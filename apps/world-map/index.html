@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>World Map Quiz — BIG TUNA</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0a0a0a;
+    color: #eee;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    user-select: none;
+  }
+
+  /* Lock layout to visible viewport while game is active so the keyboard
+     can't push the input bar off screen on Android (dvh shrinks with keyboard)
+     or let it scroll out of view. iOS is handled separately via visualViewport. */
+  body.game-active {
+    height: 100svh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  body.game-active #app {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #app { flex: 1; display: flex; flex-direction: column; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: none; border-radius: 12px; cursor: pointer;
+    font-family: inherit; font-weight: 800; letter-spacing: 0.06em;
+    transition: opacity .15s, transform .1s, background .12s;
+    touch-action: manipulation; text-decoration: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary   { background: #fff; color: #0a0a0a; padding: 14px 24px; font-size: 0.88rem; }
+  .btn-primary:hover { background: #f0f0f0; }
+  .btn-secondary { background: #1e1e1e; color: #ccc; padding: 12px 20px; font-size: 0.85rem; border: 1px solid #2a2a2a; }
+  .btn-secondary:hover { background: #252525; }
+  .btn-danger    { background: #1a0707; color: #ff6b6b; padding: 10px 18px; font-size: 0.82rem; border: 1px solid #3a1010; }
+  .btn-danger:hover { background: #220909; }
+  .btn-sm { padding: 8px 14px; font-size: 0.78rem; letter-spacing: 0.05em; }
+  .btn-full { width: 100%; }
+
+  /* ── HOME ── */
+  .home {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 24px 48px;
+    gap: 48px;
+  }
+  .home-hero { text-align: center; }
+  .home-globe { font-size: clamp(3rem, 10vw, 5rem); line-height: 1; margin-bottom: 16px; }
+  .home-title {
+    font-size: clamp(2rem, 7vw, 3.2rem);
+    font-weight: 900; letter-spacing: -0.03em; line-height: 1.05;
+    color: #eee;
+  }
+  .home-sub {
+    margin-top: 10px;
+    font-size: clamp(0.8rem, 2vw, 0.95rem);
+    color: #444; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .home-buttons { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 260px; }
+
+  /* ── GAME ── */
+  .game-wrap {
+    flex: 1; display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+  }
+
+  .map-container {
+    flex: 1; position: relative; overflow: hidden;
+    background: #0b141f;
+    min-height: 0;
+  }
+  .map-container svg {
+    display: block; width: 100%; height: 100%;
+  }
+
+  .country-path {
+    fill: #252525; stroke: #111; stroke-width: 0.4px;
+    transition: fill 0.5s ease;
+    cursor: default;
+  }
+  .country-path.guessed { fill: #1b5e38; }
+  .country-path.flash   { fill: #4caf50; transition: fill 0.05s; }
+
+  /* Graticule */
+  .graticule { fill: none; stroke: #131c26; stroke-width: 0.3px; }
+
+  .bottom-bar {
+    background: #111; border-top: 1px solid #1c1c1c;
+    padding: 10px 14px 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+  }
+  .stats-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; gap: 4px;
+  }
+  .stat-box { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 48px; }
+  .stat-val {
+    font-size: clamp(1.2rem, 4vw, 1.6rem);
+    font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .stat-lbl { font-size: 0.6rem; color: #444; text-transform: uppercase; letter-spacing: 0.1em; }
+  .stat-val.red { color: #ef5350; }
+  .stat-val.green { color: #4caf50; }
+  .stat-divider { width: 1px; background: #1e1e1e; align-self: stretch; margin: 2px 0; }
+
+  .input-row { display: flex; gap: 8px; align-items: center; }
+
+  #country-input {
+    flex: 1; background: #1a1a1a; border: 1px solid #2a2a2a;
+    border-radius: 10px; padding: 11px 14px; color: #eee;
+    font-family: inherit; font-size: 1rem; outline: none;
+    transition: border-color .2s, background .2s;
+    user-select: text; -webkit-user-select: text;
+  }
+  #country-input:focus { border-color: #3a3a3a; }
+  #country-input.correct { border-color: #4caf50; background: #0c1c0e; }
+  #country-input.wrong   { border-color: #ef5350; background: #1a0808; }
+
+  /* ── SCREEN (settings / highscores / results) ── */
+  .screen {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; padding: 28px 20px 60px;
+    gap: 20px; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .screen-title {
+    font-size: 1.5rem; font-weight: 900; letter-spacing: -0.01em;
+    align-self: flex-start; max-width: 480px; width: 100%;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: #141414; border: 1px solid #1e1e1e;
+    border-radius: 16px; padding: 20px;
+    width: 100%; max-width: 480px;
+  }
+  .card-label {
+    font-size: 0.68rem; color: #444; text-transform: uppercase;
+    letter-spacing: 0.12em; margin-bottom: 14px; font-weight: 700;
+  }
+
+  /* Settings option grid */
+  .opt-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .opt-btn {
+    padding: 11px 6px; border-radius: 9px; border: 1px solid #2a2a2a;
+    background: #1a1a1a; color: #777; font-family: inherit;
+    font-size: 0.82rem; font-weight: 700; cursor: pointer;
+    text-align: center; transition: all .15s;
+  }
+  .opt-btn.on { background: #eee; color: #0a0a0a; border-color: #eee; }
+  .opt-btn:hover:not(.on) { background: #222; color: #ccc; }
+
+  /* Highscores */
+  .hs-list { display: flex; flex-direction: column; gap: 8px; }
+  .hs-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; background: #0f0f0f;
+    border-radius: 10px; border: 1px solid #1a1a1a;
+  }
+  .hs-rank { font-size: 0.78rem; color: #333; font-weight: 700; width: 18px; text-align: center; flex-shrink: 0; }
+  .hs-body { flex: 1; }
+  .hs-score { font-size: 1.05rem; font-weight: 800; }
+  .hs-meta { font-size: 0.72rem; color: #444; margin-top: 2px; }
+  .hs-time { font-size: 0.82rem; color: #555; font-variant-numeric: tabular-nums; }
+  .hs-empty { text-align: center; padding: 28px 0; color: #333; font-size: 0.9rem; }
+
+  /* Results */
+  .result-big {
+    font-size: clamp(3.5rem, 14vw, 6rem);
+    font-weight: 900; letter-spacing: -0.04em; line-height: 1;
+    color: #4caf50;
+  }
+  .result-sub { font-size: 0.95rem; color: #444; margin-top: 6px; }
+  .missed-wrap { display: flex; flex-wrap: wrap; gap: 6px; max-height: 240px; overflow-y: auto; }
+  .missed-tag {
+    background: #111; border: 1px solid #1e1e1e; border-radius: 6px;
+    padding: 4px 10px; font-size: 0.78rem; color: #555;
+  }
+  .btn-row { display: flex; gap: 10px; width: 100%; max-width: 480px; }
+  .btn-row .btn { flex: 1; }
+
+  /* Toast for already-guessed */
+  #toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
+    background: #222; border: 1px solid #333; color: #aaa;
+    padding: 8px 18px; border-radius: 8px; font-size: 0.82rem;
+    opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none;
+    white-space: nowrap; z-index: 1000;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── EXPERT MODE overrides ── */
+  body.expert-mode { background: #020202; }
+  body.expert-mode .map-container { background: #060008; }
+  body.expert-mode .bottom-bar { background: #060000; border-top-color: #1c0000; }
+  body.expert-mode .country-path { fill: #180000; stroke: #0a0000; }
+  body.expert-mode .country-path.guessed { fill: #5a0000; transition: fill 0.5s ease; }
+  body.expert-mode .country-path.flash   { fill: #cc1100; transition: fill 0.05s; }
+  body.expert-mode .btn-primary   { background: #bb0000; color: #fff; }
+  body.expert-mode .btn-primary:hover { background: #990000; }
+  body.expert-mode .stat-val.green { color: #cc2200; }
+  body.expert-mode #country-input:focus { border-color: #5a0000; }
+  body.expert-mode #country-input.correct { border-color: #cc1100; background: #120000; }
+  body.expert-mode .result-big { color: #cc2200; }
+  body.expert-mode .home { background: #020202; }
+  body.expert-mode .graticule { stroke: #0d0005; }
+
+  /* ── EXPERT INTRO overlay ── */
+  #expert-intro {
+    position: fixed; inset: 0; background: #000;
+    z-index: 9999; overflow: hidden;
+  }
+  #expert-intro canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+  #expert-intro-title {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(2.8rem, 13vw, 7rem);
+    font-weight: 900; letter-spacing: -0.04em; line-height: 0.88;
+    text-align: center; color: #fff; pointer-events: none;
+    animation: expert-glow 0.45s ease-in-out infinite alternate;
+  }
+  @keyframes expert-glow {
+    from { text-shadow: 0 0 20px rgba(255,30,0,.7),  0 0 60px rgba(200,0,0,.4); }
+    to   { text-shadow: 0 0 60px rgba(255,60,0,1),   0 0 130px rgba(220,0,0,.8), 0 0 220px rgba(180,0,0,.3); }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUNTRY DATABASE  (ISO 3166-1 numeric → { name, aliases[] })
+// ─────────────────────────────────────────────────────────────────────────────
+const COUNTRIES = {
+  '004': { name: 'Afghanistan',                       aliases: [] },
+  '008': { name: 'Albania',                           aliases: [] },
+  '012': { name: 'Algeria',                           aliases: [] },
+  '020': { name: 'Andorra',                           aliases: [] },
+  '336': { name: 'Vatican City',                      aliases: ['vatican', 'holy see'] },
+  '024': { name: 'Angola',                            aliases: [] },
+  '028': { name: 'Antigua and Barbuda',               aliases: ['antigua', 'antigua barbuda'] },
+  '032': { name: 'Argentina',                         aliases: ['arg'] },
+  '051': { name: 'Armenia',                           aliases: [] },
+  '036': { name: 'Australia',                         aliases: ['aus', 'aussie'] },
+  '040': { name: 'Austria',                           aliases: [] },
+  '031': { name: 'Azerbaijan',                        aliases: ['azer'] },
+  '044': { name: 'Bahamas',                           aliases: ['the bahamas'] },
+  '048': { name: 'Bahrain',                           aliases: [] },
+  '050': { name: 'Bangladesh',                        aliases: [] },
+  '052': { name: 'Barbados',                          aliases: [] },
+  '112': { name: 'Belarus',                           aliases: ['byelorussia'] },
+  '056': { name: 'Belgium',                           aliases: [] },
+  '084': { name: 'Belize',                            aliases: [] },
+  '204': { name: 'Benin',                             aliases: [] },
+  '064': { name: 'Bhutan',                            aliases: [] },
+  '068': { name: 'Bolivia',                           aliases: [] },
+  '070': { name: 'Bosnia and Herzegovina',            aliases: ['bosnia', 'bih', 'bosnia herzegovina'] },
+  '072': { name: 'Botswana',                          aliases: [] },
+  '076': { name: 'Brazil',                            aliases: ['brasil'] },
+  '096': { name: 'Brunei',                            aliases: ['brunei darussalam'] },
+  '100': { name: 'Bulgaria',                          aliases: [] },
+  '854': { name: 'Burkina Faso',                      aliases: ['upper volta', 'burkina'] },
+  '108': { name: 'Burundi',                           aliases: [] },
+  '116': { name: 'Cambodia',                          aliases: ['kampuchea', 'khmer'] },
+  '120': { name: 'Cameroon',                          aliases: [] },
+  '124': { name: 'Canada',                            aliases: [] },
+  '132': { name: 'Cabo Verde',                        aliases: ['cape verde', 'cape verde islands'] },
+  '140': { name: 'Central African Republic',          aliases: ['car', 'central africa', 'caf'] },
+  '148': { name: 'Chad',                              aliases: [] },
+  '152': { name: 'Chile',                             aliases: [] },
+  '156': { name: 'China',                             aliases: ['prc', 'peoples republic of china'] },
+  '158': { name: 'Taiwan',                            aliases: ['chinese taipei', 'roc', 'republic of china', 'formosa'] },
+  '170': { name: 'Colombia',                          aliases: ['columbia'] },
+  '174': { name: 'Comoros',                           aliases: [] },
+  '178': { name: 'Republic of the Congo',             aliases: ['congo', 'congo republic', 'congo brazzaville', 'republic congo'] },
+  '180': { name: 'Democratic Republic of the Congo',  aliases: ['drc', 'dr congo', 'congo kinshasa', 'zaire', 'dem rep congo', 'democratic republic congo'] },
+  '188': { name: 'Costa Rica',                        aliases: [] },
+  '384': { name: 'Ivory Coast',                       aliases: ['cote divoire', 'cote divi', 'cote di', 'ivorycoast', 'ivory'] },
+  '191': { name: 'Croatia',                           aliases: ['hrvatska'] },
+  '192': { name: 'Cuba',                              aliases: [] },
+  '196': { name: 'Cyprus',                            aliases: [] },
+  '203': { name: 'Czechia',                           aliases: ['czech republic', 'czech', 'czechoslovakia'] },
+  '208': { name: 'Denmark',                           aliases: [] },
+  '262': { name: 'Djibouti',                          aliases: [] },
+  '212': { name: 'Dominica',                          aliases: [] },
+  '214': { name: 'Dominican Republic',                aliases: ['dominican'] },
+  '218': { name: 'Ecuador',                           aliases: [] },
+  '818': { name: 'Egypt',                             aliases: [] },
+  '222': { name: 'El Salvador',                       aliases: ['salvador'] },
+  '226': { name: 'Equatorial Guinea',                 aliases: ['equatorial'] },
+  '232': { name: 'Eritrea',                           aliases: [] },
+  '748': { name: 'Eswatini',                          aliases: ['swaziland'] },
+  '233': { name: 'Estonia',                           aliases: [] },
+  '231': { name: 'Ethiopia',                          aliases: ['abyssinia'] },
+  '242': { name: 'Fiji',                              aliases: [] },
+  '246': { name: 'Finland',                           aliases: [] },
+  '250': { name: 'France',                            aliases: [] },
+  '266': { name: 'Gabon',                             aliases: [] },
+  '270': { name: 'Gambia',                            aliases: ['the gambia'] },
+  '268': { name: 'Georgia',                           aliases: [] },
+  '276': { name: 'Germany',                           aliases: ['deutschland'] },
+  '288': { name: 'Ghana',                             aliases: [] },
+  '300': { name: 'Greece',                            aliases: ['hellas'] },
+  '308': { name: 'Grenada',                           aliases: [] },
+  '320': { name: 'Guatemala',                         aliases: [] },
+  '324': { name: 'Guinea',                            aliases: [] },
+  '624': { name: 'Guinea-Bissau',                     aliases: ['guinea bissau'] },
+  '328': { name: 'Guyana',                            aliases: [] },
+  '332': { name: 'Haiti',                             aliases: [] },
+  '340': { name: 'Honduras',                          aliases: [] },
+  '344': { name: 'Hong Kong',                         aliases: ['hk', 'hong kong sar'] },
+  '348': { name: 'Hungary',                           aliases: [] },
+  '352': { name: 'Iceland',                           aliases: [] },
+  '356': { name: 'India',                             aliases: ['hindustan'] },
+  '360': { name: 'Indonesia',                         aliases: [] },
+  '364': { name: 'Iran',                              aliases: ['persia'] },
+  '368': { name: 'Iraq',                              aliases: [] },
+  '372': { name: 'Ireland',                           aliases: ['eire', 'republic of ireland'] },
+  '376': { name: 'Israel',                            aliases: [] },
+  '380': { name: 'Italy',                             aliases: ['italia'] },
+  '388': { name: 'Jamaica',                           aliases: [] },
+  '392': { name: 'Japan',                             aliases: ['nippon'] },
+  '383': { name: 'Kosovo',                             aliases: ['kosova'] },
+  '400': { name: 'Jordan',                            aliases: [] },
+  '398': { name: 'Kazakhstan',                        aliases: ['kazakh'] },
+  '404': { name: 'Kenya',                             aliases: [] },
+  '296': { name: 'Kiribati',                          aliases: [] },
+  '408': { name: 'North Korea',                       aliases: ['dprk', 'north korea'] },
+  '410': { name: 'South Korea',                       aliases: ['korea', 'rok', 'south korea'] },
+  '414': { name: 'Kuwait',                            aliases: [] },
+  '417': { name: 'Kyrgyzstan',                        aliases: ['kyrgyz', 'kirghizia'] },
+  '418': { name: 'Laos',                              aliases: ['lao'] },
+  '428': { name: 'Latvia',                            aliases: [] },
+  '422': { name: 'Lebanon',                           aliases: [] },
+  '426': { name: 'Lesotho',                           aliases: [] },
+  '430': { name: 'Liberia',                           aliases: [] },
+  '434': { name: 'Libya',                             aliases: [] },
+  '438': { name: 'Liechtenstein',                     aliases: [] },
+  '440': { name: 'Lithuania',                         aliases: [] },
+  '442': { name: 'Luxembourg',                        aliases: [] },
+  '446': { name: 'Macao',                             aliases: ['macau', 'macao sar'] },
+  '450': { name: 'Madagascar',                        aliases: [] },
+  '454': { name: 'Malawi',                            aliases: ['nyasaland'] },
+  '458': { name: 'Malaysia',                          aliases: [] },
+  '462': { name: 'Maldives',                          aliases: [] },
+  '466': { name: 'Mali',                              aliases: [] },
+  '470': { name: 'Malta',                             aliases: [] },
+  '584': { name: 'Marshall Islands',                  aliases: [] },
+  '478': { name: 'Mauritania',                        aliases: [] },
+  '480': { name: 'Mauritius',                         aliases: [] },
+  '484': { name: 'Mexico',                            aliases: ['mejico', 'mexique'] },
+  '583': { name: 'Micronesia',                        aliases: ['federated states of micronesia', 'fsm'] },
+  '498': { name: 'Moldova',                           aliases: ['moldavia'] },
+  '492': { name: 'Monaco',                            aliases: [] },
+  '496': { name: 'Mongolia',                          aliases: [] },
+  '499': { name: 'Montenegro',                        aliases: [] },
+  '504': { name: 'Morocco',                           aliases: ['maroc'] },
+  '508': { name: 'Mozambique',                        aliases: [] },
+  '104': { name: 'Myanmar',                           aliases: ['burma'] },
+  '516': { name: 'Namibia',                           aliases: ['south west africa'] },
+  '520': { name: 'Nauru',                             aliases: [] },
+  '524': { name: 'Nepal',                             aliases: [] },
+  '528': { name: 'Netherlands',                       aliases: ['holland', 'dutch'] },
+  '554': { name: 'New Zealand',                       aliases: ['nz', 'aotearoa'] },
+  '558': { name: 'Nicaragua',                         aliases: [] },
+  '562': { name: 'Niger',                             aliases: [] },
+  '566': { name: 'Nigeria',                           aliases: [] },
+  '807': { name: 'North Macedonia',                   aliases: ['macedonia', 'fyrom', 'mkd'] },
+  '578': { name: 'Norway',                            aliases: [] },
+  '512': { name: 'Oman',                              aliases: [] },
+  '586': { name: 'Pakistan',                          aliases: [] },
+  '585': { name: 'Palau',                             aliases: [] },
+  '275': { name: 'Palestine',                         aliases: ['west bank', 'gaza', 'palestinian territories', 'palestina'] },
+  '591': { name: 'Panama',                            aliases: [] },
+  '598': { name: 'Papua New Guinea',                  aliases: ['png'] },
+  '600': { name: 'Paraguay',                          aliases: [] },
+  '604': { name: 'Peru',                              aliases: [] },
+  '608': { name: 'Philippines',                       aliases: ['phillippines', 'phillipines', 'pilipinas'] },
+  '616': { name: 'Poland',                            aliases: ['polska'] },
+  '620': { name: 'Portugal',                          aliases: [] },
+  '634': { name: 'Qatar',                             aliases: ['katar'] },
+  '642': { name: 'Romania',                           aliases: ['rumania', 'roumania'] },
+  '643': { name: 'Russia',                            aliases: ['russian federation', 'ussr', 'rossiya'] },
+  '646': { name: 'Rwanda',                            aliases: [] },
+  '659': { name: 'Saint Kitts and Nevis',             aliases: ['st kitts', 'saint kitts', 'st kitts nevis'] },
+  '662': { name: 'Saint Lucia',                       aliases: ['st lucia'] },
+  '670': { name: 'Saint Vincent and the Grenadines',  aliases: ['st vincent', 'saint vincent'] },
+  '882': { name: 'Samoa',                             aliases: ['western samoa'] },
+  '674': { name: 'San Marino',                        aliases: [] },
+  '678': { name: 'Sao Tome and Principe',             aliases: ['sao tome', 'sao tome principe'] },
+  '682': { name: 'Saudi Arabia',                      aliases: ['ksa', 'saudi'] },
+  '686': { name: 'Senegal',                           aliases: [] },
+  '688': { name: 'Serbia',                            aliases: [] },
+  '690': { name: 'Seychelles',                        aliases: [] },
+  '694': { name: 'Sierra Leone',                      aliases: [] },
+  '702': { name: 'Singapore',                         aliases: [] },
+  '703': { name: 'Slovakia',                          aliases: ['slovak'] },
+  '705': { name: 'Slovenia',                          aliases: [] },
+  '090': { name: 'Solomon Islands',                   aliases: ['solomon'] },
+  '706': { name: 'Somalia',                           aliases: [] },
+  '710': { name: 'South Africa',                      aliases: ['rsa'] },
+  '728': { name: 'South Sudan',                       aliases: [] },
+  '724': { name: 'Spain',                             aliases: ['espana', 'espagne'] },
+  '144': { name: 'Sri Lanka',                         aliases: ['ceylon'] },
+  '729': { name: 'Sudan',                             aliases: [] },
+  '740': { name: 'Suriname',                          aliases: ['surinam'] },
+  '752': { name: 'Sweden',                            aliases: ['sverige'] },
+  '756': { name: 'Switzerland',                       aliases: ['swiss', 'helvetia'] },
+  '760': { name: 'Syria',                             aliases: [] },
+  '762': { name: 'Tajikistan',                        aliases: ['tajik'] },
+  '834': { name: 'Tanzania',                          aliases: ['tanganyika'] },
+  '764': { name: 'Thailand',                          aliases: ['siam'] },
+  '626': { name: 'Timor-Leste',                       aliases: ['east timor', 'timor leste', 'timor'] },
+  '768': { name: 'Togo',                              aliases: [] },
+  '776': { name: 'Tonga',                             aliases: [] },
+  '780': { name: 'Trinidad and Tobago',               aliases: ['trinidad', 'trinidad tobago'] },
+  '788': { name: 'Tunisia',                           aliases: [] },
+  '792': { name: 'Turkey',                            aliases: ['turkiye'] },
+  '795': { name: 'Turkmenistan',                      aliases: ['turkmen'] },
+  '798': { name: 'Tuvalu',                            aliases: [] },
+  '800': { name: 'Uganda',                            aliases: [] },
+  '804': { name: 'Ukraine',                           aliases: [] },
+  '784': { name: 'United Arab Emirates',              aliases: ['uae', 'emirates'] },
+  '826': { name: 'United Kingdom',                    aliases: ['uk', 'britain', 'great britain', 'england', 'gb'] },
+  '840': { name: 'United States',                     aliases: ['usa', 'us', 'america', 'united states of america'] },
+  '858': { name: 'Uruguay',                           aliases: [] },
+  '860': { name: 'Uzbekistan',                        aliases: ['uzbek'] },
+  '548': { name: 'Vanuatu',                           aliases: [] },
+  '862': { name: 'Venezuela',                         aliases: [] },
+  '704': { name: 'Vietnam',                           aliases: ['viet nam'] },
+  '732': { name: 'Western Sahara',                    aliases: [] },
+  '887': { name: 'Yemen',                             aliases: [] },
+  '894': { name: 'Zambia',                            aliases: [] },
+  '716': { name: 'Zimbabwe',                          aliases: ['rhodesia'] },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATES DATABASE  (FIPS 2-digit → { name, aliases[] })
+// ─────────────────────────────────────────────────────────────────────────────
+const STATES = {
+  '01': { name: 'Alabama',        aliases: ['bama'] },
+  '02': { name: 'Alaska',         aliases: [] },
+  '04': { name: 'Arizona',        aliases: [] },
+  '05': { name: 'Arkansas',       aliases: [] },
+  '06': { name: 'California',     aliases: ['cali'] },
+  '08': { name: 'Colorado',       aliases: [] },
+  '09': { name: 'Connecticut',    aliases: [] },
+  '10': { name: 'Delaware',       aliases: [] },
+  '12': { name: 'Florida',        aliases: [] },
+  '13': { name: 'Georgia',        aliases: [] },
+  '15': { name: 'Hawaii',         aliases: [] },
+  '16': { name: 'Idaho',          aliases: [] },
+  '17': { name: 'Illinois',       aliases: [] },
+  '18': { name: 'Indiana',        aliases: [] },
+  '19': { name: 'Iowa',           aliases: [] },
+  '20': { name: 'Kansas',         aliases: [] },
+  '21': { name: 'Kentucky',       aliases: [] },
+  '22': { name: 'Louisiana',      aliases: [] },
+  '23': { name: 'Maine',          aliases: [] },
+  '24': { name: 'Maryland',       aliases: [] },
+  '25': { name: 'Massachusetts',  aliases: ['mass'] },
+  '26': { name: 'Michigan',       aliases: ['mich'] },
+  '27': { name: 'Minnesota',      aliases: ['minn'] },
+  '28': { name: 'Mississippi',    aliases: ['miss'] },
+  '29': { name: 'Missouri',       aliases: [] },
+  '30': { name: 'Montana',        aliases: [] },
+  '31': { name: 'Nebraska',       aliases: ['neb'] },
+  '32': { name: 'Nevada',         aliases: [] },
+  '33': { name: 'New Hampshire',  aliases: [] },
+  '34': { name: 'New Jersey',     aliases: [] },
+  '35': { name: 'New Mexico',     aliases: [] },
+  '36': { name: 'New York',       aliases: [] },
+  '37': { name: 'North Carolina', aliases: [] },
+  '38': { name: 'North Dakota',   aliases: [] },
+  '39': { name: 'Ohio',           aliases: [] },
+  '40': { name: 'Oklahoma',       aliases: [] },
+  '41': { name: 'Oregon',         aliases: [] },
+  '42': { name: 'Pennsylvania',   aliases: ['penn'] },
+  '44': { name: 'Rhode Island',   aliases: [] },
+  '45': { name: 'South Carolina', aliases: [] },
+  '46': { name: 'South Dakota',   aliases: [] },
+  '47': { name: 'Tennessee',      aliases: ['tenn'] },
+  '48': { name: 'Texas',          aliases: [] },
+  '49': { name: 'Utah',           aliases: [] },
+  '50': { name: 'Vermont',        aliases: [] },
+  '51': { name: 'Virginia',       aliases: [] },
+  '53': { name: 'Washington',     aliases: [] },
+  '54': { name: 'West Virginia',  aliases: [] },
+  '55': { name: 'Wisconsin',      aliases: ['wisc'] },
+  '56': { name: 'Wyoming',        aliases: [] },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUZZY MATCHING
+// ─────────────────────────────────────────────────────────────────────────────
+function norm(s) {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Build lookup maps for each database
+function buildMaps(db) {
+  const nameToId = {}, aliasToId = {}, nameList = [];
+  for (const [id, data] of Object.entries(db)) {
+    const n = norm(data.name);
+    nameToId[n] = id;
+    nameList.push({ id, n });
+    for (const a of data.aliases) {
+      const an = norm(a);
+      if (!aliasToId[an]) aliasToId[an] = id;
+    }
+  }
+  return { nameToId, aliasToId, nameList };
+}
+const worldMaps = buildMaps(COUNTRIES);
+const stateMaps = buildMaps(STATES);
+
+function getMaps() { return state.mode === 'usa' ? stateMaps : worldMaps; }
+function getDB()   { return state.mode === 'usa' ? STATES   : COUNTRIES; }
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  let curr = new Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i-1] === b[j-1]
+        ? prev[j-1]
+        : 1 + Math.min(prev[j-1], prev[j], curr[j-1]);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+function maxDist(len) {
+  if (len <= 3) return 0;
+  if (len <= 5) return 1;
+  if (len <= 9) return 2;
+  return 3;
+}
+
+// Returns country/state id or null
+function matchCountry(input) {
+  const { nameToId, aliasToId, nameList } = getMaps();
+  const n = norm(input);
+  if (!n) return null;
+  if (nameToId[n])  return nameToId[n];   // exact match — no length gate
+  if (aliasToId[n]) return aliasToId[n];  // alias match — no length gate
+
+  // Fuzzy against names (needs min 3 chars)
+  if (n.length < 3) return null;
+  const threshold = maxDist(n.length);
+  if (threshold === 0) return null;
+
+  let best = null, bestDist = threshold + 1;
+  for (const entry of nameList) {
+    const d = levenshtein(n, entry.n);
+    if (d < bestDist) { bestDist = d; best = entry.id; }
+    else if (d === bestDist) { best = null; }
+  }
+  for (const [an, aid] of Object.entries(aliasToId)) {
+    const d = levenshtein(n, an);
+    if (d < bestDist) { bestDist = d; best = aid; }
+    else if (d === bestDist && aid !== best) { best = null; }
+  }
+  return (best && bestDist <= threshold) ? best : null;
+}
+
+// Quick exact/alias match (for real-time as user types)
+function quickMatch(input) {
+  const { nameToId, aliasToId } = getMaps();
+  const n = norm(input);
+  return nameToId[n] || aliasToId[n] || null;
+}
+
+// Countries shown in REGULAR world mode (dots + guessable, no polygon at 110m)
+const REGULAR_BONUS = ['020', '028', '132', '158', '336', '344', '383', '492', '690'];
+// Andorra, Antigua & Barbuda, Cabo Verde, Taiwan, Vatican, Hong Kong, Kosovo, Monaco, Seychelles
+
+// Additional countries only in EXPERT mode
+const EXPERT_ONLY_BONUS = [
+  '048', // Bahrain
+  '052', // Barbados
+  '174', // Comoros
+  '212', // Dominica
+  '296', // Kiribati
+  '308', // Grenada
+  '438', // Liechtenstein
+  '446', // Macao
+  '462', // Maldives
+  '470', // Malta
+  '480', // Mauritius
+  '520', // Nauru
+  '583', // Micronesia
+  '584', // Marshall Islands
+  '585', // Palau
+  '659', // Saint Kitts and Nevis
+  '662', // Saint Lucia
+  '670', // Saint Vincent and the Grenadines
+  '674', // San Marino
+  '678', // Sao Tome and Principe
+  '702', // Singapore
+  '776', // Tonga
+  '798', // Tuvalu
+  '882', // Samoa
+];
+
+// [longitude, latitude] for bonus country dot placement
+const BONUS_COORDS = {
+  '020': [1.52,    42.51],  // Andorra
+  '028': [-61.80,  17.10],  // Antigua and Barbuda
+  '048': [50.55,   26.00],  // Bahrain
+  '052': [-59.55,  13.20],  // Barbados
+  '132': [-23.60,  15.10],  // Cabo Verde
+  '174': [43.35,  -11.65],  // Comoros
+  '212': [-61.37,  15.41],  // Dominica
+  '296': [173.00,   1.34],  // Kiribati
+  '308': [-61.67,  12.12],  // Grenada
+  '336': [12.45,   41.90],  // Vatican City
+  '344': [114.18,  22.32],  // Hong Kong
+  '383': [21.00,   42.60],  // Kosovo
+  '438': [9.55,    47.17],  // Liechtenstein
+  '446': [113.55,  22.20],  // Macao
+  '462': [73.22,    3.20],  // Maldives
+  '470': [14.37,   35.90],  // Malta
+  '480': [57.55,  -20.30],  // Mauritius
+  '492': [7.41,    43.73],  // Monaco
+  '520': [166.93,  -0.53],  // Nauru
+  '583': [158.20,   6.88],  // Micronesia
+  '584': [171.18,   7.13],  // Marshall Islands
+  '585': [134.57,   7.52],  // Palau
+  '659': [-62.78,  17.33],  // Saint Kitts and Nevis
+  '662': [-60.98,  13.91],  // Saint Lucia
+  '670': [-61.19,  13.25],  // Saint Vincent and the Grenadines
+  '674': [12.46,   43.94],  // San Marino
+  '678': [6.61,     0.33],  // Sao Tome and Principe
+  '690': [55.49,   -4.62],  // Seychelles
+  '702': [103.82,   1.35],  // Singapore
+  '776': [-175.20,-21.18],  // Tonga
+  '798': [179.21,  -8.52],  // Tuvalu
+  '882': [-172.10,-13.76],  // Samoa
+};
+
+// Territories that turn green when their parent country is guessed (not separate quiz countries)
+const TERRITORIES = {
+  '208': ['304'], // Denmark → Greenland
+};
+
+// Territories that turn green only when ALL required countries are guessed
+const COMBO_TERRITORIES = [
+  {
+    requires: ['032', '036', '152', '250', '554', '578', '826'], // Argentina, Australia, Chile, France, New Zealand, Norway, UK
+    unlocks: ['010'], // Antarctica
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const state = {
+  view: 'home',
+  mode: 'world',        // 'world' | 'usa'
+  difficulty: 'regular', // 'regular' | 'expert' (world only)
+  guessed: new Set(),
+  mapIds: new Set(),
+  timer: null,
+  timeLeft: 0,
+  settings: { timeLimit: 900 },
+  worldHighscores: [],
+  worldExpertHighscores: [],
+  usaHighscores: [],
+  worldData: null,
+  usaData: null,
+  gameStartTime: 0,
+  lastScore: null,
+  missedIds: [],
+  svgEl: null,
+  projection: null,
+  pathGen: null,
+  vvCleanup: null,
+};
+
+function getHighscores() {
+  if (state.mode === 'usa') return state.usaHighscores;
+  return state.difficulty === 'expert' ? state.worldExpertHighscores : state.worldHighscores;
+}
+
+const TIME_OPTS = [
+  { label: '5 min',   val: 300 },
+  { label: '10 min',  val: 600 },
+  { label: '15 min',  val: 900 },
+  { label: '20 min',  val: 1200 },
+  { label: '30 min',  val: 1800 },
+  { label: 'No limit',val: 0 },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function fmt(s) {
+  const a = Math.abs(s), m = Math.floor(a / 60), sec = a % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function clearTopbarLeft() {
+  const slot = document.getElementById('tt-extra-slot');
+  if (slot) slot.innerHTML = '';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+let _toastHide;
+let _sync = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER ROUTER
+// ─────────────────────────────────────────────────────────────────────────────
+function render() {
+  if (state.timer && state.view !== 'game') {
+    clearInterval(state.timer); state.timer = null;
+  }
+  if (state.view !== 'game') ExpertAudio.stop();
+  // Clean up visualViewport handler and game-active body class when leaving game
+  if (state.vvCleanup) { state.vvCleanup(); state.vvCleanup = null; }
+  document.body.classList.toggle('game-active', state.view === 'game');
+  document.body.classList.toggle('expert-mode', state.mode === 'world' && state.difficulty === 'expert');
+  clearTopbarLeft();
+  Topbar.setTitle('World Map Quiz');
+
+  const app = document.getElementById('app');
+  switch (state.view) {
+    case 'home':       renderHome(app);       break;
+    case 'game':       renderGame(app);       break;
+    case 'results':    renderResults(app);    break;
+    case 'settings':   renderSettings(app);   break;
+    case 'highscores': renderHighscores(app); break;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOME
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHome(app) {
+  document.body.classList.toggle('expert-mode', state.mode === 'world' && state.difficulty === 'expert');
+  const isExpert = state.mode === 'world' && state.difficulty === 'expert';
+  const sub = state.mode === 'usa'
+    ? 'Name all 50 states'
+    : isExpert
+      ? 'Every country + microstates & territories'
+      : 'Name every country on the map';
+
+  app.innerHTML = `
+    <div class="home">
+      <div class="home-hero">
+        <div class="home-globe">${state.mode === 'usa' ? '🇺🇸' : '🌍'}</div>
+        <div class="home-title">${state.mode === 'usa' ? 'USA States Quiz' : 'World Map Quiz'}</div>
+        <div class="home-sub">${sub}</div>
+      </div>
+      <div class="home-buttons">
+        <div style="display:flex;gap:8px;width:100%">
+          <button class="btn btn-full${state.mode === 'world' ? ' btn-primary' : ' btn-secondary'}" id="btn-mode-world" style="flex:1">🌍 World</button>
+          <button class="btn btn-full${state.mode === 'usa'   ? ' btn-primary' : ' btn-secondary'}" id="btn-mode-usa"   style="flex:1">🇺🇸 USA</button>
+        </div>
+        ${state.mode === 'world' ? `
+        <div style="display:flex;gap:8px;width:100%">
+          <button class="btn btn-full${state.difficulty === 'regular' ? ' btn-primary' : ' btn-secondary'}" id="btn-diff-regular" style="flex:1">Regular</button>
+          <button class="btn btn-full${state.difficulty === 'expert'  ? ' btn-primary' : ' btn-secondary'}" id="btn-diff-expert"  style="flex:1">Expert</button>
+        </div>` : ''}
+        <button class="btn btn-primary btn-full" id="btn-start">Start Game</button>
+        <button class="btn btn-secondary btn-full" id="btn-settings">Settings</button>
+        <button class="btn btn-secondary btn-full" id="btn-hs">Highscores</button>
+      </div>
+    </div>`;
+
+  document.getElementById('btn-mode-world').onclick = () => { state.mode = 'world'; renderHome(app); };
+  document.getElementById('btn-mode-usa').onclick   = () => { state.mode = 'usa'; state.difficulty = 'regular'; renderHome(app); };
+  if (state.mode === 'world') {
+    document.getElementById('btn-diff-regular').onclick = () => { state.difficulty = 'regular'; renderHome(app); };
+    document.getElementById('btn-diff-expert').onclick  = () => { state.difficulty = 'expert';  renderHome(app); };
+  }
+  document.getElementById('btn-start').onclick    = () => { state.view = 'game';       render(); };
+  document.getElementById('btn-settings').onclick = () => { state.view = 'settings';   render(); };
+  document.getElementById('btn-hs').onclick       = () => { state.view = 'highscores'; render(); };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAME
+// ─────────────────────────────────────────────────────────────────────────────
+function renderGame(app) {
+  Topbar.setTitle('');
+
+  state.guessed = new Set();
+  state.gameStartTime = Date.now();
+  state.timeLeft = state.settings.timeLimit === 0 ? 0 : state.settings.timeLimit;
+
+  const timerLabel = state.settings.timeLimit === 0 ? 'Time' : 'Left';
+
+  app.innerHTML = `
+    <div class="game-wrap">
+      <div class="map-container" id="map-container"></div>
+      <div class="bottom-bar">
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-val green" id="stat-guessed">0</div>
+            <div class="stat-lbl">Guessed</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-total">—</div>
+            <div class="stat-lbl">${state.mode === 'usa' ? 'States' : 'Countries'}</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-timer">${fmt(state.timeLeft)}</div>
+            <div class="stat-lbl">${timerLabel}</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-box">
+            <button class="btn btn-danger btn-sm" id="btn-giveup">Give Up</button>
+          </div>
+        </div>
+        <div class="input-row">
+          <input type="text" id="country-input"
+            placeholder="${state.mode === 'usa' ? 'Type a state name…' : 'Type a country name…'}"
+            autocomplete="off" autocorrect="off" autocapitalize="off"
+            spellcheck="false">
+        </div>
+      </div>
+    </div>`;
+
+  // Back button in topbar
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn btn-secondary btn-sm';
+  backBtn.textContent = '← Home';
+  backBtn.onclick = () => {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    state.difficulty = 'regular';
+    state.view = 'home'; render();
+  };
+  Topbar.addLeft(backBtn);
+
+  document.getElementById('btn-giveup').onclick = () => endGame();
+
+  // Input
+  const input = document.getElementById('country-input');
+  setTimeout(() => input.focus(), 100);
+
+  input.addEventListener('input', () => {
+    const val = input.value.trim();
+    const n = norm(val);
+    const id = quickMatch(val);
+    if (id && state.mapIds.has(id)) {
+      if (state.guessed.has(id)) {
+        // Already guessed — only interrupt if no unguessed country's name/alias starts with this input
+        const db = getDB();
+        const hasLongerMatch = [...state.mapIds].some(cid => {
+          if (cid === id) return false;
+          if (state.guessed.has(cid)) return false;
+          const data = db[cid];
+          return [data.name, ...data.aliases].some(s => norm(s).startsWith(n));
+        });
+        if (hasLongerMatch) return;
+        showToast(`Already got ${db[id].name}!`);
+        input.value = '';
+      } else {
+        // If this is a full-name match (not an alias), don't auto-confirm while
+        // another unguessed country's full name starts with the same input.
+        // This lets you type "nigeria" through "niger" without accidentally
+        // confirming Niger. Alias matches ("uk", "aus") still confirm instantly.
+        const { nameToId } = getMaps();
+        if (nameToId[n] === id) {
+          const db = getDB();
+          const blockedByLonger = [...state.mapIds].some(cid => {
+            if (cid === id || state.guessed.has(cid)) return false;
+            const cn = norm(db[cid].name);
+            return cn.startsWith(n) && cn.length > n.length;
+          });
+          if (blockedByLonger) return;
+        }
+        confirmGuess(id, input);
+      }
+    }
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const val = input.value.trim();
+    if (!val) return;
+    const id = matchCountry(val);
+    if (!id || !state.mapIds.has(id)) {
+      input.classList.add('wrong');
+      setTimeout(() => input.classList.remove('wrong'), 500);
+      return;
+    }
+    if (state.guessed.has(id)) {
+      showToast(`Already got ${getDB()[id].name}!`);
+      input.value = '';
+      return;
+    }
+    confirmGuess(id, input);
+  });
+
+  // Map
+  initMap(document.getElementById('map-container'));
+
+  // iOS keyboard fix: visualViewport shrinks when keyboard appears but the
+  // layout viewport does NOT, so we manually resize the game-wrap to fit.
+  if (window.visualViewport) {
+    const onVV = () => {
+      const wrap = document.querySelector('.game-wrap');
+      if (!wrap) return;
+      const topbarEl = document.getElementById('topbar');
+      const tbH = topbarEl ? topbarEl.offsetHeight : 52;
+      const available = window.visualViewport.height - tbH;
+      wrap.style.height = available + 'px';
+    };
+    window.visualViewport.addEventListener('resize', onVV);
+    window.visualViewport.addEventListener('scroll', onVV);
+    onVV();
+    state.vvCleanup = () => {
+      window.visualViewport.removeEventListener('resize', onVV);
+      window.visualViewport.removeEventListener('scroll', onVV);
+      const wrap = document.querySelector('.game-wrap');
+      if (wrap) wrap.style.height = '';
+    };
+  }
+
+  // Timer (delayed for expert intro)
+  const startGameTimer = () => {
+    const inp = document.getElementById('country-input');
+    if (inp) { inp.disabled = false; inp.focus(); }
+    if (state.settings.timeLimit > 0) {
+      state.timer = setInterval(() => {
+        state.timeLeft--;
+        updateTimer();
+        if (state.timeLeft <= 0) { clearInterval(state.timer); state.timer = null; endGame(); }
+      }, 1000);
+    } else {
+      state.timer = setInterval(() => { state.timeLeft++; updateTimer(); }, 1000);
+    }
+  };
+
+  if (state.mode === 'world' && state.difficulty === 'expert') {
+    const inp = document.getElementById('country-input');
+    if (inp) inp.disabled = true;
+    showExpertIntro().then(startGameTimer);
+  } else {
+    startGameTimer();
+  }
+}
+
+function confirmGuess(id, input) {
+  state.guessed.add(id);
+
+  // Flash path on map (plus any territories — world mode only)
+  const territoryIds = state.mode === 'world' ? (TERRITORIES[id] || []) : [];
+  for (const pid of [id, ...territoryIds]) {
+    const path = document.querySelector(`[data-id="${pid}"]`);
+    if (path) {
+      path.classList.add('flash');
+      setTimeout(() => {
+        path.classList.remove('flash');
+        path.classList.add('guessed');
+      }, 350);
+    }
+  }
+
+  // Check combo territories (world mode only)
+  for (const combo of (state.mode === 'world' ? COMBO_TERRITORIES : [])) {
+    if (!combo.requires.includes(id)) continue;
+    if (combo.requires.every(cid => state.guessed.has(cid))) {
+      for (const pid of combo.unlocks) {
+        const path = document.querySelector(`[data-id="${pid}"]`);
+        if (path) {
+          path.classList.add('flash');
+          setTimeout(() => {
+            path.classList.remove('flash');
+            path.classList.add('guessed');
+          }, 350);
+        }
+      }
+    }
+  }
+
+  // Show country name, clear after delay
+  if (input) {
+    input.value = getDB()[id]?.name || '';
+    input.classList.add('correct');
+    setTimeout(() => {
+      input.classList.remove('correct');
+      input.value = '';
+      input.focus();
+    }, 700);
+  }
+
+  const el = document.getElementById('stat-guessed');
+  if (el) el.textContent = state.guessed.size;
+
+  if (state.guessed.size >= state.mapIds.size) {
+    clearInterval(state.timer); state.timer = null;
+    setTimeout(endGame, 500);
+  }
+}
+
+function updateTimer() {
+  const el = document.getElementById('stat-timer');
+  if (!el) return;
+  el.textContent = fmt(state.timeLeft);
+  el.classList.toggle('red', state.settings.timeLimit > 0 && state.timeLeft <= 30);
+}
+
+function endGame() {
+  if (state.timer) { clearInterval(state.timer); state.timer = null; }
+
+  const elapsed = Math.floor((Date.now() - state.gameStartTime) / 1000);
+  const score = {
+    count: state.guessed.size,
+    total: state.mapIds.size,
+    elapsed,
+    date: new Date().toLocaleDateString(),
+    timestamp: Date.now(),
+  };
+  state.lastScore = score;
+  state.missedIds = [...state.mapIds].filter(id => !state.guessed.has(id));
+
+  const hs = getHighscores();
+  hs.push(score);
+  hs.sort((a, b) => b.count - a.count || a.elapsed - b.elapsed);
+  hs.splice(10);
+  saveSettings();
+
+  state.view = 'results';
+  render();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAP (D3 + topojson)
+// ─────────────────────────────────────────────────────────────────────────────
+async function initMap(container) {
+  if (state.mode === 'usa') {
+    await initMapUSA(container);
+  } else {
+    await initMapWorld(container);
+  }
+}
+
+async function initMapWorld(container) {
+  if (!state.worldData) {
+    try {
+      const r = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+      state.worldData = await r.json();
+    } catch {
+      container.innerHTML = '<div style="color:#333;text-align:center;padding:60px 20px;font-size:.9rem">Failed to load map data.<br>Check your connection.</div>';
+      return;
+    }
+  }
+
+  const W = 960, H = 500;
+  const projection = d3.geoNaturalEarth1().scale(153.5).translate([W / 2, H / 2]);
+  const pathGen = d3.geoPath().projection(projection);
+
+  const svg = d3.select(container).append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet')
+    .style('display', 'block').style('width', '100%').style('height', '100%');
+
+  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#0b141f');
+  svg.append('path').datum(d3.geoGraticule()()).attr('class', 'graticule').attr('d', pathGen);
+
+  const countries = topojson.feature(state.worldData, state.worldData.objects.countries);
+
+  const expert = state.difficulty === 'expert';
+  const bonusIds = expert ? [...REGULAR_BONUS, ...EXPERT_ONLY_BONUS] : REGULAR_BONUS;
+
+  state.mapIds.clear();
+  countries.features.forEach(f => {
+    const id = String(f.id).padStart(3, '0');
+    if (COUNTRIES[id]) state.mapIds.add(id);
+  });
+  for (const id of bonusIds) {
+    if (COUNTRIES[id]) state.mapIds.add(id);
+  }
+
+  const totalEl = document.getElementById('stat-total');
+  if (totalEl) totalEl.textContent = state.mapIds.size;
+
+  svg.selectAll('.country-path')
+    .data(countries.features)
+    .enter().append('path')
+    .attr('class', 'country-path')
+    .attr('d', pathGen)
+    .attr('data-id', d => String(d.id).padStart(3, '0'));
+
+  svg.append('path')
+    .datum(topojson.mesh(state.worldData, state.worldData.objects.countries, (a, b) => a !== b))
+    .attr('fill', 'none').attr('stroke', '#111').attr('stroke-width', 0.4).attr('d', pathGen);
+
+  svg.append('path')
+    .datum({ type: 'Sphere' })
+    .attr('fill', 'none').attr('stroke', '#1a2a3a').attr('stroke-width', 0.6).attr('d', pathGen);
+
+  // Dots for bonus countries (all modes show REGULAR_BONUS dots; expert adds the rest)
+  for (const id of bonusIds) {
+    const coords = BONUS_COORDS[id];
+    if (!coords) continue;
+    const projected = projection(coords);
+    if (!projected) continue;
+    svg.append('circle')
+      .attr('class', 'country-path')
+      .attr('data-id', id)
+      .attr('cx', projected[0])
+      .attr('cy', projected[1])
+      .attr('r', 2.5)
+      .attr('stroke-width', 0.6);
+  }
+
+  state.svgEl = svg.node();
+}
+
+async function initMapUSA(container) {
+  if (!state.usaData) {
+    try {
+      const r = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json');
+      state.usaData = await r.json();
+    } catch {
+      container.innerHTML = '<div style="color:#333;text-align:center;padding:60px 20px;font-size:.9rem">Failed to load map data.<br>Check your connection.</div>';
+      return;
+    }
+  }
+
+  const W = 960, H = 600;
+  const projection = d3.geoAlbersUsa().scale(1280).translate([W / 2, H / 2]);
+  const pathGen = d3.geoPath().projection(projection);
+
+  const svg = d3.select(container).append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet')
+    .style('display', 'block').style('width', '100%').style('height', '100%');
+
+  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#0b141f');
+
+  const statesGeo = topojson.feature(state.usaData, state.usaData.objects.states);
+
+  state.mapIds.clear();
+  statesGeo.features.forEach(f => {
+    const id = String(f.id).padStart(2, '0');
+    if (STATES[id]) state.mapIds.add(id);
+  });
+
+  const totalEl = document.getElementById('stat-total');
+  if (totalEl) totalEl.textContent = state.mapIds.size;
+
+  svg.selectAll('.country-path')
+    .data(statesGeo.features)
+    .enter().append('path')
+    .attr('class', 'country-path')
+    .attr('d', pathGen)
+    .attr('data-id', d => String(d.id).padStart(2, '0'));
+
+  svg.append('path')
+    .datum(topojson.mesh(state.usaData, state.usaData.objects.states, (a, b) => a !== b))
+    .attr('fill', 'none').attr('stroke', '#111').attr('stroke-width', 0.4).attr('d', pathGen);
+
+  state.svgEl = svg.node();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESULTS
+// ─────────────────────────────────────────────────────────────────────────────
+function renderResults(app) {
+  const s = state.lastScore;
+  const pct = s.total ? Math.round((s.count / s.total) * 100) : 0;
+
+  const missedHtml = state.missedIds.length
+    ? state.missedIds.map(id => getDB()[id]?.name || id).sort()
+        .map(n => `<span class="missed-tag">${n}</span>`).join('')
+    : '';
+
+  app.innerHTML = `
+    <div class="screen">
+      <div class="screen-title">Results</div>
+      <div class="card" style="text-align:center">
+        <div class="result-big">${s.count}</div>
+        <div class="result-sub">out of ${s.total} · ${pct}% · ${fmt(s.elapsed)}</div>
+      </div>
+      ${state.missedIds.length ? `
+      <div class="card">
+        <div class="card-label">Missed (${state.missedIds.length})</div>
+        <div class="missed-wrap">${missedHtml}</div>
+      </div>` : `
+      <div class="card" style="text-align:center;color:#4caf50;font-weight:900;font-size:1.1rem;padding:32px">
+        🎉 Perfect score!
+      </div>`}
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-again">Play Again</button>
+        <button class="btn btn-secondary" id="btn-home">Home</button>
+      </div>
+    </div>`;
+
+  document.getElementById('btn-again').onclick = () => { state.view = 'game'; render(); };
+  document.getElementById('btn-home').onclick  = () => { state.difficulty = 'regular'; state.view = 'home'; render(); };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+function renderSettings(app) {
+  const opts = TIME_OPTS.map(o => `
+    <button class="opt-btn${state.settings.timeLimit === o.val ? ' on' : ''}"
+      data-val="${o.val}">${o.label}</button>`).join('');
+
+  app.innerHTML = `
+    <div class="screen">
+      <div class="screen-title">Settings</div>
+      <div class="card">
+        <div class="card-label">Time Limit</div>
+        <div class="opt-grid">${opts}</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-save">Save</button>
+        <button class="btn btn-secondary" id="btn-back">Back</button>
+      </div>
+    </div>`;
+
+  document.querySelectorAll('.opt-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      state.settings.timeLimit = parseInt(btn.dataset.val, 10);
+    };
+  });
+
+  document.getElementById('btn-save').onclick = () => { saveSettings(); state.view = 'home'; render(); };
+  document.getElementById('btn-back').onclick = () => { state.view = 'home'; render(); };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HIGHSCORES
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHighscores(app) {
+  const scores = getHighscores();
+  const modeLabel = state.mode === 'usa' ? 'USA States' : state.difficulty === 'expert' ? 'World — Expert' : 'World — Regular';
+  const rows = scores.length
+    ? scores.map((s, i) => `
+      <div class="hs-row">
+        <div class="hs-rank">${i + 1}</div>
+        <div class="hs-body">
+          <div class="hs-score">${s.count} / ${s.total}</div>
+          <div class="hs-meta">${s.date}</div>
+        </div>
+        <div class="hs-time">${fmt(s.elapsed)}</div>
+      </div>`).join('')
+    : '<div class="hs-empty">No scores yet. Play a game!</div>';
+
+  app.innerHTML = `
+    <div class="screen">
+      <div class="screen-title">Highscores — ${modeLabel}</div>
+      <div class="card" style="width:100%;max-width:480px">
+        <div class="hs-list">${rows}</div>
+      </div>
+      ${scores.length ? `<button class="btn btn-danger btn-sm" id="btn-clear">Clear All</button>` : ''}
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-full" id="btn-back-hs">Back</button>
+      </div>
+    </div>`;
+
+  document.getElementById('btn-back-hs').onclick = () => { state.view = 'home'; render(); };
+  const clr = document.getElementById('btn-clear');
+  if (clr) clr.onclick = () => {
+    if (confirm('Clear all highscores?')) {
+      if (state.mode === 'usa') state.usaHighscores = [];
+      else if (state.difficulty === 'expert') state.worldExpertHighscores = [];
+      else state.worldHighscores = [];
+      saveSettings(); renderHighscores(app);
+    }
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPERT AUDIO  (Web Audio API procedural beat)
+// ─────────────────────────────────────────────────────────────────────────────
+const ExpertAudio = (() => {
+  let ctx = null, master = null, schedId = null, nextTime = 0, step = 0;
+  const BPM = 138, S16 = 60 / BPM / 4; // 16th-note duration
+
+  function noise(t, dur, freq, vol) {
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const filt = ctx.createBiquadFilter(); filt.type = 'bandpass'; filt.frequency.value = freq; filt.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(filt); filt.connect(g); g.connect(master);
+    src.start(t); src.stop(t + dur);
+  }
+
+  function kick(t) {
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(28, t + 0.45);
+    g.gain.setValueAtTime(1.6, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + 0.45);
+  }
+
+  function snare(t) {
+    noise(t, 0.14, 1800, 0.45);
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.frequency.value = 220; osc.type = 'triangle';
+    g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + 0.1);
+  }
+
+  function hihat(t, vol) { noise(t, 0.04, 9000, vol); }
+
+  function bass(t, freq) {
+    if (!freq) return;
+    const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = freq;
+    const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 280; filt.Q.value = 3;
+    const dist = ctx.createWaveShaper();
+    const curve = new Float32Array(128);
+    for (let i = 0; i < 128; i++) { const x = (i * 2) / 128 - 1; curve[i] = Math.tanh(x * 4) * 0.7; }
+    dist.curve = curve;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.38, t); g.gain.exponentialRampToValueAtTime(0.0001, t + S16 * 1.8);
+    osc.connect(dist); dist.connect(filt); filt.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + S16 * 2);
+  }
+
+  // 16-step pattern at 138 BPM
+  const KICK  = new Set([0, 6, 8, 14]);           // syncopated kick
+  const SNARE = new Set([4, 12]);                  // beats 2 & 4
+  const HHAT  = new Set([0,2,4,6,8,10,12,14]);    // 8th notes open
+  // E minor bass riff (Hz, 0 = rest)
+  const BASS  = [41.2, 0, 41.2, 0, 49.0, 0, 41.2, 36.7, 41.2, 0, 41.2, 0, 49.0, 55.0, 0, 41.2];
+
+  function tick() {
+    while (nextTime < ctx.currentTime + 0.18) {
+      const s = step % 16;
+      if (KICK.has(s))  kick(nextTime);
+      if (SNARE.has(s)) snare(nextTime);
+      hihat(nextTime, HHAT.has(s) ? 0.1 : 0.045);
+      bass(nextTime, BASS[s]);
+      nextTime += S16; step++;
+    }
+    schedId = setTimeout(tick, 50);
+  }
+
+  return {
+    start() {
+      if (ctx) return;
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);
+        nextTime = ctx.currentTime + 0.05; step = 0; tick();
+      } catch(e) {}
+    },
+    stop() {
+      if (schedId) { clearTimeout(schedId); schedId = null; }
+      if (ctx) {
+        try { master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
+              master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4); } catch(e) {}
+        setTimeout(() => { if (ctx) { ctx.close(); ctx = null; } }, 500);
+      }
+    }
+  };
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPERT INTRO ANIMATION
+// ─────────────────────────────────────────────────────────────────────────────
+function showExpertIntro() {
+  return new Promise(resolve => {
+    ExpertAudio.start();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'expert-intro';
+    overlay.innerHTML = `<canvas id="ei-canvas"></canvas><div id="expert-intro-title">EXPERT<br>MODE</div>`;
+    document.body.appendChild(overlay);
+
+    const canvas = document.getElementById('ei-canvas');
+    const c = canvas.getContext('2d');
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const W = canvas.width, H = canvas.height;
+    const particles = [];
+
+    function spawnParticle() {
+      const smoke = Math.random() < 0.28;
+      particles.push({
+        x: Math.random() * W,
+        y: H + 15,
+        vx: (Math.random() - 0.5) * (smoke ? 1.2 : 1.8),
+        vy: -(Math.random() * (smoke ? 2.5 : 4.5) + 1.5),
+        life: smoke ? 0.55 + Math.random() * 0.3 : 0.8 + Math.random() * 0.2,
+        size: smoke ? Math.random() * 30 + 20 : Math.random() * 22 + 8,
+        decay: smoke ? 0.005 : 0.013 + Math.random() * 0.007,
+        smoke,
+      });
+    }
+
+    // Pre-seed particles spread across the screen vertically
+    for (let i = 0; i < 90; i++) {
+      spawnParticle();
+      const p = particles[particles.length - 1];
+      p.y = H * (0.3 + Math.random() * 0.8);
+      p.life *= Math.random();
+    }
+
+    let animId;
+    const start = Date.now();
+    const DURATION = 2800;
+
+    function frame() {
+      const elapsed = Date.now() - start;
+      c.clearRect(0, 0, W, H);
+
+      // Spawn more
+      for (let i = 0; i < 6; i++) spawnParticle();
+
+      // Update & cull
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.vy -= 0.03;
+        if (p.smoke) p.size += 0.5; else p.size *= 0.993;
+        p.life -= p.decay;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      // Draw smoke first (behind fire)
+      for (const p of particles) {
+        if (!p.smoke) continue;
+        c.save(); c.globalAlpha = p.life * 0.18;
+        c.fillStyle = '#2a2a2a';
+        c.beginPath(); c.arc(p.x, p.y, p.size, 0, Math.PI * 2); c.fill();
+        c.restore();
+      }
+      // Draw fire
+      for (const p of particles) {
+        if (p.smoke) continue;
+        const g = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+        const gb = Math.floor(p.life * 160);
+        g.addColorStop(0,   `rgba(255,${gb + 60},10,${p.life})`);
+        g.addColorStop(0.45,`rgba(230,${gb},0,${p.life * 0.65})`);
+        g.addColorStop(1,   `rgba(160,0,0,0)`);
+        c.save(); c.fillStyle = g;
+        c.beginPath(); c.arc(p.x, p.y, p.size, 0, Math.PI * 2); c.fill();
+        c.restore();
+      }
+
+      if (elapsed < DURATION) {
+        animId = requestAnimationFrame(frame);
+      } else {
+        overlay.style.transition = 'opacity 0.55s';
+        overlay.style.opacity = '0';
+        setTimeout(() => { cancelAnimationFrame(animId); overlay.remove(); resolve(); }, 580);
+      }
+    }
+
+    animId = requestAnimationFrame(frame);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PERSISTENCE
+// ─────────────────────────────────────────────────────────────────────────────
+function saveSettings() {
+  const data = {
+    settings: state.settings,
+    worldHighscores:       state.worldHighscores,
+    worldExpertHighscores: state.worldExpertHighscores,
+    usaHighscores:         state.usaHighscores,
+  };
+  try { localStorage.setItem('world-map', JSON.stringify(data)); } catch {}
+  if (_sync) _sync.sync();
+}
+
+function applySettings(data) {
+  if (!data) return;
+  if (data.settings)              state.settings              = { ...state.settings, ...data.settings };
+  if (data.worldHighscores)       state.worldHighscores       = data.worldHighscores;
+  if (data.worldExpertHighscores) state.worldExpertHighscores = data.worldExpertHighscores;
+  if (data.usaHighscores)         state.usaHighscores         = data.usaHighscores;
+  // Migrate legacy single highscores array
+  if (data.highscores && !data.worldHighscores) state.worldHighscores = data.highscores;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────────────────────────
+window.__worldMapInit = async function () {
+  const saved = window.Auth ? await Auth.loadSettings('world-map') : null;
+  if (saved) {
+    applySettings(saved);
+  } else {
+    try { applySettings(JSON.parse(localStorage.getItem('world-map'))); } catch {}
+  }
+  if (window.Auth) {
+    _sync = Auth.autoSync('world-map', () => ({
+      settings: state.settings,
+      worldHighscores:       state.worldHighscores,
+      worldExpertHighscores: state.worldExpertHighscores,
+      usaHighscores:         state.usaHighscores,
+    }));
+  }
+  render();
+};
+</script>
+
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+<script>
+  if (window.Auth) {
+    Auth.onReady(() => window.__worldMapInit());
+  } else {
+    window.__worldMapInit();
+  }
+</script>
+</body>
+</html>

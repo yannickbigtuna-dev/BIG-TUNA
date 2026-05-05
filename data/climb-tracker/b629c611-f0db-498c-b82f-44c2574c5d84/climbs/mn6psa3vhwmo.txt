@@ -1,0 +1,12 @@
+id=mn6psa3vhwmo
+date=2026-03-26T00:08:30.763Z
+grade=Orange
+holdsColor=Red
+status=complete
+tries=1
+rating=0
+flash=true
+styles=
+notes=
+sessionId=
+hasPhoto=true

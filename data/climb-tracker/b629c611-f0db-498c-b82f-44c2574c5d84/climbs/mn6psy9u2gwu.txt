@@ -1,0 +1,12 @@
+id=mn6psy9u2gwu
+date=2026-03-26T00:09:02.083Z
+grade=Yellow
+holdsColor=Green
+status=complete
+tries=1
+rating=0
+flash=true
+styles=
+notes=
+sessionId=mn6pshg5rgqt
+hasPhoto=true

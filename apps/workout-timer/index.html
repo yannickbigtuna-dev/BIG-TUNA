@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Workout Timer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+    :root {
+      --bg: #1a1a2e;
+      --text: #ffffff;
+      --sub: rgba(255,255,255,0.5);
+      --bar-bg: rgba(255,255,255,0.15);
+      --card: rgba(0,0,0,0.22);
+      --transition: 0.5s ease;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bot: env(safe-area-inset-bottom, 0px);
+      --topbar-h: 52px;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      transition: background var(--transition);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── SCREENS ── */
+    #setup, #timer {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #timer { display: none; overflow: hidden; }
+
+    /* ── SETUP SCREEN ── */
+    #setup {
+      padding: 24px 20px calc(24px + var(--safe-bot));
+      gap: 0;
+    }
+
+    #setup h1 {
+      font-size: clamp(1.5rem, 6vw, 2rem);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      margin-bottom: 28px;
+      opacity: 0.95;
+    }
+
+    .fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%;
+      max-width: 480px;
+      margin-bottom: 20px;
+    }
+
+    .field {
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 16px;
+      padding: 14px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--sub);
+    }
+
+    .field input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: clamp(1.5rem, 5vw, 1.9rem);
+      font-weight: 800;
+      width: 100%;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .field input::-webkit-inner-spin-button,
+    .field input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+    /* ── NAMED EXERCISES ── */
+    .toggle-row {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding: 0 4px;
+    }
+
+    .toggle-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--sub);
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.12);
+      border-radius: 99px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 20px; height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle-switch input:checked + .toggle-track { background: rgba(100,200,120,0.7); }
+    .toggle-switch input:checked + .toggle-track::after { transform: translateX(18px); }
+
+    #exercise-names-section {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #exercise-names-section .section-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--sub);
+      margin-bottom: 2px;
+    }
+
+    .ex-name-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ex-name-num {
+      font-size: 0.7rem;
+      color: var(--sub);
+      width: 20px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .ex-name-input {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 9px 12px;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-weight: 600;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
+    .ex-name-input::placeholder { color: rgba(255,255,255,0.2); }
+    .ex-name-input:focus { border-color: rgba(255,255,255,0.3); }
+
+    /* ── EXERCISE NAME ON TIMER ── */
+    #exercise-name-display {
+      font-size: clamp(1.2rem, 5vw, 2rem);
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      opacity: 0.9;
+      margin-bottom: clamp(2px, 0.8vh, 8px);
+      min-height: 1.2em;
+      text-align: center;
+    }
+
+    /* ── BUTTONS ── */
+    .btn-start {
+      width: 100%;
+      max-width: 480px;
+      padding: 17px;
+      border: none;
+      border-radius: 16px;
+      background: var(--text);
+      color: var(--bg);
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: opacity 0.15s, transform 0.1s;
+      margin-bottom: 10px;
+    }
+
+    .btn-start:active { opacity: 0.8; transform: scale(0.98); }
+
+    .btn-save-defaults {
+      width: 100%;
+      max-width: 480px;
+      padding: 13px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      background: transparent;
+      color: rgba(255,255,255,0.5);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      font-family: inherit;
+    }
+
+    .btn-save-defaults:active,
+    .btn-save-defaults:hover {
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.8);
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    .btn-save-defaults.saved {
+      color: rgba(100,220,120,0.8);
+      border-color: rgba(100,220,120,0.3);
+    }
+
+    /* ── TIMER SCREEN ── */
+    #timer {
+      justify-content: space-between;
+      padding: clamp(6px, 1.5vh, 16px) 20px calc(clamp(8px, 1.5vh, 16px) + var(--safe-bot));
+    }
+
+    #timer-top {
+      width: 100%;
+      max-width: 540px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      justify-content: center;
+      gap: 0;
+    }
+
+    #stage-label {
+      font-size: clamp(0.65rem, 2.5vw, 1rem);
+      font-weight: 800;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      opacity: 0.6;
+      margin-bottom: clamp(4px, 1vh, 10px);
+    }
+
+    #clock {
+      font-size: clamp(3.2rem, min(20vw, 16vh), 11rem);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: clamp(8px, 2vh, 18px);
+    }
+
+    #bar-wrap {
+      width: min(480px, 88vw);
+      height: 6px;
+      background: var(--bar-bg);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    #bar {
+      height: 100%;
+      background: rgba(255,255,255,0.8);
+      border-radius: 99px;
+      transition: width 0.9s linear;
+    }
+
+    /* ── BOTTOM INFO ── */
+    #timer-bottom {
+      width: 100%;
+      max-width: 540px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(10px, 2.5vh, 20px);
+    }
+
+    #info {
+      display: flex;
+      gap: clamp(24px, 8vw, 56px);
+      opacity: 0.72;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .info-val {
+      font-size: clamp(1.1rem, 4.5vw, 1.5rem);
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .info-lbl {
+      font-size: clamp(0.55rem, 2vw, 0.65rem);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      opacity: 0.65;
+    }
+
+    /* ── CONTROLS ── */
+    #controls {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .ctrl {
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      font-size: 0.82rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: clamp(44px, 7vh, 54px);
+      touch-action: manipulation;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .ctrl:active { opacity: 0.75; transform: scale(0.97); }
+    .ctrl svg { width: 17px; height: 17px; fill: currentColor; flex-shrink: 0; }
+
+    #btn-playpause {
+      flex: 2;
+      background: rgba(255,255,255,0.95);
+      color: #111;
+    }
+
+    #btn-stop, #btn-reset {
+      flex: 1;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup">
+  <h1>Workout Timer</h1>
+  <div class="fields">
+    <div class="field">
+      <label>Work (sec)</label>
+      <input type="number" id="s-work" value="30" min="1" max="3600" inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label>Rest (sec)</label>
+      <input type="number" id="s-rest" value="10" min="0" max="3600" inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label>Exercises</label>
+      <input type="number" id="s-exercises" value="5" min="1" max="99" inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label>Rounds</label>
+      <input type="number" id="s-rounds" value="3" min="1" max="99" inputmode="numeric" />
+    </div>
+    <div class="field" style="grid-column:1/-1">
+      <label>Rest Between Rounds (sec)</label>
+      <input type="number" id="s-roundrest" value="60" min="0" max="3600" inputmode="numeric" />
+    </div>
+  </div>
+  <div class="toggle-row">
+    <span class="toggle-label">Name Exercises</span>
+    <label class="toggle-switch">
+      <input type="checkbox" id="s-nameex" checked onchange="toggleNameExercises()" />
+      <span class="toggle-track"></span>
+    </label>
+  </div>
+
+  <div id="exercise-names-section">
+    <div class="section-label">Exercise Names</div>
+    <div id="ex-name-list"></div>
+  </div>
+
+  <button class="btn-start" onclick="startWorkout()">START WORKOUT</button>
+  <button class="btn-save-defaults" id="btn-save-defaults" onclick="saveDefaults()">SAVE AS DEFAULT</button>
+</div>
+
+<!-- TIMER -->
+<div id="timer">
+  <div id="timer-top">
+    <div id="stage-label">WORK</div>
+    <div id="exercise-name-display"></div>
+    <div id="clock">00:00</div>
+    <div id="bar-wrap"><div id="bar" style="width:100%"></div></div>
+  </div>
+  <div id="timer-bottom">
+    <div id="info">
+      <div class="info-item">
+        <span class="info-val" id="i-total">00:00</span>
+        <span class="info-lbl">Total Left</span>
+      </div>
+      <div class="info-item">
+        <span class="info-val" id="i-ex">1</span>
+        <span class="info-lbl">Exercise</span>
+      </div>
+      <div class="info-item">
+        <span class="info-val" id="i-round">1</span>
+        <span class="info-lbl">Round</span>
+      </div>
+    </div>
+    <div id="controls">
+      <button class="ctrl" id="btn-playpause" onclick="togglePause()">
+        <svg viewBox="0 0 24 24" id="pp-icon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        <span id="pp-label">PAUSE</span>
+      </button>
+      <button class="ctrl" id="btn-stop" onclick="stopWorkout()">
+        <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+        STOP
+      </button>
+      <button class="ctrl" id="btn-reset" onclick="resetCurrent()">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+        RESET
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Named Exercises ───────────────────────────────────────────────────────────
+function buildNameInputs() {
+  const count = Math.max(1, +document.getElementById('s-exercises').value || 5);
+  const list  = document.getElementById('ex-name-list');
+  const existing = Array.from(list.querySelectorAll('.ex-name-input')).map(i => i.value);
+  list.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const row = document.createElement('div');
+    row.className = 'ex-name-row';
+    row.innerHTML = `<span class="ex-name-num">${i + 1}</span>
+      <input class="ex-name-input" type="text" placeholder="Exercise ${i + 1}"
+             value="${existing[i] || ''}" inputmode="text" />`;
+    list.appendChild(row);
+  }
+}
+
+function toggleNameExercises() {
+  const on  = document.getElementById('s-nameex').checked;
+  const sec = document.getElementById('exercise-names-section');
+  sec.style.display = on ? 'flex' : 'none';
+  if (on) buildNameInputs();
+}
+
+function getExerciseNames() {
+  if (!document.getElementById('s-nameex').checked) return [];
+  return Array.from(document.getElementById('ex-name-list').querySelectorAll('.ex-name-input'))
+    .map(i => i.value.trim());
+}
+
+// ── Settings: save & load ─────────────────────────────────────────────────────
+function getFormValues() {
+  return {
+    work:          Math.max(1, +document.getElementById('s-work').value      || 30),
+    rest:          Math.max(0, +document.getElementById('s-rest').value      || 10),
+    exercises:     Math.max(1, +document.getElementById('s-exercises').value || 5),
+    rounds:        Math.max(1, +document.getElementById('s-rounds').value    || 3),
+    roundrest:     Math.max(0, +document.getElementById('s-roundrest').value || 60),
+    nameExercises: document.getElementById('s-nameex').checked,
+    exerciseNames: getExerciseNames(),
+  };
+}
+
+function applySettings(s) {
+  if (!s) return;
+  if (s.work      != null) document.getElementById('s-work').value      = s.work;
+  if (s.rest      != null) document.getElementById('s-rest').value      = s.rest;
+  if (s.exercises != null) document.getElementById('s-exercises').value = s.exercises;
+  if (s.rounds    != null) document.getElementById('s-rounds').value    = s.rounds;
+  if (s.roundrest != null) document.getElementById('s-roundrest').value = s.roundrest;
+  if (s.nameExercises != null) {
+    document.getElementById('s-nameex').checked = s.nameExercises;
+    toggleNameExercises();
+  }
+  if (s.exerciseNames && Array.isArray(s.exerciseNames)) {
+    buildNameInputs();
+    const inputs = document.querySelectorAll('.ex-name-input');
+    s.exerciseNames.forEach((name, i) => { if (inputs[i]) inputs[i].value = name; });
+  }
+}
+
+async function saveDefaults() {
+  const btn = document.getElementById('btn-save-defaults');
+  btn.disabled = true;
+  await Auth.saveSettings('workout-timer', getFormValues());
+  btn.textContent = 'SAVED';
+  btn.classList.add('saved');
+  setTimeout(() => {
+    btn.textContent = 'SAVE AS DEFAULT';
+    btn.classList.remove('saved');
+    btn.disabled = false;
+  }, 2000);
+}
+
+// Init on DOMContentLoaded
+window.addEventListener('DOMContentLoaded', () => {
+  buildNameInputs();
+  document.getElementById('s-exercises').addEventListener('input', () => {
+    if (document.getElementById('s-nameex').checked) buildNameInputs();
+  });
+
+  // Load saved settings once auth is ready
+  Auth.onReady(async user => {
+    if (!user) return;
+    const saved = await Auth.loadSettings('workout-timer');
+    applySettings(saved);
+  });
+});
+
+// ── Themes ────────────────────────────────────────────────────────────────────
+const THEMES = {
+  work:      '#1a5e38',
+  rest:      '#b03020',
+  roundrest: '#123658',
+  done:      '#1a1a2e',
+  idle:      '#1a1a2e',
+};
+
+function applyTheme(name) {
+  document.documentElement.style.setProperty('--bg', THEMES[name] || THEMES.idle);
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let cfg = {}, steps = [], stepIdx = 0, stepRemaining = 0, totalRemaining = 0, paused = false, ticker = null;
+
+function buildSteps(c) {
+  const list = [];
+  for (let r = 1; r <= c.rounds; r++) {
+    for (let e = 1; e <= c.exercises; e++) {
+      list.push({ type: 'work', duration: c.work, ex: e, round: r });
+      if (e < c.exercises && c.rest > 0)
+        list.push({ type: 'rest', duration: c.rest, ex: e, round: r });
+    }
+    if (r < c.rounds && c.roundrest > 0)
+      list.push({ type: 'roundrest', duration: c.roundrest, ex: c.exercises, round: r });
+  }
+  return list;
+}
+
+function calcTotal(s, from) { return s.slice(from).reduce((a, st) => a + st.duration, 0); }
+function fmt(sec) { return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`; }
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+function startWorkout() {
+  cfg = {
+    work:      Math.max(1, +document.getElementById('s-work').value      || 30),
+    rest:      Math.max(0, +document.getElementById('s-rest').value      || 10),
+    exercises: Math.max(1, +document.getElementById('s-exercises').value || 5),
+    rounds:    Math.max(1, +document.getElementById('s-rounds').value    || 3),
+    roundrest: Math.max(0, +document.getElementById('s-roundrest').value || 60),
+    names:     getExerciseNames(),
+  };
+  steps = buildSteps(cfg);
+  stepIdx = 0; paused = false;
+  totalRemaining = calcTotal(steps, 0);
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('timer').style.display = 'flex';
+  loadStep(); startTicker();
+}
+
+function loadStep() {
+  if (stepIdx >= steps.length) { finishWorkout(); return; }
+  const st = steps[stepIdx];
+  stepRemaining = st.duration;
+  document.getElementById('stage-label').textContent = { work:'WORK', rest:'REST', roundrest:'ROUND REST' }[st.type] || st.type.toUpperCase();
+  const workExIdx = st.type === 'work' ? st.ex - 1 : (steps[stepIdx-1]?.ex || st.ex) - 1;
+  const nameExIdx = st.type === 'rest' ? workExIdx + 1 : workExIdx;
+  document.getElementById('i-ex').textContent    = workExIdx + 1;
+  document.getElementById('i-round').textContent = st.round;
+  const name = cfg.names && cfg.names[nameExIdx] ? cfg.names[nameExIdx] : '';
+  document.getElementById('exercise-name-display').textContent = (st.type === 'roundrest') ? '' : name;
+  applyTheme(st.type); render();
+}
+
+function render() {
+  if (stepIdx >= steps.length) return;
+  const st = steps[stepIdx];
+  document.getElementById('clock').textContent   = fmt(stepRemaining);
+  document.getElementById('i-total').textContent = fmt(totalRemaining);
+  document.getElementById('bar').style.width     = (st.duration > 0 ? (stepRemaining / st.duration) * 100 : 0) + '%';
+}
+
+function startTicker() {
+  clearInterval(ticker);
+  ticker = setInterval(() => {
+    if (paused) return;
+    stepRemaining--; totalRemaining--;
+    if (stepRemaining <= 0) { stepIdx++; loadStep(); } else render();
+  }, 1000);
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('pp-icon').innerHTML  = paused ? '<path d="M8 5v14l11-7z"/>' : '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+  document.getElementById('pp-label').textContent = paused ? 'PLAY' : 'PAUSE';
+}
+
+function stopWorkout() {
+  clearInterval(ticker); ticker = null; paused = false;
+  applyTheme('idle');
+  document.getElementById('timer').style.display = 'none';
+  document.getElementById('setup').style.display = 'flex';
+  document.getElementById('pp-icon').innerHTML   = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+  document.getElementById('pp-label').textContent = 'PAUSE';
+}
+
+function resetCurrent() {
+  if (stepIdx >= steps.length) return;
+  paused = false;
+  document.getElementById('pp-icon').innerHTML   = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+  document.getElementById('pp-label').textContent = 'PAUSE';
+  totalRemaining = calcTotal(steps, stepIdx);
+  stepRemaining  = steps[stepIdx].duration;
+  render();
+}
+
+function finishWorkout() {
+  clearInterval(ticker); ticker = null;
+  applyTheme('done');
+  document.getElementById('stage-label').textContent           = 'DONE!';
+  document.getElementById('exercise-name-display').textContent = '';
+  document.getElementById('clock').textContent                 = '00:00';
+  document.getElementById('bar').style.width         = '0%';
+  document.getElementById('i-total').textContent     = '00:00';
+}
+</script>
+
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+</body>
+</html>

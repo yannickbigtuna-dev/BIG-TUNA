@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Capitals Quiz — BIG TUNA</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0a0a0a;
+    color: #eee;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    user-select: none;
+  }
+  body.game-active { height: 100svh; height: 100dvh; overflow: hidden; }
+  body.game-active #app { height: 100%; overflow: hidden; }
+  #app { flex: 1; display: flex; flex-direction: column; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: none; border-radius: 12px; cursor: pointer;
+    font-family: inherit; font-weight: 800; letter-spacing: 0.06em;
+    transition: opacity .15s, transform .1s, background .12s;
+    touch-action: manipulation; text-decoration: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary   { background: #fff; color: #0a0a0a; padding: 14px 24px; font-size: 0.88rem; }
+  .btn-primary:hover { background: #f0f0f0; }
+  .btn-secondary { background: #1e1e1e; color: #ccc; padding: 12px 20px; font-size: 0.85rem; border: 1px solid #2a2a2a; }
+  .btn-secondary:hover { background: #252525; }
+  .btn-danger    { background: #1a0707; color: #ff6b6b; padding: 10px 18px; font-size: 0.82rem; border: 1px solid #3a1010; }
+  .btn-danger:hover { background: #220909; }
+  .btn-sm { padding: 8px 14px; font-size: 0.78rem; letter-spacing: 0.05em; }
+  .btn-full { width: 100%; }
+
+  /* Home */
+  .home {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 24px 48px; gap: 36px;
+  }
+  .home-hero { text-align: center; }
+  .home-globe { font-size: clamp(2.8rem, 10vw, 4.5rem); line-height: 1; margin-bottom: 14px; }
+  .home-title { font-size: clamp(1.9rem, 7vw, 3rem); font-weight: 900; letter-spacing: -0.03em; line-height: 1.05; }
+  .home-sub { margin-top: 10px; font-size: clamp(0.75rem, 2vw, 0.9rem); color: #444; letter-spacing: 0.1em; text-transform: uppercase; }
+  .home-buttons { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; }
+
+  /* Option grids */
+  .opt-grid   { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .opt-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .opt-grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .opt-btn {
+    padding: 11px 6px; border-radius: 9px; border: 1px solid #2a2a2a;
+    background: #1a1a1a; color: #777; font-family: inherit;
+    font-size: 0.82rem; font-weight: 700; cursor: pointer;
+    text-align: center; transition: all .15s;
+  }
+  .opt-btn.on { background: #eee; color: #0a0a0a; border-color: #eee; }
+  .opt-btn:hover:not(.on) { background: #222; color: #ccc; }
+
+  /* Game layout */
+  .game-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+  .progress-bar { height: 3px; background: #1a1a1a; flex-shrink: 0; }
+  .progress-fill { height: 100%; background: #eee; transition: width 0.4s ease; }
+
+  .game-stats {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 16px; background: #0f0f0f; border-bottom: 1px solid #1a1a1a; flex-shrink: 0;
+  }
+  .stat-box { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 52px; }
+  .stat-val { font-size: clamp(1rem, 4vw, 1.4rem); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1; }
+  .stat-lbl { font-size: 0.58rem; color: #444; text-transform: uppercase; letter-spacing: 0.1em; }
+  .stat-val.red { color: #ef5350; }
+  .stat-val.green { color: #4caf50; }
+  .stat-divider { width: 1px; background: #1e1e1e; align-self: stretch; margin: 2px 0; }
+
+  /* Country card */
+  .country-display {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 12px 20px; gap: 6px; overflow: hidden; min-height: 0;
+  }
+  .country-flag-img {
+    height: clamp(52px, 10vh, 90px);
+    width: auto;
+    border-radius: 3px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    display: block;
+    flex-shrink: 0;
+  }
+  .country-name {
+    font-size: clamp(1.5rem, 6vw, 2.6rem);
+    font-weight: 900; letter-spacing: -0.02em;
+    text-align: center; color: #eee; line-height: 1.1;
+  }
+  .outline-wrap {
+    width: 100%; max-width: 320px;
+    height: clamp(90px, 18vh, 170px);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .outline-wrap svg { max-width: 100%; max-height: 100%; display: block; }
+  .outline-placeholder { color: #1e1e1e; font-size: 2.2rem; }
+
+  /* Wrong answer reveal */
+  .country-display.wrong-state {
+    background: #1a0000;
+    animation: wrong-bg 0.25s ease forwards;
+  }
+  @keyframes wrong-bg {
+    from { background: #4a0000; }
+    to   { background: #1a0000; }
+  }
+  .wrong-reveal {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; text-align: center;
+  }
+  .wrong-reveal-label {
+    font-size: 0.72rem; color: #ff6b6b; text-transform: uppercase;
+    letter-spacing: 0.14em; font-weight: 700;
+  }
+  .wrong-reveal-capital {
+    font-size: clamp(2rem, 9vw, 3.8rem);
+    font-weight: 900; letter-spacing: -0.02em;
+    color: #ff6b6b; line-height: 1.1;
+  }
+
+  /* Bottom bar */
+  .bottom-bar {
+    background: #111; border-top: 1px solid #1c1c1c;
+    padding: 10px 14px 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+  }
+  .input-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  #capital-input {
+    flex: 1; background: #1a1a1a; border: 1px solid #2a2a2a;
+    border-radius: 10px; padding: 12px 14px; color: #eee;
+    font-family: inherit; font-size: 1rem; outline: none;
+    transition: border-color .2s, background .2s;
+    user-select: text; -webkit-user-select: text;
+  }
+  #capital-input:focus { border-color: #3a3a3a; }
+  #capital-input.correct { border-color: #4caf50; background: #0c1c0e; }
+  #capital-input.wrong   { border-color: #ef5350; background: #1a0808; }
+  #capital-input.skipped { border-color: #e6920a; background: #1a1000; color: #e6920a; }
+
+  .bottom-actions {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .score-inline { font-size: 0.78rem; color: #444; font-variant-numeric: tabular-nums; }
+  .score-inline strong { color: #4caf50; font-weight: 800; }
+
+  /* Screen (settings/results/highscores) */
+  .screen {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; padding: 28px 20px 60px;
+    gap: 20px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .screen-title { font-size: 1.5rem; font-weight: 900; letter-spacing: -0.01em; align-self: flex-start; max-width: 480px; width: 100%; margin: 0 auto; }
+  .card { background: #141414; border: 1px solid #1e1e1e; border-radius: 16px; padding: 20px; width: 100%; max-width: 480px; }
+  .card-label { font-size: 0.68rem; color: #444; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px; font-weight: 700; }
+
+  /* Highscores */
+  .hs-list { display: flex; flex-direction: column; gap: 8px; }
+  .hs-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #0f0f0f; border-radius: 10px; border: 1px solid #1a1a1a; }
+  .hs-rank { font-size: 0.78rem; color: #333; font-weight: 700; width: 18px; text-align: center; flex-shrink: 0; }
+  .hs-body { flex: 1; }
+  .hs-score { font-size: 1.05rem; font-weight: 800; }
+  .hs-meta { font-size: 0.72rem; color: #444; margin-top: 2px; }
+  .hs-time { font-size: 0.82rem; color: #555; font-variant-numeric: tabular-nums; }
+  .hs-empty { text-align: center; padding: 28px 0; color: #333; font-size: 0.9rem; }
+
+  /* Results */
+  .result-big { font-size: clamp(3.5rem, 14vw, 6rem); font-weight: 900; letter-spacing: -0.04em; line-height: 1; color: #4caf50; }
+  .result-sub { font-size: 0.95rem; color: #444; margin-top: 6px; }
+  .missed-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
+  .missed-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #0f0f0f; border-radius: 8px; border: 1px solid #1a1a1a; }
+  .missed-flag { font-size: 1.1rem; flex-shrink: 0; }
+  .missed-country { font-size: 0.82rem; color: #555; flex: 1; }
+  .missed-capital { font-size: 0.85rem; color: #ccc; font-weight: 700; }
+
+  .btn-row { display: flex; gap: 10px; width: 100%; max-width: 480px; }
+  .btn-row .btn { flex: 1; }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
+    background: #222; border: 1px solid #333; color: #aaa;
+    padding: 8px 18px; border-radius: 8px; font-size: 0.82rem;
+    opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none;
+    white-space: nowrap; z-index: 1000;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAPITALS DATABASE  (ISO 3166-1 numeric → { capital, aliases[], a2, region })
+// ─────────────────────────────────────────────────────────────────────────────
+const CAPITALS = {
+  '004': { capital: 'Kabul',                       aliases: [],                                        a2: 'AF', region: 'Asia'     },
+  '008': { capital: 'Tirana',                      aliases: ['tirane'],                                a2: 'AL', region: 'Europe'   },
+  '012': { capital: 'Algiers',                     aliases: ['alger', 'el djazair'],                   a2: 'DZ', region: 'Africa'   },
+  '020': { capital: 'Andorra la Vella',            aliases: ['andorra'],                               a2: 'AD', region: 'Europe'   },
+  '024': { capital: 'Luanda',                      aliases: [],                                        a2: 'AO', region: 'Africa'   },
+  '028': { capital: "Saint John's",               aliases: ["st johns", 'saint johns'],               a2: 'AG', region: 'Americas' },
+  '032': { capital: 'Buenos Aires',               aliases: [],                                        a2: 'AR', region: 'Americas' },
+  '036': { capital: 'Canberra',                   aliases: [],                                        a2: 'AU', region: 'Oceania'  },
+  '040': { capital: 'Vienna',                     aliases: ['wien'],                                  a2: 'AT', region: 'Europe'   },
+  '031': { capital: 'Baku',                       aliases: [],                                        a2: 'AZ', region: 'Asia'     },
+  '044': { capital: 'Nassau',                     aliases: [],                                        a2: 'BS', region: 'Americas' },
+  '048': { capital: 'Manama',                     aliases: [],                                        a2: 'BH', region: 'Asia'     },
+  '050': { capital: 'Dhaka',                      aliases: ['dacca'],                                 a2: 'BD', region: 'Asia'     },
+  '051': { capital: 'Yerevan',                    aliases: ['erevan', 'erivan'],                      a2: 'AM', region: 'Asia'     },
+  '052': { capital: 'Bridgetown',                 aliases: [],                                        a2: 'BB', region: 'Americas' },
+  '056': { capital: 'Brussels',                   aliases: ['bruxelles', 'brussel'],                  a2: 'BE', region: 'Europe'   },
+  '064': { capital: 'Thimphu',                    aliases: ['thimbu'],                                a2: 'BT', region: 'Asia'     },
+  '068': { capital: 'Sucre',                      aliases: ['la paz', 'lapaz'],                       a2: 'BO', region: 'Americas' },
+  '070': { capital: 'Sarajevo',                   aliases: [],                                        a2: 'BA', region: 'Europe'   },
+  '072': { capital: 'Gaborone',                   aliases: [],                                        a2: 'BW', region: 'Africa'   },
+  '076': { capital: 'Brasilia',                   aliases: ['brasília'],                              a2: 'BR', region: 'Americas' },
+  '084': { capital: 'Belmopan',                   aliases: [],                                        a2: 'BZ', region: 'Americas' },
+  '096': { capital: 'Bandar Seri Begawan',        aliases: ['bandar', 'bsb'],                         a2: 'BN', region: 'Asia'     },
+  '100': { capital: 'Sofia',                      aliases: [],                                        a2: 'BG', region: 'Europe'   },
+  '104': { capital: 'Naypyidaw',                  aliases: ['naypyitaw', 'nay pyi taw'],              a2: 'MM', region: 'Asia'     },
+  '108': { capital: 'Gitega',                     aliases: ['bujumbura'],                             a2: 'BI', region: 'Africa'   },
+  '112': { capital: 'Minsk',                      aliases: [],                                        a2: 'BY', region: 'Europe'   },
+  '116': { capital: 'Phnom Penh',                 aliases: ['phnompenh', 'phnom-penh'],               a2: 'KH', region: 'Asia'     },
+  '120': { capital: 'Yaounde',                    aliases: ['yaoundé'],                               a2: 'CM', region: 'Africa'   },
+  '124': { capital: 'Ottawa',                     aliases: [],                                        a2: 'CA', region: 'Americas' },
+  '132': { capital: 'Praia',                      aliases: [],                                        a2: 'CV', region: 'Africa'   },
+  '140': { capital: 'Bangui',                     aliases: [],                                        a2: 'CF', region: 'Africa'   },
+  '144': { capital: 'Sri Jayawardenepura Kotte',  aliases: ['colombo', 'kotte', 'jayawardenepura'],   a2: 'LK', region: 'Asia'     },
+  '148': { capital: "N'Djamena",                  aliases: ['ndjamena', 'fort lamy'],                 a2: 'TD', region: 'Africa'   },
+  '152': { capital: 'Santiago',                   aliases: [],                                        a2: 'CL', region: 'Americas' },
+  '156': { capital: 'Beijing',                    aliases: ['peking'],                                a2: 'CN', region: 'Asia'     },
+  '158': { capital: 'Taipei',                     aliases: [],                                        a2: 'TW', region: 'Asia'     },
+  '170': { capital: 'Bogota',                     aliases: ['bogotá'],                                a2: 'CO', region: 'Americas' },
+  '174': { capital: 'Moroni',                     aliases: [],                                        a2: 'KM', region: 'Africa'   },
+  '178': { capital: 'Brazzaville',                aliases: [],                                        a2: 'CG', region: 'Africa'   },
+  '180': { capital: 'Kinshasa',                   aliases: ['leopoldville'],                          a2: 'CD', region: 'Africa'   },
+  '188': { capital: 'San Jose',                   aliases: ['san josé'],                              a2: 'CR', region: 'Americas' },
+  '191': { capital: 'Zagreb',                     aliases: [],                                        a2: 'HR', region: 'Europe'   },
+  '192': { capital: 'Havana',                     aliases: ['habana', 'la habana'],                   a2: 'CU', region: 'Americas' },
+  '196': { capital: 'Nicosia',                    aliases: ['lefkosia'],                              a2: 'CY', region: 'Europe'   },
+  '203': { capital: 'Prague',                     aliases: ['Praha'],                                 a2: 'CZ', region: 'Europe'   },
+  '204': { capital: 'Porto-Novo',                 aliases: ['porto novo', 'cotonou'],                 a2: 'BJ', region: 'Africa'   },
+  '208': { capital: 'Copenhagen',                 aliases: ['kobenhavn', 'københavn'],                a2: 'DK', region: 'Europe'   },
+  '212': { capital: 'Roseau',                     aliases: [],                                        a2: 'DM', region: 'Americas' },
+  '214': { capital: 'Santo Domingo',              aliases: [],                                        a2: 'DO', region: 'Americas' },
+  '218': { capital: 'Quito',                      aliases: [],                                        a2: 'EC', region: 'Americas' },
+  '222': { capital: 'San Salvador',               aliases: [],                                        a2: 'SV', region: 'Americas' },
+  '226': { capital: 'Malabo',                     aliases: [],                                        a2: 'GQ', region: 'Africa'   },
+  '231': { capital: 'Addis Ababa',                aliases: ['addisababa'],                            a2: 'ET', region: 'Africa'   },
+  '232': { capital: 'Asmara',                     aliases: ['asmera'],                                a2: 'ER', region: 'Africa'   },
+  '233': { capital: 'Tallinn',                    aliases: ['tallin'],                                a2: 'EE', region: 'Europe'   },
+  '242': { capital: 'Suva',                       aliases: [],                                        a2: 'FJ', region: 'Oceania'  },
+  '246': { capital: 'Helsinki',                   aliases: ['helsingfors'],                           a2: 'FI', region: 'Europe'   },
+  '250': { capital: 'Paris',                      aliases: [],                                        a2: 'FR', region: 'Europe'   },
+  '262': { capital: 'Djibouti',                   aliases: ['djibouti city'],                         a2: 'DJ', region: 'Africa'   },
+  '266': { capital: 'Libreville',                 aliases: [],                                        a2: 'GA', region: 'Africa'   },
+  '268': { capital: 'Tbilisi',                    aliases: ['tiflis'],                                a2: 'GE', region: 'Asia'     },
+  '270': { capital: 'Banjul',                     aliases: ['bathurst'],                              a2: 'GM', region: 'Africa'   },
+  '275': { capital: 'Ramallah',                   aliases: ['east jerusalem'],                        a2: 'PS', region: 'Asia'     },
+  '276': { capital: 'Berlin',                     aliases: [],                                        a2: 'DE', region: 'Europe'   },
+  '288': { capital: 'Accra',                      aliases: [],                                        a2: 'GH', region: 'Africa'   },
+  '296': { capital: 'South Tarawa',               aliases: ['tarawa', 'bairiki'],                     a2: 'KI', region: 'Oceania'  },
+  '300': { capital: 'Athens',                     aliases: ['athina'],                                a2: 'GR', region: 'Europe'   },
+  '308': { capital: "Saint George's",             aliases: ["st george's", 'saint georges', 'st georges'], a2: 'GD', region: 'Americas' },
+  '320': { capital: 'Guatemala City',             aliases: ['guatemala'],                             a2: 'GT', region: 'Americas' },
+  '324': { capital: 'Conakry',                    aliases: [],                                        a2: 'GN', region: 'Africa'   },
+  '328': { capital: 'Georgetown',                 aliases: [],                                        a2: 'GY', region: 'Americas' },
+  '332': { capital: 'Port-au-Prince',             aliases: ['port au prince'],                        a2: 'HT', region: 'Americas' },
+  '336': { capital: 'Vatican City',               aliases: ['vatican'],                               a2: 'VA', region: 'Europe'   },
+  '340': { capital: 'Tegucigalpa',                aliases: [],                                        a2: 'HN', region: 'Americas' },
+  '344': { capital: 'Hong Kong',                  aliases: ['victoria'],                              a2: 'HK', region: 'Asia'     },
+  '348': { capital: 'Budapest',                   aliases: [],                                        a2: 'HU', region: 'Europe'   },
+  '352': { capital: 'Reykjavik',                  aliases: ['reykjavík'],                             a2: 'IS', region: 'Europe'   },
+  '356': { capital: 'New Delhi',                  aliases: ['delhi'],                                 a2: 'IN', region: 'Asia'     },
+  '360': { capital: 'Jakarta',                    aliases: ['djakarta'],                              a2: 'ID', region: 'Asia'     },
+  '364': { capital: 'Tehran',                     aliases: ['teheran'],                               a2: 'IR', region: 'Asia'     },
+  '368': { capital: 'Baghdad',                    aliases: [],                                        a2: 'IQ', region: 'Asia'     },
+  '372': { capital: 'Dublin',                     aliases: [],                                        a2: 'IE', region: 'Europe'   },
+  '376': { capital: 'Jerusalem',                  aliases: ['tel aviv', 'tel-aviv'],                  a2: 'IL', region: 'Asia'     },
+  '380': { capital: 'Rome',                       aliases: ['roma'],                                  a2: 'IT', region: 'Europe'   },
+  '383': { capital: 'Pristina',                   aliases: ['prishtina', 'prishtine'],                a2: 'XK', region: 'Europe'   },
+  '384': { capital: 'Yamoussoukro',               aliases: ['abidjan'],                               a2: 'CI', region: 'Africa'   },
+  '388': { capital: 'Kingston',                   aliases: [],                                        a2: 'JM', region: 'Americas' },
+  '392': { capital: 'Tokyo',                      aliases: [],                                        a2: 'JP', region: 'Asia'     },
+  '398': { capital: 'Astana',                     aliases: ['nur-sultan', 'nur sultan', 'akmola'],    a2: 'KZ', region: 'Asia'     },
+  '400': { capital: 'Amman',                      aliases: [],                                        a2: 'JO', region: 'Asia'     },
+  '404': { capital: 'Nairobi',                    aliases: [],                                        a2: 'KE', region: 'Africa'   },
+  '408': { capital: 'Pyongyang',                  aliases: [],                                        a2: 'KP', region: 'Asia'     },
+  '410': { capital: 'Seoul',                      aliases: [],                                        a2: 'KR', region: 'Asia'     },
+  '414': { capital: 'Kuwait City',                aliases: ['kuwait'],                                a2: 'KW', region: 'Asia'     },
+  '417': { capital: 'Bishkek',                    aliases: ['frunze', 'pishpek'],                     a2: 'KG', region: 'Asia'     },
+  '418': { capital: 'Vientiane',                  aliases: [],                                        a2: 'LA', region: 'Asia'     },
+  '422': { capital: 'Beirut',                     aliases: ['bayrut'],                                a2: 'LB', region: 'Asia'     },
+  '426': { capital: 'Maseru',                     aliases: [],                                        a2: 'LS', region: 'Africa'   },
+  '428': { capital: 'Riga',                       aliases: [],                                        a2: 'LV', region: 'Europe'   },
+  '430': { capital: 'Monrovia',                   aliases: [],                                        a2: 'LR', region: 'Africa'   },
+  '434': { capital: 'Tripoli',                    aliases: ['tarabulus'],                             a2: 'LY', region: 'Africa'   },
+  '438': { capital: 'Vaduz',                      aliases: [],                                        a2: 'LI', region: 'Europe'   },
+  '440': { capital: 'Vilnius',                    aliases: [],                                        a2: 'LT', region: 'Europe'   },
+  '442': { capital: 'Luxembourg',                 aliases: ['luxembourg city'],                       a2: 'LU', region: 'Europe'   },
+  '446': { capital: 'Macao',                      aliases: ['macau'],                                 a2: 'MO', region: 'Asia'     },
+  '450': { capital: 'Antananarivo',               aliases: ['tananarivo'],                            a2: 'MG', region: 'Africa'   },
+  '454': { capital: 'Lilongwe',                   aliases: [],                                        a2: 'MW', region: 'Africa'   },
+  '458': { capital: 'Kuala Lumpur',               aliases: ['kl', 'putrajaya'],                       a2: 'MY', region: 'Asia'     },
+  '462': { capital: 'Male',                       aliases: ['malé'],                                  a2: 'MV', region: 'Asia'     },
+  '466': { capital: 'Bamako',                     aliases: [],                                        a2: 'ML', region: 'Africa'   },
+  '470': { capital: 'Valletta',                   aliases: ['valetta'],                               a2: 'MT', region: 'Europe'   },
+  '478': { capital: 'Nouakchott',                 aliases: [],                                        a2: 'MR', region: 'Africa'   },
+  '480': { capital: 'Port Louis',                 aliases: ['port-louis'],                            a2: 'MU', region: 'Africa'   },
+  '484': { capital: 'Mexico City',                aliases: ['mexico', 'ciudad de mexico', 'cdmx'],    a2: 'MX', region: 'Americas' },
+  '492': { capital: 'Monaco',                     aliases: [],                                        a2: 'MC', region: 'Europe'   },
+  '496': { capital: 'Ulaanbaatar',                aliases: ['ulan bator', 'ulan-bator'],              a2: 'MN', region: 'Asia'     },
+  '498': { capital: 'Chisinau',                   aliases: ['chișinău', 'kishinev'],                  a2: 'MD', region: 'Europe'   },
+  '499': { capital: 'Podgorica',                  aliases: [],                                        a2: 'ME', region: 'Europe'   },
+  '504': { capital: 'Rabat',                      aliases: [],                                        a2: 'MA', region: 'Africa'   },
+  '508': { capital: 'Maputo',                     aliases: ['lourenco marques'],                      a2: 'MZ', region: 'Africa'   },
+  '516': { capital: 'Windhoek',                   aliases: [],                                        a2: 'NA', region: 'Africa'   },
+  '520': { capital: 'Yaren',                      aliases: [],                                        a2: 'NR', region: 'Oceania'  },
+  '524': { capital: 'Kathmandu',                  aliases: ['katmandu'],                              a2: 'NP', region: 'Asia'     },
+  '528': { capital: 'Amsterdam',                  aliases: ['the hague', 'den haag'],                 a2: 'NL', region: 'Europe'   },
+  '548': { capital: 'Port Vila',                  aliases: ['vila'],                                  a2: 'VU', region: 'Oceania'  },
+  '554': { capital: 'Wellington',                 aliases: [],                                        a2: 'NZ', region: 'Oceania'  },
+  '558': { capital: 'Managua',                    aliases: [],                                        a2: 'NI', region: 'Americas' },
+  '562': { capital: 'Niamey',                     aliases: [],                                        a2: 'NE', region: 'Africa'   },
+  '566': { capital: 'Abuja',                      aliases: [],                                        a2: 'NG', region: 'Africa'   },
+  '578': { capital: 'Oslo',                       aliases: [],                                        a2: 'NO', region: 'Europe'   },
+  '583': { capital: 'Palikir',                    aliases: [],                                        a2: 'FM', region: 'Oceania'  },
+  '584': { capital: 'Majuro',                     aliases: [],                                        a2: 'MH', region: 'Oceania'  },
+  '585': { capital: 'Ngerulmud',                  aliases: ['koror'],                                 a2: 'PW', region: 'Oceania'  },
+  '586': { capital: 'Islamabad',                  aliases: [],                                        a2: 'PK', region: 'Asia'     },
+  '591': { capital: 'Panama City',                aliases: ['panama'],                                a2: 'PA', region: 'Americas' },
+  '598': { capital: 'Port Moresby',               aliases: [],                                        a2: 'PG', region: 'Oceania'  },
+  '600': { capital: 'Asuncion',                   aliases: ['asunción'],                              a2: 'PY', region: 'Americas' },
+  '604': { capital: 'Lima',                       aliases: [],                                        a2: 'PE', region: 'Americas' },
+  '608': { capital: 'Manila',                     aliases: [],                                        a2: 'PH', region: 'Asia'     },
+  '616': { capital: 'Warsaw',                     aliases: ['warszawa'],                              a2: 'PL', region: 'Europe'   },
+  '620': { capital: 'Lisbon',                     aliases: ['lisboa'],                                a2: 'PT', region: 'Europe'   },
+  '624': { capital: 'Bissau',                     aliases: [],                                        a2: 'GW', region: 'Africa'   },
+  '626': { capital: 'Dili',                       aliases: [],                                        a2: 'TL', region: 'Asia'     },
+  '634': { capital: 'Doha',                       aliases: [],                                        a2: 'QA', region: 'Asia'     },
+  '642': { capital: 'Bucharest',                  aliases: ['bucuresti'],                             a2: 'RO', region: 'Europe'   },
+  '643': { capital: 'Moscow',                     aliases: ['moskva'],                                a2: 'RU', region: 'Europe'   },
+  '646': { capital: 'Kigali',                     aliases: [],                                        a2: 'RW', region: 'Africa'   },
+  '659': { capital: 'Basseterre',                 aliases: [],                                        a2: 'KN', region: 'Americas' },
+  '662': { capital: 'Castries',                   aliases: [],                                        a2: 'LC', region: 'Americas' },
+  '670': { capital: 'Kingstown',                  aliases: [],                                        a2: 'VC', region: 'Americas' },
+  '674': { capital: 'San Marino',                 aliases: [],                                        a2: 'SM', region: 'Europe'   },
+  '678': { capital: 'Sao Tome',                   aliases: ['são tomé'],                              a2: 'ST', region: 'Africa'   },
+  '682': { capital: 'Riyadh',                     aliases: ['ar riyadh'],                             a2: 'SA', region: 'Asia'     },
+  '686': { capital: 'Dakar',                      aliases: [],                                        a2: 'SN', region: 'Africa'   },
+  '688': { capital: 'Belgrade',                   aliases: ['beograd'],                               a2: 'RS', region: 'Europe'   },
+  '690': { capital: 'Victoria',                   aliases: [],                                        a2: 'SC', region: 'Africa'   },
+  '694': { capital: 'Freetown',                   aliases: [],                                        a2: 'SL', region: 'Africa'   },
+  '702': { capital: 'Singapore',                  aliases: [],                                        a2: 'SG', region: 'Asia'     },
+  '703': { capital: 'Bratislava',                 aliases: [],                                        a2: 'SK', region: 'Europe'   },
+  '704': { capital: 'Hanoi',                      aliases: ['ha noi'],                                a2: 'VN', region: 'Asia'     },
+  '705': { capital: 'Ljubljana',                  aliases: [],                                        a2: 'SI', region: 'Europe'   },
+  '706': { capital: 'Mogadishu',                  aliases: ['mogadiscio', 'muqdisho'],                a2: 'SO', region: 'Africa'   },
+  '710': { capital: 'Pretoria',                   aliases: ['cape town', 'bloemfontein', 'tshwane'],  a2: 'ZA', region: 'Africa'   },
+  '716': { capital: 'Harare',                     aliases: ['salisbury'],                             a2: 'ZW', region: 'Africa'   },
+  '724': { capital: 'Madrid',                     aliases: [],                                        a2: 'ES', region: 'Europe'   },
+  '728': { capital: 'Juba',                       aliases: [],                                        a2: 'SS', region: 'Africa'   },
+  '729': { capital: 'Khartoum',                   aliases: [],                                        a2: 'SD', region: 'Africa'   },
+  '732': { capital: 'Laayoune',                   aliases: ['el aaiun', 'el-aaiun'],                  a2: 'EH', region: 'Africa'   },
+  '740': { capital: 'Paramaribo',                 aliases: [],                                        a2: 'SR', region: 'Americas' },
+  '748': { capital: 'Mbabane',                    aliases: ['lobamba'],                               a2: 'SZ', region: 'Africa'   },
+  '752': { capital: 'Stockholm',                  aliases: [],                                        a2: 'SE', region: 'Europe'   },
+  '756': { capital: 'Bern',                       aliases: ['berne'],                                 a2: 'CH', region: 'Europe'   },
+  '760': { capital: 'Damascus',                   aliases: ['dimashq'],                               a2: 'SY', region: 'Asia'     },
+  '762': { capital: 'Dushanbe',                   aliases: ['dyushambe'],                             a2: 'TJ', region: 'Asia'     },
+  '764': { capital: 'Bangkok',                    aliases: ['krung thep'],                            a2: 'TH', region: 'Asia'     },
+  '768': { capital: 'Lome',                       aliases: ['lomé'],                                  a2: 'TG', region: 'Africa'   },
+  '776': { capital: 'Nuku\'alofa',                aliases: ['nukualofa', 'nuku alofa'],               a2: 'TO', region: 'Oceania'  },
+  '780': { capital: 'Port of Spain',              aliases: ['portofspain'],                           a2: 'TT', region: 'Americas' },
+  '784': { capital: 'Abu Dhabi',                  aliases: [],                                        a2: 'AE', region: 'Asia'     },
+  '788': { capital: 'Tunis',                      aliases: [],                                        a2: 'TN', region: 'Africa'   },
+  '792': { capital: 'Ankara',                     aliases: [],                                        a2: 'TR', region: 'Asia'     },
+  '795': { capital: 'Ashgabat',                   aliases: ['ashkhabad'],                             a2: 'TM', region: 'Asia'     },
+  '798': { capital: 'Funafuti',                   aliases: [],                                        a2: 'TV', region: 'Oceania'  },
+  '800': { capital: 'Kampala',                    aliases: [],                                        a2: 'UG', region: 'Africa'   },
+  '804': { capital: 'Kyiv',                       aliases: ['kiev', 'kiyv'],                          a2: 'UA', region: 'Europe'   },
+  '807': { capital: 'Skopje',                     aliases: [],                                        a2: 'MK', region: 'Europe'   },
+  '818': { capital: 'Cairo',                      aliases: ['al qahira'],                             a2: 'EG', region: 'Africa'   },
+  '826': { capital: 'London',                     aliases: [],                                        a2: 'GB', region: 'Europe'   },
+  '834': { capital: 'Dodoma',                     aliases: ['dar es salaam'],                         a2: 'TZ', region: 'Africa'   },
+  '840': { capital: 'Washington DC',              aliases: ['washington', 'washington d.c.', 'dc'],   a2: 'US', region: 'Americas' },
+  '854': { capital: 'Ouagadougou',                aliases: [],                                        a2: 'BF', region: 'Africa'   },
+  '858': { capital: 'Montevideo',                 aliases: [],                                        a2: 'UY', region: 'Americas' },
+  '860': { capital: 'Tashkent',                   aliases: ['toshkent'],                              a2: 'UZ', region: 'Asia'     },
+  '862': { capital: 'Caracas',                    aliases: [],                                        a2: 'VE', region: 'Americas' },
+  '882': { capital: 'Apia',                       aliases: [],                                        a2: 'WS', region: 'Oceania'  },
+  '887': { capital: "Sana'a",                     aliases: ['sanaa', 'sana a'],                       a2: 'YE', region: 'Asia'     },
+  '894': { capital: 'Lusaka',                     aliases: [],                                        a2: 'ZM', region: 'Africa'   },
+  '090': { capital: 'Honiara',                    aliases: [],                                        a2: 'SB', region: 'Oceania'  },
+};
+
+// Countries without polygon in 110m topojson (rendered as dots in world-map)
+const NO_OUTLINE = new Set([
+  '020','028','048','052','132','158','174','212','296','308',
+  '336','344','383','438','446','462','470','480','492','520',
+  '583','584','585','659','662','670','674','678','690','702',
+  '776','798','882',
+]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FLAG EMOJI
+// ─────────────────────────────────────────────────────────────────────────────
+function flagEmoji(a2) {
+  if (!a2 || a2 === 'XK') return '🏳';
+  return [...a2.toUpperCase()].map(c =>
+    String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)
+  ).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUZZY MATCHING
+// ─────────────────────────────────────────────────────────────────────────────
+function norm(s) {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  let curr = new Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i-1] === b[j-1]
+        ? prev[j-1]
+        : 1 + Math.min(prev[j-1], prev[j], curr[j-1]);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+function maxDist(len) {
+  if (len <= 3) return 0;
+  if (len <= 5) return 1;
+  if (len <= 9) return 2;
+  return 3;
+}
+
+// Returns true if user input matches the capital for countryId
+function matchCapital(input, countryId) {
+  const data = CAPITALS[countryId];
+  if (!data) return false;
+  const n = norm(input);
+  if (!n) return false;
+
+  const targets = [norm(data.capital), ...data.aliases.map(norm)];
+
+  // Exact match against any target
+  if (targets.some(t => t === n)) return true;
+
+  // Fuzzy match
+  const threshold = maxDist(n.length);
+  if (threshold === 0) return false;
+
+  return targets.some(t => levenshtein(n, t) <= threshold);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const REGION_OPTS = ['All', 'Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
+const COUNT_OPTS  = [10, 20, 30, 'All'];
+const TIME_OPTS   = [
+  { label: '5 min',    val: 300 },
+  { label: '10 min',   val: 600 },
+  { label: '15 min',   val: 900 },
+  { label: '20 min',   val: 1200 },
+  { label: 'No limit', val: 0 },
+];
+
+const state = {
+  view: 'home',
+  settings: { region: 'All', count: 'All', timeLimit: 0 },
+  // game
+  questions: [],
+  currentIdx: 0,
+  correctIds: new Set(),
+  missedIds: [],
+  timer: null,
+  timeLeft: 0,
+  gameStartTime: 0,
+  advancing: false,
+  // results
+  lastScore: null,
+  // persistence
+  highscores: { All: [], Africa: [], Americas: [], Asia: [], Europe: [], Oceania: [] },
+  worldData: null,
+  vvCleanup: null,
+};
+
+function getHighscores() { return state.highscores[state.settings.region] || []; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function fmt(s) {
+  const a = Math.abs(s), m = Math.floor(a / 60), sec = a % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function clearTopbarLeft() {
+  const slot = document.getElementById('tt-extra-slot');
+  if (slot) slot.innerHTML = '';
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER ROUTER
+// ─────────────────────────────────────────────────────────────────────────────
+function render() {
+  if (state.timer && state.view !== 'game') { clearInterval(state.timer); state.timer = null; }
+  if (state.vvCleanup) { state.vvCleanup(); state.vvCleanup = null; }
+  document.body.classList.toggle('game-active', state.view === 'game');
+  clearTopbarLeft();
+  if (window.Topbar) Topbar.setTitle('Capitals Quiz');
+
+  const app = document.getElementById('app');
+  switch (state.view) {
+    case 'home':       renderHome(app);       break;
+    case 'game':       renderGame(app);       break;
+    case 'results':    renderResults(app);    break;
+    case 'settings':   renderSettings(app);   break;
+    case 'highscores': renderHighscores(app); break;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOME
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHome(app) {
+  const regionBtns = REGION_OPTS.map(r => `
+    <button class="opt-btn${state.settings.region === r ? ' on' : ''}" data-region="${r}">${r}</button>
+  `).join('');
+
+  app.innerHTML = `
+    <div class="home">
+      <div class="home-hero">
+        <div class="home-globe">🏛</div>
+        <div class="home-title">Capitals Quiz</div>
+        <div class="home-sub">Name the capital city</div>
+      </div>
+      <div class="home-buttons">
+        <div class="card" style="padding:16px">
+          <div class="card-label">Region</div>
+          <div class="opt-grid-6">${regionBtns}</div>
+        </div>
+        <button class="btn btn-primary btn-full" id="btn-start">Start Game</button>
+        <button class="btn btn-secondary btn-full" id="btn-settings">Settings</button>
+        <button class="btn btn-secondary btn-full" id="btn-hs">Highscores</button>
+      </div>
+    </div>`;
+
+  document.querySelectorAll('[data-region]').forEach(btn => {
+    btn.onclick = () => {
+      state.settings.region = btn.dataset.region;
+      saveSettings();
+      renderHome(app);
+    };
+  });
+  document.getElementById('btn-start').onclick    = () => { state.view = 'game';       render(); };
+  document.getElementById('btn-settings').onclick = () => { state.view = 'settings';   render(); };
+  document.getElementById('btn-hs').onclick       = () => { state.view = 'highscores'; render(); };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+function renderSettings(app) {
+  const countBtns = COUNT_OPTS.map(c => `
+    <button class="opt-btn${state.settings.count === c ? ' on' : ''}" data-count="${c}">${c === 'All' ? 'All' : c}</button>
+  `).join('');
+  const timeBtns = TIME_OPTS.map(o => `
+    <button class="opt-btn${state.settings.timeLimit === o.val ? ' on' : ''}" data-time="${o.val}">${o.label}</button>
+  `).join('');
+
+  app.innerHTML = `
+    <div class="screen">
+      <div class="screen-title">Settings</div>
+      <div class="card">
+        <div class="card-label">Questions per game</div>
+        <div class="opt-grid">${countBtns}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Time Limit</div>
+        <div class="opt-grid">${timeBtns}</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-save">Save</button>
+        <button class="btn btn-secondary" id="btn-back">Back</button>
+      </div>
+    </div>`;
+
+  document.querySelectorAll('[data-count]').forEach(btn => {
+    btn.onclick = () => {
+      const v = btn.dataset.count;
+      state.settings.count = v === 'All' ? 'All' : parseInt(v, 10);
+      document.querySelectorAll('[data-count]').forEach(b => b.classList.toggle('on', b === btn));
+    };
+  });
+  document.querySelectorAll('[data-time]').forEach(btn => {
+    btn.onclick = () => {
+      state.settings.timeLimit = parseInt(btn.dataset.time, 10);
+      document.querySelectorAll('[data-time]').forEach(b => b.classList.toggle('on', b === btn));
+    };
+  });
+  document.getElementById('btn-save').onclick = () => { saveSettings(); state.view = 'home'; render(); };
+  document.getElementById('btn-back').onclick = () => { state.view = 'home'; render(); };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAME
+// ─────────────────────────────────────────────────────────────────────────────
+function buildQuestions() {
+  const region = state.settings.region;
+  let pool = Object.keys(CAPITALS).filter(id =>
+    region === 'All' || CAPITALS[id].region === region
+  );
+  shuffle(pool);
+  const count = state.settings.count;
+  if (count !== 'All' && pool.length > count) pool = pool.slice(0, count);
+  return pool;
+}
+
+function renderGame(app) {
+  if (window.Topbar) Topbar.setTitle('');
+
+  state.questions   = buildQuestions();
+  state.currentIdx  = 0;
+  state.correctIds  = new Set();
+  state.missedIds   = [];
+  state.advancing   = false;
+  state.gameStartTime = Date.now();
+  state.timeLeft = state.settings.timeLimit > 0 ? state.settings.timeLimit : 0;
+
+  const total = state.questions.length;
+
+  app.innerHTML = `
+    <div class="game-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div class="game-stats">
+        <div class="stat-box">
+          <div class="stat-val green" id="stat-correct">0</div>
+          <div class="stat-lbl">Correct</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-q">1 / ${total}</div>
+          <div class="stat-lbl">Question</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-timer">${state.settings.timeLimit > 0 ? fmt(state.timeLeft) : '0:00'}</div>
+          <div class="stat-lbl">${state.settings.timeLimit > 0 ? 'Left' : 'Time'}</div>
+        </div>
+      </div>
+      <div class="country-display" id="country-display"></div>
+      <div class="bottom-bar">
+        <div class="input-row">
+          <input type="text" id="capital-input"
+            placeholder="Type the capital city…"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="bottom-actions">
+          <span class="score-inline" id="score-inline">0 / 0 correct</span>
+          <button type="button" class="btn btn-danger btn-sm" id="btn-skip" tabindex="-1">Skip</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-giveup" tabindex="-1">Give Up</button>
+        </div>
+      </div>
+    </div>`;
+
+  // Back button
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.className = 'btn btn-secondary btn-sm';
+  backBtn.textContent = '← Home';
+  backBtn.onclick = () => {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    state.view = 'home'; render();
+  };
+  if (window.Topbar) Topbar.addLeft(backBtn);
+
+  const input = document.getElementById('capital-input');
+
+  // Enter key submits — stopPropagation prevents the event reaching any other element
+  input.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = input.value.trim();
+      if (val) submitAnswer(val);
+    }
+  });
+
+  // Skip: pointerdown so it fires on mouse/touch press, preventDefault stops focus shift
+  const skipBtn = document.getElementById('btn-skip');
+  skipBtn.addEventListener('pointerdown', e => { e.preventDefault(); skipQuestion(); });
+  // If focus ever lands on skip (e.g. via browser quirk), immediately redirect it
+  skipBtn.addEventListener('focus', () => input.focus());
+
+  document.getElementById('btn-giveup').addEventListener('pointerdown', e => { e.preventDefault(); endGame(); });
+
+  // iOS keyboard fix
+  if (window.visualViewport) {
+    const onVV = () => {
+      const wrap = document.querySelector('.game-wrap');
+      if (!wrap) return;
+      const topbarEl = document.getElementById('topbar');
+      const tbH = topbarEl ? topbarEl.offsetHeight : 52;
+      wrap.style.height = (window.visualViewport.height - tbH) + 'px';
+    };
+    window.visualViewport.addEventListener('resize', onVV);
+    window.visualViewport.addEventListener('scroll', onVV);
+    onVV();
+    state.vvCleanup = () => {
+      window.visualViewport.removeEventListener('resize', onVV);
+      window.visualViewport.removeEventListener('scroll', onVV);
+      const wrap = document.querySelector('.game-wrap');
+      if (wrap) wrap.style.height = '';
+    };
+  }
+
+  // Timer
+  if (state.settings.timeLimit > 0) {
+    state.timer = setInterval(() => {
+      state.timeLeft--;
+      updateTimerEl();
+      if (state.timeLeft <= 0) { clearInterval(state.timer); state.timer = null; endGame(); }
+    }, 1000);
+  } else {
+    state.timer = setInterval(() => { state.timeLeft++; updateTimerEl(); }, 1000);
+  }
+
+  showQuestion();
+  setTimeout(() => { const inp = document.getElementById('capital-input'); if (inp) inp.focus(); }, 150);
+}
+
+function showQuestion() {
+  const total = state.questions.length;
+  const idx   = state.currentIdx;
+
+  // Progress
+  const pct = total ? (idx / total) * 100 : 0;
+  const pfill = document.getElementById('progress-fill');
+  if (pfill) pfill.style.width = pct + '%';
+
+  const qEl = document.getElementById('stat-q');
+  if (qEl) qEl.textContent = `${Math.min(idx + 1, total)} / ${total}`;
+
+  if (idx >= total) { endGame(); return; }
+
+  const countryId = state.questions[idx];
+  const data = CAPITALS[countryId];
+  const flagSrc = `https://flagcdn.com/w160/${data.a2.toLowerCase()}.png`;
+
+  const display = document.getElementById('country-display');
+  if (!display) return;
+
+  display.innerHTML = `
+    <img class="country-flag-img" src="${flagSrc}" alt="flag">
+    <div class="country-name">${getCountryName(countryId)}</div>
+    <div class="outline-wrap" id="outline-wrap">
+      <div class="outline-placeholder">⬡</div>
+    </div>`;
+
+  updateScoreInline();
+  renderOutline('outline-wrap', countryId);
+}
+
+function getCountryName(id) {
+  // We need the country name — use the same list from world-map but embed a small lookup
+  return COUNTRY_NAMES[id] || id;
+}
+
+function submitAnswer(val) {
+  if (state.advancing) return;
+  if (!val) return;
+
+  const countryId = state.questions[state.currentIdx];
+  const input = document.getElementById('capital-input');
+  if (!input) return;
+
+  if (matchCapital(val, countryId)) {
+    // Correct
+    state.correctIds.add(countryId);
+    input.value = CAPITALS[countryId].capital;
+    input.classList.add('correct');
+    updateScoreInline();
+    updateCorrectEl();
+    state.advancing = true;
+    setTimeout(() => {
+      input.classList.remove('correct');
+      input.value = '';
+      state.advancing = false;
+      state.currentIdx++;
+      if (state.currentIdx >= state.questions.length) {
+        endGame();
+      } else {
+        showQuestion();
+        const inp = document.getElementById('capital-input');
+        if (inp) inp.focus();
+      }
+    }, 700);
+  } else {
+    // Wrong — one guess only, reveal correct answer
+    state.missedIds.push(countryId);
+    state.advancing = true;
+    input.disabled = true;
+    input.value = '';
+
+    const display = document.getElementById('country-display');
+    if (display) {
+      display.classList.add('wrong-state');
+      display.innerHTML = `
+        <div class="wrong-reveal">
+          <div class="wrong-reveal-label">The capital is</div>
+          <div class="wrong-reveal-capital">${CAPITALS[countryId].capital}</div>
+        </div>`;
+    }
+    updateScoreInline();
+
+    setTimeout(() => {
+      if (display) display.classList.remove('wrong-state');
+      input.disabled = false;
+      state.advancing = false;
+      state.currentIdx++;
+      if (state.currentIdx >= state.questions.length) {
+        endGame();
+      } else {
+        showQuestion();
+        const inp = document.getElementById('capital-input');
+        if (inp) inp.focus();
+      }
+    }, 1800);
+  }
+}
+
+function skipQuestion() {
+  if (state.advancing) return;
+  const countryId = state.questions[state.currentIdx];
+  const input = document.getElementById('capital-input');
+  if (!input) return;
+
+  state.missedIds.push(countryId);
+  const correctCapital = CAPITALS[countryId].capital;
+  input.value = correctCapital;
+  input.classList.add('skipped');
+  state.advancing = true;
+
+  setTimeout(() => {
+    input.classList.remove('skipped');
+    input.value = '';
+    state.advancing = false;
+    state.currentIdx++;
+    if (state.currentIdx >= state.questions.length) {
+      endGame();
+    } else {
+      showQuestion();
+      const inp = document.getElementById('capital-input');
+      if (inp) inp.focus();
+    }
+  }, 1000);
+}
+
+function updateTimerEl() {
+  const el = document.getElementById('stat-timer');
+  if (!el) return;
+  el.textContent = fmt(state.timeLeft);
+  el.classList.toggle('red', state.settings.timeLimit > 0 && state.timeLeft <= 30);
+}
+
+function updateCorrectEl() {
+  const el = document.getElementById('stat-correct');
+  if (el) el.textContent = state.correctIds.size;
+}
+
+function updateScoreInline() {
+  const el = document.getElementById('score-inline');
+  if (!el) return;
+  const answered = state.correctIds.size + state.missedIds.length;
+  el.innerHTML = `<strong>${state.correctIds.size}</strong> / ${answered} correct`;
+}
+
+function endGame() {
+  if (state.timer) { clearInterval(state.timer); state.timer = null; }
+
+  // Any unanswered questions count as missed
+  for (let i = state.currentIdx; i < state.questions.length; i++) {
+    const id = state.questions[i];
+    if (!state.correctIds.has(id) && !state.missedIds.includes(id)) {
+      state.missedIds.push(id);
+    }
+  }
+
+  const elapsed = Math.floor((Date.now() - state.gameStartTime) / 1000);
+  const total = state.questions.length;
+  const score = {
+    count: state.correctIds.size,
+    total,
+    elapsed,
+    date: new Date().toLocaleDateString(),
+    timestamp: Date.now(),
+    region: state.settings.region,
+  };
+  state.lastScore = score;
+
+  const hs = getHighscores();
+  hs.push(score);
+  hs.sort((a, b) => b.count - a.count || a.elapsed - b.elapsed);
+  hs.splice(10);
+  saveSettings();
+
+  state.view = 'results';
+  render();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUNTRY OUTLINE (D3 + topojson)
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderOutline(wrapperId, countryId) {
+  if (!state.worldData) {
+    try {
+      const r = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json');
+      state.worldData = await r.json();
+    } catch { return; }
+  }
+
+  const wrapper = document.getElementById(wrapperId);
+  if (!wrapper) return;
+
+  const countries = topojson.feature(state.worldData, state.worldData.objects.countries);
+  const feature = countries.features.find(f => String(f.id).padStart(3, '0') === countryId);
+  if (!feature) return;
+
+  const W = wrapper.clientWidth  || 280;
+  const H = wrapper.clientHeight || 150;
+
+  wrapper.innerHTML = '';
+
+  const projection = d3.geoMercator();
+  try {
+    projection.fitExtent([[8, 8], [W - 8, H - 8]], feature);
+  } catch { return; }
+
+  const pathGen = d3.geoPath().projection(projection);
+
+  const svg = d3.select(wrapper).append('svg')
+    .attr('width', W).attr('height', H)
+    .style('display', 'block');
+
+  svg.append('path')
+    .datum(feature)
+    .attr('fill', '#252525')
+    .attr('stroke', '#666')
+    .attr('stroke-width', 1.2)
+    .attr('d', pathGen);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESULTS
+// ─────────────────────────────────────────────────────────────────────────────
+function renderResults(app) {
+  const s = state.lastScore;
+  const pct = s.total ? Math.round((s.count / s.total) * 100) : 0;
+
+  const missedHtml = state.missedIds.length
+    ? state.missedIds.map(id => {
+        const data = CAPITALS[id];
+        if (!data) return '';
+        return `<div class="missed-item">
+          <span class="missed-flag">${flagEmoji(data.a2)}</span>
+          <span class="missed-country">${getCountryName(id)}</span>
+          <span class="missed-capital">${data.capital}</span>
+        </div>`;
+      }).join('')
+    : '';
+
+  app.innerHTML = `
+    <div class="screen">
+      <div class="screen-title">Results</div>
+      <div class="card" style="text-align:center">
+        <div class="result-big">${s.count}</div>
+        <div class="result-sub">out of ${s.total} &middot; ${pct}% &middot; ${fmt(s.elapsed)}</div>
+      </div>
+      ${state.missedIds.length ? `
+      <div class="card">
+        <div class="card-label">Missed (${state.missedIds.length})</div>
+        <div class="missed-list">${missedHtml}</div>
+      </div>` : `
+      <div class="card" style="text-align:center;color:#4caf50;font-weight:900;font-size:1.1rem;padding:32px">
+        Perfect score!
+      </div>`}
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-again">Play Again</button>
+        <button class="btn btn-secondary" id="btn-home">Home</button>
+      </div>
+    </div>`;
+
+  document.getElementById('btn-again').onclick = () => { state.view = 'game'; render(); };
+  document.getElementById('btn-home').onclick  = () => { state.view = 'home'; render(); };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HIGHSCORES
+// ─────────────────────────────────────────────────────────────────────────────
+function renderHighscores(app) {
+  const region = state.settings.region;
+  const scores = getHighscores();
+
+  const rows = scores.length
+    ? scores.map((s, i) => `
+      <div class="hs-row">
+        <div class="hs-rank">${i + 1}</div>
+        <div class="hs-body">
+          <div class="hs-score">${s.count} / ${s.total}</div>
+          <div class="hs-meta">${s.date}</div>
+        </div>
+        <div class="hs-time">${fmt(s.elapsed)}</div>
+      </div>`).join('')
+    : '<div class="hs-empty">No scores yet. Play a game!</div>';
+
+  app.innerHTML = `
+    <div class="screen">
+      <div class="screen-title">Highscores — ${region}</div>
+      <div class="card">
+        <div class="hs-list">${rows}</div>
+      </div>
+      ${scores.length ? `<button class="btn btn-danger btn-sm" id="btn-clear">Clear All</button>` : ''}
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-full" id="btn-back-hs">Back</button>
+      </div>
+    </div>`;
+
+  document.getElementById('btn-back-hs').onclick = () => { state.view = 'home'; render(); };
+  const clr = document.getElementById('btn-clear');
+  if (clr) clr.onclick = () => {
+    if (confirm('Clear all highscores for ' + region + '?')) {
+      state.highscores[region] = [];
+      saveSettings();
+      renderHighscores(app);
+    }
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUNTRY NAME LOOKUP (condensed from world-map)
+// ─────────────────────────────────────────────────────────────────────────────
+const COUNTRY_NAMES = {
+  '004':'Afghanistan','008':'Albania','012':'Algeria','020':'Andorra','024':'Angola',
+  '028':'Antigua and Barbuda','032':'Argentina','036':'Australia','040':'Austria',
+  '031':'Azerbaijan','044':'Bahamas','048':'Bahrain','050':'Bangladesh','051':'Armenia',
+  '052':'Barbados','056':'Belgium','064':'Bhutan','068':'Bolivia','070':'Bosnia and Herzegovina',
+  '072':'Botswana','076':'Brazil','084':'Belize','096':'Brunei','100':'Bulgaria',
+  '104':'Myanmar','108':'Burundi','112':'Belarus','116':'Cambodia','120':'Cameroon',
+  '124':'Canada','132':'Cabo Verde','140':'Central African Republic','144':'Sri Lanka',
+  '148':'Chad','152':'Chile','156':'China','158':'Taiwan','170':'Colombia',
+  '174':'Comoros','178':'Republic of the Congo','180':'DR Congo','188':'Costa Rica',
+  '191':'Croatia','192':'Cuba','196':'Cyprus','203':'Czechia','204':'Benin',
+  '208':'Denmark','212':'Dominica','214':'Dominican Republic','218':'Ecuador',
+  '222':'El Salvador','226':'Equatorial Guinea','231':'Ethiopia','232':'Eritrea',
+  '233':'Estonia','242':'Fiji','246':'Finland','250':'France','262':'Djibouti',
+  '266':'Gabon','268':'Georgia','270':'Gambia','275':'Palestine','276':'Germany',
+  '288':'Ghana','296':'Kiribati','300':'Greece','308':'Grenada','320':'Guatemala',
+  '324':'Guinea','328':'Guyana','332':'Haiti','336':'Vatican City','340':'Honduras',
+  '344':'Hong Kong','348':'Hungary','352':'Iceland','356':'India','360':'Indonesia',
+  '364':'Iran','368':'Iraq','372':'Ireland','376':'Israel','380':'Italy',
+  '383':'Kosovo','384':'Ivory Coast','388':'Jamaica','392':'Japan','398':'Kazakhstan',
+  '400':'Jordan','404':'Kenya','408':'North Korea','410':'South Korea','414':'Kuwait',
+  '417':'Kyrgyzstan','418':'Laos','422':'Lebanon','426':'Lesotho','428':'Latvia',
+  '430':'Liberia','434':'Libya','438':'Liechtenstein','440':'Lithuania','442':'Luxembourg',
+  '446':'Macao','450':'Madagascar','454':'Malawi','458':'Malaysia','462':'Maldives',
+  '466':'Mali','470':'Malta','478':'Mauritania','480':'Mauritius','484':'Mexico',
+  '492':'Monaco','496':'Mongolia','498':'Moldova','499':'Montenegro','504':'Morocco',
+  '508':'Mozambique','516':'Namibia','520':'Nauru','524':'Nepal','528':'Netherlands',
+  '548':'Vanuatu','554':'New Zealand','558':'Nicaragua','562':'Niger','566':'Nigeria',
+  '578':'Norway','583':'Micronesia','584':'Marshall Islands','585':'Palau',
+  '586':'Pakistan','591':'Panama','598':'Papua New Guinea','600':'Paraguay','604':'Peru',
+  '608':'Philippines','616':'Poland','620':'Portugal','624':'Guinea-Bissau',
+  '626':'Timor-Leste','634':'Qatar','642':'Romania','643':'Russia','646':'Rwanda',
+  '659':'Saint Kitts and Nevis','662':'Saint Lucia','670':'Saint Vincent and the Grenadines',
+  '674':'San Marino','678':'Sao Tome and Principe','682':'Saudi Arabia','686':'Senegal',
+  '688':'Serbia','690':'Seychelles','694':'Sierra Leone','702':'Singapore',
+  '703':'Slovakia','704':'Vietnam','705':'Slovenia','706':'Somalia','710':'South Africa',
+  '716':'Zimbabwe','724':'Spain','728':'South Sudan','729':'Sudan','732':'Western Sahara',
+  '740':'Suriname','748':'Eswatini','752':'Sweden','756':'Switzerland','760':'Syria',
+  '762':'Tajikistan','764':'Thailand','768':'Togo','776':'Tonga','780':'Trinidad and Tobago',
+  '784':'United Arab Emirates','788':'Tunisia','792':'Turkey','795':'Turkmenistan',
+  '798':'Tuvalu','800':'Uganda','804':'Ukraine','807':'North Macedonia','818':'Egypt',
+  '826':'United Kingdom','834':'Tanzania','840':'United States','854':'Burkina Faso',
+  '858':'Uruguay','860':'Uzbekistan','862':'Venezuela','882':'Samoa',
+  '887':'Yemen','894':'Zambia','090':'Solomon Islands',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PERSISTENCE
+// ─────────────────────────────────────────────────────────────────────────────
+let _sync = null;
+
+function saveSettings() {
+  const data = { settings: state.settings, highscores: state.highscores };
+  try { localStorage.setItem('capitals-quiz', JSON.stringify(data)); } catch {}
+  if (_sync) _sync.sync();
+}
+
+function applySettings(data) {
+  if (!data) return;
+  if (data.settings)   state.settings   = { ...state.settings,   ...data.settings };
+  if (data.highscores) state.highscores  = { ...state.highscores, ...data.highscores };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────────────────────────
+window.__capitalsQuizInit = async function () {
+  const saved = window.Auth ? await Auth.loadSettings('capitals-quiz') : null;
+  if (saved) {
+    applySettings(saved);
+  } else {
+    try { applySettings(JSON.parse(localStorage.getItem('capitals-quiz'))); } catch {}
+  }
+  if (window.Auth) {
+    _sync = Auth.autoSync('capitals-quiz', () => ({
+      settings: state.settings,
+      highscores: state.highscores,
+    }));
+  }
+  render();
+};
+</script>
+
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+<script>
+  if (window.Auth) {
+    Auth.onReady(() => window.__capitalsQuizInit());
+  } else {
+    window.__capitalsQuizInit();
+  }
+</script>
+</body>
+</html>

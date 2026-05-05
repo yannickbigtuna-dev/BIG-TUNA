@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <title>Psych Sheet Analyser</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+    :root {
+      --bg:        #0f0f0f;
+      --card:      #161616;
+      --card2:     #1e1e1e;
+      --border:    rgba(255,255,255,0.07);
+      --text:      #f0f0f0;
+      --sub:       rgba(255,255,255,0.42);
+      --accent:    #4f9eff;
+      --safe-top:  env(safe-area-inset-top, 0px);
+      --safe-bot:  env(safe-area-inset-bottom, 0px);
+      --topbar-h:  52px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── MAIN ── */
+    #main {
+      flex: 1;
+      padding: 28px 16px calc(48px + var(--safe-bot));
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .page-title { font-size: 1.7rem; font-weight: 800; margin-bottom: 4px; }
+    .page-sub   { color: var(--sub); font-size: 0.85rem; margin-bottom: 24px; }
+
+    /* ── SETTINGS CARD ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--sub);
+      margin-bottom: 12px;
+    }
+
+    .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+
+    .preset-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--sub);
+      padding: 8px 14px;
+      font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em;
+      cursor: pointer; transition: all 0.15s; font-family: inherit;
+    }
+    .preset-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .preset-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    #custom-wrap { display: none; margin-bottom: 12px; }
+
+    #custom-wrap label {
+      font-size: 0.72rem; color: var(--sub);
+      display: block; margin-bottom: 6px;
+    }
+
+    #custom-input {
+      width: 100%;
+      background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; color: var(--text); font-size: 0.9rem;
+      font-family: 'Courier New', monospace; outline: none; transition: border-color 0.15s;
+    }
+    #custom-input:focus { border-color: rgba(255,255,255,0.22); }
+    #custom-input.error { border-color: rgba(255,100,100,0.5); }
+
+    .pts-preview {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      font-size: 0.73rem; line-height: 1.4;
+    }
+    .pts-chip {
+      background: var(--card2); border-radius: 5px;
+      padding: 3px 8px; color: var(--text); font-weight: 600;
+    }
+    .pts-more { color: var(--sub); padding: 3px 0; align-self: center; }
+
+    /* ── UPLOAD ── */
+    #upload-area {
+      border: 2px dashed rgba(255,255,255,0.12);
+      border-radius: 18px;
+      padding: 52px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--card);
+      margin-bottom: 16px;
+    }
+    #upload-area.drag-over { border-color: var(--accent); background: rgba(79,158,255,0.05); }
+    #upload-area svg { width: 44px; height: 44px; fill: var(--sub); display: block; margin: 0 auto 14px; opacity: 0.7; }
+    #upload-area .upload-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
+    #upload-area .upload-sub   { font-size: 0.8rem; color: var(--sub); margin-bottom: 18px; }
+    .browse-btn {
+      display: inline-block;
+      background: var(--accent); color: #fff; border: none; border-radius: 10px;
+      padding: 10px 22px; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.08em;
+      cursor: pointer; transition: opacity 0.15s; font-family: inherit;
+    }
+    .browse-btn:hover { opacity: 0.85; }
+
+    /* ── ERROR ── */
+    .parse-error {
+      background: rgba(255,80,80,0.08);
+      border: 1px solid rgba(255,80,80,0.2);
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 0.84rem; color: #ff8888;
+      margin-bottom: 16px; display: none;
+    }
+    .parse-error.show { display: block; }
+
+    /* ── FILE LOADED BAR ── */
+    #file-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      gap: 12px;
+    }
+    #file-bar.show { display: flex; }
+
+    .file-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .file-info svg { width: 18px; height: 18px; fill: var(--accent); flex-shrink: 0; }
+    .file-name  { font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-stats { font-size: 0.74rem; color: var(--sub); margin-top: 2px; }
+
+    .clear-btn {
+      flex-shrink: 0;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 8px; color: var(--sub);
+      padding: 7px 12px; font-size: 0.75rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; font-family: inherit;
+    }
+    .clear-btn:hover { background: rgba(255,60,60,0.1); color: #ff7777; border-color: rgba(255,60,60,0.2); }
+
+    /* ── RESULTS CONTROLS ── */
+    #results-controls {
+      display: none; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center;
+    }
+    #results-controls.show { display: flex; }
+
+    .seg-group {
+      display: flex;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .seg-btn {
+      background: none; border: none;
+      padding: 8px 16px;
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em;
+      color: var(--sub); cursor: pointer; transition: all 0.15s; font-family: inherit;
+    }
+    .seg-btn.active { background: var(--accent); color: #fff; }
+    .seg-btn:not(.active):hover { color: var(--text); }
+
+    .result-count { margin-left: auto; font-size: 0.78rem; color: var(--sub); }
+
+    /* ── RESULTS ── */
+    #results { display: none; }
+    #results.show { display: block; }
+
+    .age-group-hdr {
+      font-size: 0.68rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.18em;
+      color: var(--sub);
+      padding: 24px 4px 8px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2px;
+    }
+
+    .rtable { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    .rtable th {
+      font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--sub); padding: 8px 12px;
+      text-align: left; border-bottom: 1px solid var(--border);
+      font-weight: 700;
+    }
+    .rtable th.r { text-align: right; }
+    .rtable th.c { text-align: center; }
+
+    .rtable td { padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,0.035); font-size: 0.9rem; }
+    .rtable tbody tr.data-row { cursor: pointer; transition: background 0.1s; }
+    .rtable tbody tr.data-row:hover { background: rgba(255,255,255,0.03); }
+    .rtable tbody tr:last-child td { border-bottom: none; }
+
+    .td-rank { font-weight: 800; font-size: 1.05rem; width: 44px; color: var(--sub); }
+    .td-rank.g  { color: #f5c518; }
+    .td-rank.s  { color: #b0b8c1; }
+    .td-rank.br { color: #cd7f32; }
+
+    .td-name .sub { font-size: 0.74rem; color: var(--sub); font-weight: 400; margin-top: 2px; }
+    .td-age  { color: var(--sub); font-size: 0.85rem; }
+    .td-evs  { text-align: center; color: var(--sub); font-size: 0.85rem; }
+    .td-pts  { text-align: right; font-weight: 800; font-size: 1.05rem; color: var(--accent); }
+
+    /* Expand row */
+    .exp-row { display: none; }
+    .exp-row.open { display: table-row; }
+    .exp-row > td {
+      padding: 0 8px 10px 52px;
+      border-bottom: 1px solid rgba(255,255,255,0.035);
+    }
+    .exp-row:last-child > td { border-bottom: none; }
+
+    .breakdown {
+      background: var(--card2);
+      border-radius: 10px; overflow: hidden;
+    }
+    .bd-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px; gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 0.8rem;
+    }
+    .bd-row:last-child { border-bottom: none; }
+    .bd-ev   { flex: 1; color: var(--sub); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bd-pos  { flex-shrink: 0; width: 70px; text-align: center; font-weight: 600; }
+    .bd-time { flex-shrink: 0; width: 68px; text-align: right; color: var(--sub); font-family: monospace; }
+    .bd-pts  { flex-shrink: 0; width: 52px; text-align: right; font-weight: 700; color: var(--accent); }
+    .bd-clickable { cursor: pointer; }
+    .bd-clickable:hover { background: rgba(255,255,255,0.05); }
+    .bd-clickable .bd-ev { color: var(--text); }
+
+    /* ── EVENT RANKING MODAL ── */
+    #event-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      z-index: 200; align-items: flex-end; justify-content: center;
+    }
+    #event-modal-overlay.open { display: flex; }
+    #event-modal {
+      background: var(--card); border-radius: 22px 22px 0 0;
+      width: 100%; max-width: 640px;
+      padding: 14px 20px calc(24px + var(--safe-bot));
+      max-height: 85vh; display: flex; flex-direction: column;
+      animation: slideUp 0.26s cubic-bezier(0.32,0.72,0,1);
+    }
+    #event-modal-handle {
+      width: 36px; height: 4px; background: rgba(255,255,255,0.18);
+      border-radius: 99px; margin: 0 auto 16px; flex-shrink: 0;
+    }
+    .event-modal-hdr {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 14px; flex-shrink: 0; gap: 12px;
+    }
+    .event-modal-hdr h2 { font-size: 1rem; font-weight: 700; margin-bottom: 2px; }
+    .event-modal-meta { font-size: 0.75rem; color: var(--sub); display: block; }
+    .event-modal-close {
+      background: rgba(255,255,255,0.08); border: none; border-radius: 8px;
+      color: var(--text); cursor: pointer; width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; flex-shrink: 0; transition: background 0.15s;
+    }
+    .event-modal-close:hover { background: rgba(255,255,255,0.15); }
+    #event-modal-body { overflow-y: auto; flex: 1; }
+    .em-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+    .em-table th {
+      text-align: left; font-size: 0.62rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--sub); padding: 0 8px 10px;
+    }
+    .em-table th.r { text-align: right; }
+    .em-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .em-table tr:last-child td { border-bottom: none; }
+    .em-rank { width: 36px; text-align: center; font-weight: 700; }
+    .em-name { font-weight: 500; }
+    .em-team { font-size: 0.76rem; color: var(--sub); }
+    .em-age  { width: 36px; text-align: center; color: var(--sub); }
+    .em-time { text-align: right; font-family: monospace; color: var(--sub); white-space: nowrap; }
+
+    /* Empty */
+    .empty { text-align: center; padding: 52px 20px; color: var(--sub); }
+    .empty svg { width: 36px; height: 36px; fill: var(--sub); display: block; margin: 0 auto 12px; opacity: 0.35; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 580px) {
+      #main { padding: 18px 12px calc(36px + var(--safe-bot)); }
+      .page-title { font-size: 1.35rem; }
+      .rtable th:nth-child(3), .rtable td:nth-child(3) { display: none; } /* hide age col */
+      .exp-row > td { padding-left: 12px; }
+    }
+
+    /* ── MEETS TRAY ── */
+    #meets-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      z-index: 200; align-items: flex-end; justify-content: center;
+    }
+    #meets-overlay.open { display: flex; }
+    #meets-tray {
+      background: #16162a; border-radius: 22px 22px 0 0;
+      width: 100%; max-width: 540px;
+      padding: 14px 20px calc(24px + var(--safe-bot));
+      animation: slideUp 0.26s cubic-bezier(0.32,0.72,0,1);
+      max-height: 80vh; display: flex; flex-direction: column;
+    }
+    #meets-tray-handle {
+      width: 36px; height: 4px; background: rgba(255,255,255,0.18);
+      border-radius: 99px; margin: 0 auto 16px; flex-shrink: 0;
+    }
+    .meets-tray-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; flex-shrink: 0;
+    }
+    .meets-tray-hdr h2 {
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em;
+      opacity: 0.4; margin: 0;
+    }
+    .meets-tray-meta { font-size: 0.72rem; color: var(--sub); }
+    #meets-list {
+      overflow-y: auto; flex: 1;
+      display: flex; flex-direction: column; gap: 6px;
+      padding-right: 2px;
+    }
+    .meet-item {
+      display: flex; align-items: center;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 12px; gap: 10px;
+      transition: background 0.15s; flex-shrink: 0;
+    }
+    .meet-item.active {
+      background: rgba(79,158,255,0.1); border-color: rgba(79,158,255,0.3);
+    }
+    .meet-item-body { flex: 1; min-width: 0; cursor: pointer; }
+    .meet-item-body:hover .meet-item-name { color: var(--accent); }
+    .meet-item-name {
+      font-size: 0.88rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: color 0.15s;
+    }
+    .meet-item-meta {
+      font-size: 0.72rem; color: var(--sub); margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .meet-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .meet-act-btn {
+      background: none; border: none; width: 30px; height: 30px;
+      border-radius: 7px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--sub);
+      transition: background 0.15s, color 0.15s;
+    }
+    .meet-act-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .meet-act-btn.del:hover { background: rgba(255,60,60,0.12); color: #ff7777; }
+    .meet-rename-input {
+      background: var(--card2); border: 1px solid var(--accent);
+      border-radius: 6px; color: var(--text); font-size: 0.88rem;
+      padding: 2px 8px; outline: none; width: 100%; font-family: inherit;
+    }
+    .meets-empty {
+      text-align: center; padding: 32px 16px; color: var(--sub); font-size: 0.84rem;
+    }
+    .meets-tray-footer {
+      margin-top: 12px; padding-top: 12px;
+      border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .meets-upload-btn {
+      width: 100%; background: var(--accent); border: none; border-radius: 10px;
+      color: #fff; padding: 11px; font-size: 0.82rem; font-weight: 700;
+      letter-spacing: 0.07em; cursor: pointer; font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .meets-upload-btn:hover { opacity: 0.85; }
+
+    /* ── MEETS ACTION BAR (below points card) ── */
+    #meets-actions {
+      display: flex; gap: 8px; margin-bottom: 16px;
+    }
+    .ma-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+      background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--sub);
+      padding: 10px 16px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.07em;
+      cursor: pointer; transition: all 0.15s; font-family: inherit;
+    }
+    .ma-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .ma-btn svg { width: 15px; height: 15px; fill: currentColor; flex-shrink: 0; }
+    .ma-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .ma-btn.primary:hover { opacity: 0.85; }
+
+    /* meets count badge on the MEETS action button */
+    .ma-badge {
+      background: rgba(255,255,255,0.25); color: #fff; font-size: 0.6rem; font-weight: 800;
+      padding: 0 5px; border-radius: 99px; min-width: 16px; height: 16px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed; bottom: calc(24px + var(--safe-bot)); left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: #2a2a2a; border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 18px; font-size: 0.83rem; color: var(--text);
+      opacity: 0; transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none; z-index: 500;
+      max-width: calc(100vw - 32px); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+<!-- MEETS TRAY -->
+<div id="meets-overlay" onclick="if(event.target===this)closeMeetsTray()">
+  <div id="meets-tray">
+    <div id="meets-tray-handle"></div>
+    <div class="meets-tray-hdr">
+      <h2>Saved Meets</h2>
+      <span class="meets-tray-meta" id="meets-tray-meta"></span>
+    </div>
+    <div id="meets-list"></div>
+    <div class="meets-tray-footer">
+      <button class="meets-upload-btn" onclick="closeMeetsTray();document.getElementById('file-input').click()">
+        Upload New Psych Sheet
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- EVENT RANKING MODAL -->
+<div id="event-modal-overlay" onclick="if(event.target===this)closeEventModal()">
+  <div id="event-modal">
+    <div id="event-modal-handle"></div>
+    <div class="event-modal-hdr">
+      <div>
+        <h2 id="event-modal-title"></h2>
+        <span class="event-modal-meta" id="event-modal-meta"></span>
+      </div>
+      <button class="event-modal-close" onclick="closeEventModal()">✕</button>
+    </div>
+    <div id="event-modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="main">
+  <h1 class="page-title">Psych Sheet Analyser</h1>
+  <p class="page-sub">Upload a Meet Manager psych sheet to rank swimmers by predicted points.</p>
+
+  <!-- POINTS SYSTEM -->
+  <div class="card">
+    <div class="card-label">Points System</div>
+    <div class="preset-row">
+      <button class="preset-btn active" data-preset="swim-nsw" onclick="setPreset('swim-nsw')">Swim NSW</button>
+      <button class="preset-btn"        data-preset="aus"      onclick="setPreset('aus')">Swimming AUS</button>
+      <button class="preset-btn"        data-preset="usport"   onclick="setPreset('usport')">UniSport</button>
+      <button class="preset-btn"        data-preset="custom"   onclick="setPreset('custom')">Custom</button>
+    </div>
+    <div id="custom-wrap">
+      <label for="custom-input">Points per place, 1st → last (comma-separated)</label>
+      <input id="custom-input" type="text" placeholder="50, 30, 20, 15, 14, 13..." oninput="onCustomInput()"/>
+    </div>
+    <div class="pts-preview" id="pts-preview"></div>
+  </div>
+
+  <!-- persistent file input — always in DOM so .click() works regardless of upload section visibility -->
+  <input id="file-input" type="file" accept=".txt,.text,.pdf" style="display:none" onchange="onFileChange(event)"/>
+
+  <!-- MEETS & UPLOAD ACTIONS -->
+  <div id="meets-actions">
+    <button class="ma-btn" onclick="openMeetsTray()">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+      MEETS<span class="ma-badge" id="meets-badge" style="display:none"></span>
+    </button>
+    <button class="ma-btn primary" onclick="document.getElementById('file-input').click()">
+      <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+      UPLOAD
+    </button>
+  </div>
+
+  <!-- UPLOAD drop zone (shown only before first file load) -->
+  <div id="upload-section">
+    <div id="upload-area"
+         onclick="document.getElementById('file-input').click()"
+         ondragover="onDragOver(event)" ondragleave="onDragLeave()" ondrop="onDrop(event)">
+      <svg viewBox="0 0 24 24">
+        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04
+                 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5
+                 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+      </svg>
+      <p class="upload-title">Drop psych sheet here</p>
+      <p class="upload-sub">Meet Manager text export (.txt) or PDF</p>
+    </div>
+  </div>
+
+  <!-- PARSE ERROR -->
+  <div class="parse-error" id="parse-error"></div>
+
+  <!-- FILE BAR -->
+  <div id="file-bar">
+    <div class="file-info">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+      <div>
+        <div class="file-name"  id="fname"></div>
+        <div class="file-stats" id="fstats"></div>
+      </div>
+    </div>
+    <button class="clear-btn" onclick="clearFile()">Clear</button>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="results-controls">
+    <div class="seg-group">
+      <button class="seg-btn active" id="btn-w" onclick="setGender('Women')">Women</button>
+      <button class="seg-btn"        id="btn-m" onclick="setGender('Men')">Men</button>
+    </div>
+    <div class="seg-group">
+      <button class="seg-btn active" id="btn-overall"    onclick="setView('overall')">Overall</button>
+      <button class="seg-btn"        id="btn-agegroup"   onclick="setView('agegroup')">Age Group</button>
+      <button class="seg-btn"        id="btn-fina-swims" onclick="setView('fina-swims')">FINA Swims</button>
+      <button class="seg-btn"        id="btn-fina-avg"   onclick="setView('fina-avg')">FINA Avg</button>
+    </div>
+    <div class="seg-group" id="course-group" style="display:none">
+      <button class="seg-btn active" id="btn-lcm" onclick="setFinaCourse('lcm')">LCM</button>
+      <button class="seg-btn"        id="btn-scm" onclick="setFinaCourse('scm')">SCM</button>
+    </div>
+    <span class="result-count" id="rcount"></span>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results"></div>
+</div>
+
+<script>
+// ── Preset definitions ────────────────────────────────────────────────────────
+const PRESETS = {
+  'swim-nsw': { name: 'Swim NSW',       pts: [50,30,20,15,14,13,12,11,9,7,6,5,4,3,2,1] },
+  'aus':      { name: 'Swimming AUS',   pts: [20,17,16,15,14,13,12,11,9,7,6,5,4,3,2,1] },
+  'usport':   { name: 'UniSport',       pts: [32,28,27,25,24,23,22,20,17,16,15,14,13,12,11,9,7,6,5,4,3,2,1] },
+  'custom':   { name: 'Custom',         pts: [] },
+};
+
+// ── FINA / World Aquatics base times (world records as of 2024) ───────────────
+// Points = floor(1000 × (base / swimTime)^3)
+// LCM = Long Course Metres (50 m pool), SCM = Short Course Metres (25 m pool)
+const FINA_BASE_TIMES = {
+  lcm: {
+    Women: {
+      '50free':    23.67,  // Sjöström 2017
+      '100free':   51.71,  // Sjöström 2017
+      '200free':  112.98,  // Pellegrini 2009 (1:52.98)
+      '400free':  236.46,  // Ledecky 2016 (3:56.46)
+      '800free':  484.79,  // Ledecky 2016 (8:04.79)
+      '1500free': 920.48,  // Ledecky 2018 (15:20.48)
+      '50back':    27.06,  // Liu Xiang 2018
+      '100back':   57.45,  // McKeown 2021
+      '200back':  123.35,  // McKeown 2022 (2:03.35)
+      '50breast':  29.30,  // Pilato 2021
+      '100breast': 64.13,  // King 2017 (1:04.13)
+      '200breast':138.95,  // Pedersen 2013 (2:18.95)
+      '50fly':     24.43,  // Sjöström 2014
+      '100fly':    55.48,  // MacNeil 2019
+      '200fly':   121.81,  // Liu Zige 2009 (2:01.81)
+      '200im':    126.12,  // Hosszu 2015 (2:06.12)
+      '400im':    266.36,  // Hosszu 2016 (4:26.36)
+    },
+    Men: {
+      '50free':    20.91,  // Cielo Filho 2009
+      '100free':   46.40,  // Pan Zhanle 2024
+      '200free':  102.00,  // Biedermann 2009 (1:42.00)
+      '400free':  220.07,  // Biedermann 2009 (3:40.07)
+      '800free':  452.12,  // Zhang Lin 2009 (7:32.12)
+      '1500free': 871.02,  // Sun Yang 2012 (14:31.02)
+      '50back':    24.00,  // Xu Jiayu 2018
+      '100back':   51.60,  // Ceccon 2022
+      '200back':  111.92,  // Peirsol 2009 (1:51.92)
+      '50breast':  25.95,  // Peaty 2017
+      '100breast': 56.88,  // Peaty 2019
+      '200breast':126.12,  // Stubblety-Cook 2022 (2:06.12)
+      '50fly':     22.27,  // Govorov 2018
+      '100fly':    49.45,  // Dressel 2021
+      '200fly':   110.34,  // Milák 2022 (1:50.34)
+      '200im':    114.00,  // Phelps 2008 (1:54.00)
+      '400im':    242.50,  // Marchand 2024 (4:02.50)
+    },
+  },
+  scm: {
+    Women: {
+      '50free':    22.93,  // Sjöström 2014
+      '100free':   50.25,  // Campbell 2017
+      '200free':  110.78,  // Pellegrini 2009 (1:50.78)
+      '400free':  233.92,  // Belmonte 2013 (3:53.92)
+      '800free':  479.52,  // Belmonte 2012 (7:59.52)
+      '1500free': 903.71,  // Ledecky 2016 (15:03.71)
+      '50back':    26.04,  // Liu Xiang 2020
+      '100back':   54.89,  // Atherton 2018
+      '200back':  119.23,  // Ustinova 2020 (1:59.23)
+      '50breast':  28.56,  // Atkinson 2016
+      '100breast': 61.25,  // Atkinson 2016 (1:01.25)
+      '200breast':134.57,  // Jones 2006 (2:14.57)
+      '50fly':     24.05,  // Sjöström 2015
+      '100fly':    54.61,  // Sjöström 2020
+      '200fly':   119.61,  // Belmonte 2014 (1:59.61)
+      '200im':    121.86,  // Hosszu 2014 (2:01.86)
+      '400im':    258.94,  // Hosszu 2014 (4:18.94)
+    },
+    Men: {
+      '50free':    20.16,  // Manaudou 2014
+      '100free':   44.84,  // Leveaux 2008
+      '200free':   99.37,  // Biedermann 2009 (1:39.37)
+      '400free':  212.25,  // Agnel 2012 (3:32.25)
+      '800free':  443.42,  // Hackett 2008 (7:23.42)
+      '1500free': 848.06,  // Hackett 2008 (14:08.06)
+      '50back':    22.22,  // Kolesnikov 2021
+      '100back':   48.58,  // Kolesnikov 2021
+      '200back':  105.63,  // Peirsol 2009 (1:45.63)
+      '50breast':  25.25,  // van der Burgh 2009
+      '100breast': 55.34,  // Qin Haiyang 2022
+      '200breast':120.16,  // Prigoda 2018 (2:00.16)
+      '50fly':     21.75,  // Santos 2014
+      '100fly':    47.78,  // Dressel 2020
+      '200fly':   107.80,  // Milák 2020 (1:47.80)
+      '200im':    109.63,  // Lochte 2012 (1:49.63)
+      '400im':    235.50,  // Phelps 2008 (3:55.50)
+    },
+  },
+};
+
+// ── App state ─────────────────────────────────────────────────────────────────
+let events       = [];     // parsed events
+let activeGender = 'Women';
+let viewMode     = 'overall';
+let activePreset = 'swim-nsw';
+let customPts    = [];
+let expanded     = new Set();  // rowIds of expanded detail rows
+let finaCourse   = 'lcm';      // 'lcm' or 'scm' for FINA points views
+
+// ── Meets state ───────────────────────────────────────────────────────────────
+let activeMeetId         = null;   // UUID of currently loaded saved meet, or null
+let meets                = [];     // array of meet metadata (no rawText)
+let settingsSaveTimer    = null;   // debounce timer for meet settings autosave
+let suppressSettingsSave = false;  // suppress saves during meet load
+const MAX_MEETS_UI       = 20;     // must match server constant
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function apiReq(method, path, body) {
+  if (!Auth.token) return null;
+  try {
+    const opts = { method, headers: { 'Authorization': 'Bearer ' + Auth.token } };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(path, opts);
+    return await r.json();
+  } catch { return null; }
+}
+
+// ── Toast notification ────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg, duration) {
+  duration = duration || 4000;
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ── Points helpers ────────────────────────────────────────────────────────────
+function activePts() {
+  return activePreset === 'custom' ? customPts : PRESETS[activePreset].pts;
+}
+
+function ptsForPosition(pos) {
+  const p = activePts();
+  return (pos >= 1 && pos <= p.length) ? p[pos - 1] : 0;
+}
+
+// ── FINA points helpers ───────────────────────────────────────────────────────
+function parseEventKey(eventName) {
+  const m = eventName.match(/^(\d+)\s+(.+)/);
+  if (!m) return null;
+  const dist = parseInt(m[1]);
+  const s = m[2].toLowerCase();
+  let stroke;
+  if (/free/.test(s))              stroke = 'free';
+  else if (/back/.test(s))         stroke = 'back';
+  else if (/breast/.test(s))       stroke = 'breast';
+  else if (/fly|butterfly/.test(s)) stroke = 'fly';
+  else if (/medley|\bim\b/.test(s)) stroke = 'im';
+  else return null;
+  return dist + stroke;
+}
+
+function timeToSeconds(timeStr) {
+  if (!timeStr || /^(NT|NS|SCR|DQ|X)$/i.test(timeStr.trim())) return null;
+  const parts = timeStr.split(':');
+  if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+  return parseFloat(parts[0]);
+}
+
+function calcFinaPoints(eventName, gender, timeStr, course) {
+  const key  = parseEventKey(eventName);
+  if (!key) return null;
+  const base = (FINA_BASE_TIMES[course] || {})[gender];
+  if (!base || !base[key]) return null;
+  const t = timeToSeconds(timeStr);
+  if (!t || t <= 0) return null;
+  return Math.max(0, Math.floor(1000 * Math.pow(base[key] / t, 3)));
+}
+
+// ── Preset / custom points UI ─────────────────────────────────────────────────
+function setPreset(id) {
+  activePreset = id;
+  document.querySelectorAll('.preset-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.preset === id));
+  document.getElementById('custom-wrap').style.display = id === 'custom' ? 'block' : 'none';
+  renderPreview();
+  if (events.length) renderResults();
+  saveSettings();
+}
+
+function onCustomInput() {
+  const raw = document.getElementById('custom-input').value;
+  customPts = raw.split(/[\s,]+/).map(Number).filter(n => Number.isFinite(n) && n >= 0);
+  document.getElementById('custom-input').classList.toggle('error',
+    raw.trim().length > 0 && customPts.length === 0);
+  renderPreview();
+  if (events.length) renderResults();
+  saveSettings();
+}
+
+function renderPreview() {
+  const pts = activePts();
+  const el  = document.getElementById('pts-preview');
+  if (!pts.length) { el.innerHTML = ''; return; }
+  const ords = ['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th',
+                '11th','12th','13th','14th','15th','16th','17th','18th','19th','20th',
+                '21st','22nd','23rd','24th'];
+  const show = pts.slice(0, 20);
+  el.innerHTML =
+    show.map((v, i) => `<span class="pts-chip">${ords[i] || (i+1)+'th'}=${v}</span>`).join('') +
+    (pts.length > 20 ? `<span class="pts-more">+${pts.length - 20} more</span>` : '');
+}
+
+// ── Gender / view controls ────────────────────────────────────────────────────
+function setGender(g) {
+  activeGender = g;
+  document.getElementById('btn-w').classList.toggle('active', g === 'Women');
+  document.getElementById('btn-m').classList.toggle('active', g === 'Men');
+  expanded.clear();
+  renderResults();
+}
+
+function setView(v) {
+  viewMode = v;
+  document.getElementById('btn-overall').classList.toggle('active',    v === 'overall');
+  document.getElementById('btn-agegroup').classList.toggle('active',   v === 'agegroup');
+  document.getElementById('btn-fina-swims').classList.toggle('active', v === 'fina-swims');
+  document.getElementById('btn-fina-avg').classList.toggle('active',   v === 'fina-avg');
+  const isFina = v === 'fina-swims' || v === 'fina-avg';
+  document.getElementById('course-group').style.display = isFina ? '' : 'none';
+  expanded.clear();
+  renderResults();
+}
+
+function setFinaCourse(c) {
+  finaCourse = c;
+  document.getElementById('btn-lcm').classList.toggle('active', c === 'lcm');
+  document.getElementById('btn-scm').classList.toggle('active', c === 'scm');
+  renderResults();
+}
+
+// ── Parser ────────────────────────────────────────────────────────────────────
+function normGender(s) {
+  return /^(women|girls)$/i.test(s.trim()) ? 'Women' : 'Men';
+}
+
+function titleCase(s) {
+  return s.replace(/\S+/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+}
+
+function ageGroup(age) {
+  if (age <= 12) return '12 & Under';
+  if (age <= 14) return '13–14';
+  if (age <= 16) return '15–16';
+  if (age <= 18) return '17–18';
+  if (age <= 24) return '19–24';
+  if (age <= 29) return '25–29';
+  if (age <= 34) return '30–34';
+  if (age <= 39) return '35–39';
+  if (age <= 44) return '40–44';
+  if (age <= 49) return '45–49';
+  if (age <= 54) return '50–54';
+  if (age <= 59) return '55–59';
+  return '60+';
+}
+
+const AG_ORDER = ['12 & Under','13–14','15–16','17–18','19–24',
+                  '25–29','30–34','35–39','40–44','45–49','50–54','55–59','60+'];
+
+function parseEntry(line) {
+  // Must start with a seed position number (up to 3 digits)
+  const posM = line.trimStart().match(/^(\d{1,3})\s+/);
+  if (!posM) return null;
+  const pos = parseInt(posM[1]);
+  if (pos < 1 || pos > 500) return null;
+
+  const rest = line.trimStart().slice(posM[0].length).trimEnd();
+
+  // Seed time at end: [MM:]SS.ss (1-3 decimal places) or NT/NS/SCR/DQ/X
+  // Allow an optional 1-3 letter qualifier after the time (e.g. "A", "B", "NR")
+  const timeM = rest.match(/\s+((?:\d{1,2}:)?\d{1,2}\.\d{1,3}|NT|NS|SCR|DQ|X)(?:\s+[A-Z]{1,3})?\s*$/i);
+  if (!timeM) return null;
+
+  const seedTime = timeM[1].toUpperCase();
+  const mid      = rest.slice(0, timeM.index).trim();
+
+  let name, age, team = '';
+
+  // Age field: either a bare number ("17") or a gender-prefixed number ("M17", "W15").
+  // The optional letter prefix is consumed but not captured; only the digits are.
+  const AGE = '(?:[A-Za-z]?)(\\d{1,3})';
+
+  // Format A: LAST, FIRST  AGE  [TEAM]
+  const ci = mid.indexOf(',');
+  if (ci > 0) {
+    const after = mid.slice(ci + 1).trim();
+    const m = after.match(new RegExp('^(.+?)\\s+' + AGE + '(?:\\s+(.+))?$'));
+    if (m) {
+      const a = parseInt(m[2]);
+      if (a >= 5 && a <= 120) {
+        name = mid.slice(0, ci).trim() + ', ' + m[1].trim();
+        age  = a;
+        team = m[3] ? m[3].trim() : '';
+      }
+    }
+  }
+
+  // Format B: FIRST LAST  AGE  [TEAM]  (no comma in name)
+  if (!name) {
+    const m = mid.match(new RegExp('^(.+?)\\s+' + AGE + '(?:\\s+(.+))?$'));
+    if (m) {
+      const a = parseInt(m[2]);
+      if (a >= 5 && a <= 120) {
+        name = m[1].trim();
+        age  = a;
+        team = m[3] ? m[3].trim() : '';
+      }
+    }
+  }
+
+  return name ? { pos, name, age, team, seedTime } : null;
+}
+
+function parsePsychSheet(text) {
+  // ── Pre-process: merge lines where the event header was split by the PDF renderer ──
+  // Handles two common splits:
+  //   "Event N"           + next line  → "Event N <next>"
+  //   "Event N Gender"    + next line  → "Event N Gender <next>"
+  const rawLines = text.split(/\r?\n/);
+  const lines    = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const t = rawLines[i].trim();
+    // "Event N" alone (no gender or name yet)
+    const isEventOnly   = /^Event\s+\d+\s*$/i.test(t);
+    // "Event N Gender" alone (no event name yet)
+    const isEventGender = /^Event\s+\d+\s+(Women|Men|Girls|Boys|Mixed)\s*$/i.test(t);
+    if ((isEventOnly || isEventGender) && i + 1 < rawLines.length) {
+      const next = rawLines[i + 1].trim();
+      if (next) {
+        lines.push(t + ' ' + next);
+        i++; // consume next line
+        // If "Event N" was merged with just a Gender word, and still no event name,
+        // try to grab one more line for the actual event name.
+        if (isEventOnly && /^(Women|Men|Girls|Boys|Mixed)\s*$/i.test(next) && i + 1 < rawLines.length) {
+          const next2 = rawLines[i + 1].trim();
+          if (next2) { lines[lines.length - 1] += ' ' + next2; i++; }
+        }
+        continue;
+      }
+    }
+    lines.push(rawLines[i]);
+  }
+
+  const result = [];
+  let   cur     = null;
+  let   curSeen = null;
+  // Key: "eventNum|gender" — lets continuation-page headers reuse the same event object
+  // instead of creating a duplicate entry in result[].
+  const evMap = new Map();
+
+  for (const raw of lines) {
+    // ── Event header detection ──────────────────────────────────────────────
+    const evM = raw.match(/Event\s+(\d+)\s+(Women|Men|Girls|Boys|Mixed)\s+(.+)/i);
+    if (evM) {
+      // Skip relay events (no individual scoring)
+      if (/relay/i.test(evM[3])) { cur = null; curSeen = null; continue; }
+
+      const evNum    = parseInt(evM[1]);
+      const evGender = normGender(evM[2]);
+      const evKey    = `${evNum}|${evGender}`;
+
+      if (evMap.has(evKey)) {
+        // Continuation page — reuse the existing event object so entries aren't
+        // double-counted and the event doesn't appear twice in the results.
+        const existing = evMap.get(evKey);
+        cur     = existing.event;
+        curSeen = existing.seen;
+      } else {
+        // Strip trailing noise from the event name:
+        //   - seed times that leaked from a two-column layout (e.g. "100 Free  59.32")
+        //   - "(Continued)" continuation markers
+        const evName = evM[3]
+          .replace(/\s+(?:\d{1,2}:)?\d{1,2}\.\d{1,3}[A-Z]{0,3}\s*$/i, '')
+          .replace(/\s*\(cont(?:inued)?\.*\)\s*$/i, '')
+          .trim();
+        cur     = { num: evNum, gender: evGender, name: evName, entries: [] };
+        curSeen = new Set();
+        evMap.set(evKey, { event: cur, seen: curSeen });
+        result.push(cur);
+      }
+      continue;
+    }
+
+    if (!cur) continue;
+
+    // ── Skip non-entry lines ────────────────────────────────────────────────
+    const t = raw.trim();
+    if (!t) continue;
+    if (/^[=\-*]{5,}$/.test(t)) continue;
+    // Column headers (Name, #, Place, Seed, Heat, Lane, Rank, Time, Club, Team…)
+    if (/^\s*(Name|#|Place|Seed|Heat|Lane|Rank|Time|Club|Team|Age)\b/i.test(raw)) continue;
+    // Standalone page numbers, e.g. "3" or "Page 3 of 12"
+    if (/^Page\s+\d+/i.test(t)) continue;
+    if (/^\d+$/.test(t)) continue;
+    // Common footer/header noise: "Hy-Tek", "Meet Manager", "Licensed to", copyright
+    if (/Hy-?Tek|Meet\s*Manager|Licensed\s+to|^\s*©/i.test(t)) continue;
+
+    const entry = parseEntry(raw);
+    if (entry && !curSeen.has(entry.pos)) {
+      curSeen.add(entry.pos);
+      cur.entries.push(entry);
+    }
+  }
+
+  return result.filter(e => e.entries.length > 0);
+}
+
+// ── Build swimmer objects ─────────────────────────────────────────────────────
+function buildSwimmers(gender) {
+  const map = new Map();
+
+  for (const ev of events) {
+    if (ev.gender !== gender) continue;
+    for (const e of ev.entries) {
+      // Key: normalised name + age — robust against team name variations across events
+      // (same swimmer always has same name and age; team names often differ between events)
+      const key = e.name.toUpperCase().replace(/\s+/g,' ').trim() + '||' + e.age;
+      if (!map.has(key)) {
+        map.set(key, {
+          name:     titleCase(e.name),
+          rawName:  e.name.toUpperCase(),
+          age:      e.age,
+          team:     titleCase(e.team),
+          ag:       ageGroup(e.age),
+          evList:   [],
+          total:    0,
+        });
+      }
+      const sw  = map.get(key);
+      const pts = ptsForPosition(e.pos);
+      sw.evList.push({ num: ev.num, name: ev.name, pos: e.pos, time: e.seedTime, pts });
+      sw.total += pts;
+    }
+  }
+
+  return [...map.values()];
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderResults() {
+  if (viewMode === 'fina-swims') { renderFinaSwims(); return; }
+  if (viewMode === 'fina-avg')   { renderFinaAvg();   return; }
+
+  const sec      = document.getElementById('results');
+  const swimmers = buildSwimmers(activeGender);
+
+  document.getElementById('rcount').textContent =
+    swimmers.length ? `${swimmers.length} swimmer${swimmers.length !== 1 ? 's' : ''}` : '';
+
+  if (!swimmers.length) {
+    sec.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10
+      10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <p>No ${activeGender.toLowerCase()} swimmers found.</p></div>`;
+    return;
+  }
+
+  if (viewMode === 'overall') {
+    swimmers.sort((a, b) => b.total - a.total || a.rawName.localeCompare(b.rawName));
+    sec.innerHTML = buildTable(swimmers, 'all');
+  } else {
+    const groups = new Map();
+    for (const sw of swimmers) {
+      if (!groups.has(sw.ag)) groups.set(sw.ag, []);
+      groups.get(sw.ag).push(sw);
+    }
+    const sorted = [...groups.entries()].sort(
+      (a, b) => AG_ORDER.indexOf(a[0]) - AG_ORDER.indexOf(b[0]));
+    let html = '';
+    for (const [ag, list] of sorted) {
+      list.sort((a, b) => b.total - a.total || a.rawName.localeCompare(b.rawName));
+      html += `<div class="age-group-hdr">${esc(ag)}</div>` + buildTable(list, ag);
+    }
+    sec.innerHTML = html;
+  }
+}
+
+function renderFinaSwims() {
+  const sec = document.getElementById('results');
+
+  const allSwims = [];
+  for (const ev of events) {
+    if (ev.gender !== activeGender) continue;
+    for (const e of ev.entries) {
+      const pts = calcFinaPoints(ev.name, ev.gender, e.seedTime, finaCourse);
+      if (pts === null) continue;
+      allSwims.push({
+        name:      titleCase(e.name),
+        team:      titleCase(e.team),
+        eventName: ev.name,
+        eventNum:  ev.num,
+        time:      e.seedTime,
+        pts,
+      });
+    }
+  }
+
+  allSwims.sort((a, b) => b.pts - a.pts);
+
+  document.getElementById('rcount').textContent =
+    allSwims.length ? `${allSwims.length} swim${allSwims.length !== 1 ? 's' : ''}` : '';
+
+  if (!allSwims.length) {
+    sec.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10
+      10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <p>No ${activeGender.toLowerCase()} swims with valid times found.</p></div>`;
+    return;
+  }
+
+  let html = `<table class="rtable">
+    <thead><tr>
+      <th>#</th>
+      <th>Swimmer</th>
+      <th>Event</th>
+      <th class="r">Seed Time</th>
+      <th class="r">FINA Pts</th>
+    </tr></thead>
+    <tbody>`;
+
+  for (let i = 0; i < allSwims.length; i++) {
+    const sw     = allSwims[i];
+    const rank   = i + 1;
+    const rankCl = rank === 1 ? ' g' : rank === 2 ? ' s' : rank === 3 ? ' br' : '';
+    html += `
+      <tr>
+        <td class="td-rank${rankCl}">${rank}</td>
+        <td class="td-name">${esc(sw.name)}<div class="sub">${esc(sw.team)}</div></td>
+        <td class="td-age" style="font-size:0.8rem">Ev ${sw.eventNum} — ${esc(sw.eventName)}</td>
+        <td class="td-pts" style="font-family:monospace;font-weight:400;font-size:0.9rem">${esc(sw.time)}</td>
+        <td class="td-pts">${sw.pts}</td>
+      </tr>`;
+  }
+
+  html += `</tbody></table>
+    <p style="text-align:center;padding:14px 0 4px;font-size:0.73rem;color:var(--sub)">
+      ${finaCourse.toUpperCase()} world record base times · swims without a base time are excluded</p>`;
+  sec.innerHTML = html;
+}
+
+function renderFinaAvg() {
+  const sec = document.getElementById('results');
+
+  const map = new Map();
+  for (const ev of events) {
+    if (ev.gender !== activeGender) continue;
+    for (const e of ev.entries) {
+      const pts = calcFinaPoints(ev.name, ev.gender, e.seedTime, finaCourse);
+      if (pts === null) continue;
+      const key = e.name.toUpperCase().replace(/\s+/g, ' ').trim() + '||' + e.age;
+      if (!map.has(key)) {
+        map.set(key, {
+          name:    titleCase(e.name),
+          rawName: e.name.toUpperCase(),
+          age:     e.age,
+          team:    titleCase(e.team),
+          swims:   [],
+          total:   0,
+        });
+      }
+      const sw = map.get(key);
+      sw.swims.push({ num: ev.num, name: ev.name, time: e.seedTime, pts });
+      sw.total += pts;
+    }
+  }
+
+  const swimmers = [...map.values()].map(sw => ({
+    ...sw,
+    avg: sw.swims.length ? Math.round(sw.total / sw.swims.length) : 0,
+  }));
+
+  swimmers.sort((a, b) => b.avg - a.avg || a.rawName.localeCompare(b.rawName));
+
+  document.getElementById('rcount').textContent =
+    swimmers.length ? `${swimmers.length} swimmer${swimmers.length !== 1 ? 's' : ''}` : '';
+
+  if (!swimmers.length) {
+    sec.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10
+      10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <p>No ${activeGender.toLowerCase()} swimmers with valid times found.</p></div>`;
+    return;
+  }
+
+  let html = `<table class="rtable">
+    <thead><tr>
+      <th>#</th>
+      <th>Swimmer</th>
+      <th>Age</th>
+      <th class="c">Swims</th>
+      <th class="r">Avg FINA</th>
+    </tr></thead>
+    <tbody>`;
+
+  for (let i = 0; i < swimmers.length; i++) {
+    const sw     = swimmers[i];
+    const rank   = i + 1;
+    const rid    = `fexp_${i}`;
+    const rankCl = rank === 1 ? ' g' : rank === 2 ? ' s' : rank === 3 ? ' br' : '';
+    const isOpen = expanded.has(rid);
+    const sorted = [...sw.swims].sort((a, b) => b.pts - a.pts);
+
+    html += `
+      <tr class="data-row" onclick="toggleExp('${rid}')">
+        <td class="td-rank${rankCl}">${rank}</td>
+        <td class="td-name">${esc(sw.name)}<div class="sub">${esc(sw.team)}</div></td>
+        <td class="td-age">${sw.age}</td>
+        <td class="td-evs">${sw.swims.length}</td>
+        <td class="td-pts">${sw.avg}</td>
+      </tr>
+      <tr class="exp-row${isOpen ? ' open' : ''}" id="${rid}">
+        <td colspan="5"><div class="breakdown">
+          ${sorted.map(s => `
+            <div class="bd-row bd-clickable" onclick="showEventRanking(${s.num},'${activeGender}')">
+              <span class="bd-ev">Ev ${s.num} — ${esc(s.name)}</span>
+              <span class="bd-time">${s.time}</span>
+              <span class="bd-pts">${s.pts} pts</span>
+            </div>`).join('')}
+        </div></td>
+      </tr>`;
+  }
+
+  html += `</tbody></table>
+    <p style="text-align:center;padding:14px 0 4px;font-size:0.73rem;color:var(--sub)">
+      Ranked by average FINA points per scored swim · ${finaCourse.toUpperCase()} world record base times</p>`;
+  sec.innerHTML = html;
+}
+
+function buildTable(swimmers, prefix) {
+  const pfx = prefix.replace(/[^a-z0-9]/gi, '_');
+  let html = `<table class="rtable">
+    <thead><tr>
+      <th>#</th>
+      <th>Swimmer</th>
+      <th>Age</th>
+      <th class="c">Events</th>
+      <th class="r">Points</th>
+    </tr></thead>
+    <tbody>`;
+
+  for (let i = 0; i < swimmers.length; i++) {
+    const sw     = swimmers[i];
+    const rank   = i + 1;
+    const rid    = `exp_${pfx}_${i}`;
+    const rankCl = rank === 1 ? ' g' : rank === 2 ? ' s' : rank === 3 ? ' br' : '';
+    const isOpen = expanded.has(rid);
+
+    // Sort events by event number for the breakdown
+    const sortedEvs = [...sw.evList].sort((a, b) => a.num - b.num);
+
+    html += `
+      <tr class="data-row" onclick="toggleExp('${rid}')">
+        <td class="td-rank${rankCl}">${rank}</td>
+        <td class="td-name">${esc(sw.name)}<div class="sub">${esc(sw.team)}</div></td>
+        <td class="td-age">${sw.age}</td>
+        <td class="td-evs">${sw.evList.length}</td>
+        <td class="td-pts">${sw.total}</td>
+      </tr>
+      <tr class="exp-row${isOpen ? ' open' : ''}" id="${rid}">
+        <td colspan="5"><div class="breakdown">
+          ${sortedEvs.map(ev => `
+            <div class="bd-row bd-clickable" onclick="showEventRanking(${ev.num},'${activeGender}')">
+              <span class="bd-ev">Ev ${ev.num} — ${esc(ev.name)}</span>
+              <span class="bd-pos">${ordinal(ev.pos)} seed</span>
+              <span class="bd-time">${ev.time}</span>
+              <span class="bd-pts">${ev.pts > 0 ? '+' + ev.pts : '—'}</span>
+            </div>`).join('')}
+        </div></td>
+      </tr>`;
+  }
+
+  html += '</tbody></table>';
+  return html;
+}
+
+function toggleExp(rid) {
+  if (expanded.has(rid)) expanded.delete(rid);
+  else expanded.add(rid);
+  const el = document.getElementById(rid);
+  if (el) el.classList.toggle('open', expanded.has(rid));
+}
+
+function showEventRanking(eventNum, gender) {
+  const ev = events.find(e => e.num === eventNum && e.gender === gender);
+  if (!ev) return;
+
+  document.getElementById('event-modal-title').textContent = `Ev ${ev.num} — ${ev.name}`;
+  document.getElementById('event-modal-meta').textContent =
+    `${ev.gender} · ${ev.entries.length} entr${ev.entries.length === 1 ? 'y' : 'ies'}`;
+
+  const sorted = [...ev.entries].sort((a, b) => a.pos - b.pos);
+  const rankCl = pos => pos === 1 ? ' g' : pos === 2 ? ' s' : pos === 3 ? ' br' : '';
+
+  let html = `<table class="em-table">
+    <thead><tr>
+      <th>#</th><th>Swimmer</th><th class="r">Age</th><th class="r">Seed Time</th>
+    </tr></thead><tbody>`;
+
+  for (const e of sorted) {
+    html += `<tr>
+      <td class="td-rank${rankCl(e.pos)} em-rank">${e.pos}</td>
+      <td class="em-name">${esc(titleCase(e.name))}<div class="em-team">${esc(titleCase(e.team))}</div></td>
+      <td class="em-age">${e.age}</td>
+      <td class="em-time">${esc(e.seedTime)}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('event-modal-body').innerHTML = html;
+  document.getElementById('event-modal-overlay').classList.add('open');
+}
+
+function closeEventModal() {
+  document.getElementById('event-modal-overlay').classList.remove('open');
+}
+
+function ordinal(n) {
+  const s = ['th','st','nd','rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── PDF → text (using PDF.js) ─────────────────────────────────────────────────
+// Handles two-column psych-sheet layouts (common in HY-TEK Meet Manager exports)
+// by detecting the inter-column gap and outputting each column as separate lines.
+async function pdfToText(arrayBuffer) {
+  if (!window.pdfjsLib) throw new Error('PDF support requires an internet connection to load PDF.js.');
+
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pageTexts = [];
+
+  // Join a sorted {x,w,str}[] array into a single text line.
+  // A gap > 10 pt between adjacent items inserts two spaces; tighter gaps get one.
+  function joinItems(arr) {
+    let s = arr[0].str;
+    for (let i = 1; i < arr.length; i++) {
+      const gap = arr[i].x - (arr[i - 1].x + arr[i - 1].w);
+      s += (gap > 10 ? '  ' : ' ') + arr[i].str;
+    }
+    return s;
+  }
+
+  // Group a column's items into visual rows using dynamic clustering:
+  // items whose Y values differ by ≤ ROW_GAP pt belong to the same row.
+  // This handles PDFs where different parts of one entry (name vs team/time)
+  // land at slightly different Y coordinates (typically 0.5–2 pt apart).
+  // ROW_GAP must be smaller than the inter-line spacing (usually 10–14 pt).
+  function buildLines(colItems) {
+    if (!colItems.length) return [];
+    colItems.sort((a, b) => b.y - a.y);   // top → bottom (descending Y)
+    const ROW_GAP = 4;                     // pt — intra-entry drift is always < 4 pt
+    const rows = [[colItems[0]]];
+    for (let i = 1; i < colItems.length; i++) {
+      const gap = colItems[i - 1].y - colItems[i].y;   // always ≥ 0 (desc sort)
+      if (gap > ROW_GAP) rows.push([]);
+      rows[rows.length - 1].push(colItems[i]);
+    }
+    return rows.map(row => { row.sort((a, b) => a.x - b.x); return joinItems(row); });
+  }
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page    = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const pageW   = page.getViewport({ scale: 1 }).width;
+
+    const items = content.items
+      .filter(i => i.str && i.str.trim())
+      .map(i => ({ x: i.transform[4], y: i.transform[5], w: i.width || 0, str: i.str }));
+
+    if (!items.length) continue;
+
+    // ── Detect two-column layout ───────────────────────────────────────────
+    // Scan the middle 38–62 % of page width for the longest horizontal gap
+    // (consecutive 4 pt bins with no item X-positions).  A gap here indicates
+    // an inter-column gutter.  Require > 4 empty bins (> 16 pt).
+    const BIN   = 4;
+    const binLo = Math.floor(pageW * 0.38 / BIN);
+    const binHi = Math.ceil (pageW * 0.62 / BIN);
+    const xHist = new Map();
+    for (const it of items) xHist.set(Math.round(it.x / BIN), true);
+
+    let colSplitX = null, bestLen = 4, runStart = null;
+    for (let b = binLo; b <= binHi; b++) {
+      if (!xHist.has(b)) {
+        if (runStart === null) runStart = b;
+      } else {
+        if (runStart !== null) {
+          const len = b - runStart;
+          if (len > bestLen) { bestLen = len; colSplitX = (runStart + b) / 2 * BIN; }
+          runStart = null;
+        }
+      }
+    }
+    if (runStart !== null) {
+      const len = binHi - runStart + 1;
+      if (len > bestLen) colSplitX = (runStart + binHi) / 2 * BIN;
+    }
+    // Require at least 15 % of items on each side to confirm two-column layout.
+    if (colSplitX !== null) {
+      const lc = items.filter(i => i.x <  colSplitX).length;
+      const rc = items.filter(i => i.x >= colSplitX).length;
+      if (lc < items.length * 0.15 || rc < items.length * 0.15) colSplitX = null;
+    }
+
+    if (colSplitX !== null) {
+      // Two-column layout: emit ALL left-column lines first, then ALL right-column.
+      // This keeps each event's header + entries contiguous so the parser never sees
+      // a right-column event header interrupt a left-column event sequence.
+      const leftLines  = buildLines(items.filter(i => i.x <  colSplitX));
+      const rightLines = buildLines(items.filter(i => i.x >= colSplitX));
+      pageTexts.push([...leftLines, ...rightLines].join('\n'));
+    } else {
+      pageTexts.push(buildLines(items).join('\n'));
+    }
+  }
+
+  let text = pageTexts.join('\n');
+  // Fix numbers split across PDF text items:  "25 .43"→"25.43"  "4: 10"→"4:10"  "1 :05"→"1:05"
+  text = text.replace(/(\d) \./g, '$1.');
+  text = text.replace(/(\d) :/g, '$1:');
+  text = text.replace(/: (\d)/g, ':$1');
+  return text;
+}
+
+// ── File handling ─────────────────────────────────────────────────────────────
+function onFileChange(e) {
+  const f = e.target.files[0];
+  if (f) loadFile(f);
+  e.target.value = '';
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-area').classList.add('drag-over');
+}
+function onDragLeave() { document.getElementById('upload-area').classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  onDragLeave();
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+}
+
+function showError(msg) {
+  const el = document.getElementById('parse-error');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function applyParsed(parsed, fileName) {
+  if (!parsed.length) {
+    showError('No swimmer entries found. Make sure this is a Meet Manager psych sheet.');
+    return;
+  }
+
+  events = parsed;
+  expanded.clear();
+
+  const wEvs        = events.filter(e => e.gender === 'Women').length;
+  const mEvs        = events.filter(e => e.gender === 'Men').length;
+  const totalEntries = events.reduce((s, e) => s + e.entries.length, 0);
+
+  document.getElementById('fname').textContent  = fileName;
+  document.getElementById('fstats').textContent =
+    `${events.length} events (${wEvs}W / ${mEvs}M) · ${totalEntries} total entries`;
+
+  document.getElementById('upload-section').style.display = 'none';
+  document.getElementById('file-bar').classList.add('show');
+  document.getElementById('results-controls').classList.add('show');
+  document.getElementById('results').classList.add('show');
+
+  activeGender = wEvs >= mEvs ? 'Women' : 'Men';
+  document.getElementById('btn-w').classList.toggle('active', activeGender === 'Women');
+  document.getElementById('btn-m').classList.toggle('active', activeGender === 'Men');
+
+  renderResults();
+}
+
+function loadFile(file) {
+  document.getElementById('parse-error').classList.remove('show');
+  const isPDF = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+
+  if (isPDF) {
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      try {
+        const text   = await pdfToText(ev.target.result);
+        const parsed = parsePsychSheet(text);
+        if (!parsed.length) { showError('No swimmer entries found. Make sure this is a Meet Manager psych sheet.'); return; }
+        activeMeetId = null; // new upload — will be assigned by saveMeetFromFile
+        applyParsed(parsed, file.name);
+        await saveMeetFromFile(text, file.name);
+      } catch (err) {
+        showError('Could not read PDF: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      try {
+        const text   = ev.target.result;
+        const parsed = parsePsychSheet(text);
+        if (!parsed.length) { showError('No swimmer entries found. Make sure this is a Meet Manager psych sheet.'); return; }
+        activeMeetId = null;
+        applyParsed(parsed, file.name);
+        await saveMeetFromFile(text, file.name);
+      } catch (err) {
+        showError('Error reading file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+}
+
+function clearFile() {
+  events = [];
+  expanded.clear();
+  activeMeetId = null;
+  clearTimeout(settingsSaveTimer);
+  document.getElementById('upload-section').style.display = 'block';
+  document.getElementById('file-bar').classList.remove('show');
+  document.getElementById('results-controls').classList.remove('show');
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('parse-error').classList.remove('show');
+  renderMeetsTray(); // update active highlight
+}
+
+// ── Settings persistence ──────────────────────────────────────────────────────
+function saveSettings() {
+  if (suppressSettingsSave) return;
+  Auth.saveSettings('psych-sheet', { preset: activePreset, customPts });
+  if (activeMeetId) {
+    clearTimeout(settingsSaveTimer);
+    settingsSaveTimer = setTimeout(saveMeetSettings, 600);
+  }
+}
+
+// ── Meets API ─────────────────────────────────────────────────────────────────
+async function loadMeetsList() {
+  const data = await apiReq('GET', '/api/meets/psych-sheet', undefined);
+  if (Array.isArray(data)) {
+    meets = data;
+    updateMeetsBadge();
+    renderMeetsTray();
+  }
+}
+
+async function loadMeet(meetId) {
+  // Show loading in file-bar immediately
+  document.getElementById('upload-section').style.display = 'none';
+  document.getElementById('file-bar').classList.add('show');
+  document.getElementById('fname').textContent  = 'Loading…';
+  document.getElementById('fstats').textContent = '';
+
+  const meet = await apiReq('GET', `/api/meets/psych-sheet/${meetId}`, undefined);
+  if (!meet || meet.error) {
+    clearFile();
+    showError(meet && meet.error ? meet.error : 'Failed to load meet.');
+    return;
+  }
+
+  // Apply meet's settings silently (no save triggered)
+  if (meet.settings) {
+    suppressSettingsSave = true;
+    const p = PRESETS[meet.settings.preset] ? meet.settings.preset : 'swim-nsw';
+    if (p === 'custom' && Array.isArray(meet.settings.customPts)) {
+      customPts = meet.settings.customPts;
+      document.getElementById('custom-input').value = customPts.join(', ');
+    } else {
+      customPts = [];
+      document.getElementById('custom-input').value = '';
+    }
+    activePreset = p;
+    document.querySelectorAll('.preset-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.preset === p));
+    document.getElementById('custom-wrap').style.display = p === 'custom' ? 'block' : 'none';
+    renderPreview();
+    suppressSettingsSave = false;
+  }
+
+  const parsed = parsePsychSheet(meet.rawText || '');
+  if (!parsed.length) {
+    clearFile();
+    showError('No swimmer entries found in this saved meet.');
+    return;
+  }
+
+  activeMeetId = meetId;
+  applyParsed(parsed, meet.fileName || meet.name);
+  document.getElementById('fname').textContent = meet.name;
+
+  closeMeetsTray();
+  renderMeetsTray(); // update active highlight
+}
+
+async function saveMeetFromFile(rawText, fileName) {
+  if (!Auth.token) return;
+  const name = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 100) || 'Untitled Meet';
+  const data = await apiReq('POST', '/api/meets/psych-sheet', {
+    name, fileName,
+    settings: { preset: activePreset, customPts },
+    rawText,
+  });
+  if (!data) return;
+  if (data.error) { showToast(data.error); return; }
+  activeMeetId = data.id;
+  meets.push(data);
+  updateMeetsBadge();
+  renderMeetsTray();
+  document.getElementById('fname').textContent = data.name;
+}
+
+async function saveMeetSettings() {
+  if (!activeMeetId) return;
+  const data = await apiReq('PATCH', `/api/meets/psych-sheet/${activeMeetId}`, {
+    settings: { preset: activePreset, customPts },
+  });
+  if (data && !data.error) {
+    const idx = meets.findIndex(m => m.id === activeMeetId);
+    if (idx !== -1) {
+      meets[idx].settings   = { preset: activePreset, customPts: [...customPts] };
+      meets[idx].updatedAt  = data.updatedAt || meets[idx].updatedAt;
+    }
+  }
+}
+
+async function renameMeet(meetId, newName) {
+  const data = await apiReq('PATCH', `/api/meets/psych-sheet/${meetId}`, { name: newName });
+  if (!data || data.error) { showToast(data && data.error ? data.error : 'Failed to rename.'); return; }
+  const idx = meets.findIndex(m => m.id === meetId);
+  if (idx !== -1) { meets[idx].name = newName; meets[idx].updatedAt = data.updatedAt || meets[idx].updatedAt; }
+  if (activeMeetId === meetId) document.getElementById('fname').textContent = newName;
+}
+
+async function deleteMeet(meetId) {
+  const data = await apiReq('DELETE', `/api/meets/psych-sheet/${meetId}`, undefined);
+  if (!data || data.error) { showToast(data && data.error ? data.error : 'Failed to delete meet.'); return; }
+  meets = meets.filter(m => m.id !== meetId);
+  if (activeMeetId === meetId) { activeMeetId = null; clearFile(); }
+  updateMeetsBadge();
+  renderMeetsTray();
+}
+
+// ── Meets tray UI ─────────────────────────────────────────────────────────────
+function updateMeetsBadge() {
+  const badge = document.getElementById('meets-badge');
+  if (!badge) return;
+  if (meets.length > 0) { badge.textContent = meets.length; badge.style.display = ''; }
+  else                  { badge.style.display = 'none'; }
+}
+
+function renderMeetsTray() {
+  const list = document.getElementById('meets-list');
+  const meta = document.getElementById('meets-tray-meta');
+  if (!list) return;
+  if (meta) meta.textContent = `${meets.length} / ${MAX_MEETS_UI}`;
+
+  if (!meets.length) {
+    list.innerHTML = '<div class="meets-empty">No saved meets yet.<br>Upload a psych sheet to save it here.</div>';
+    return;
+  }
+
+  const sorted = [...meets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  list.innerHTML = sorted.map(m => {
+    const isActive = m.id === activeMeetId;
+    const date     = new Date(m.updatedAt).toLocaleDateString('en-AU',
+      { day: 'numeric', month: 'short', year: 'numeric' });
+    const metaStr  = [m.fileName, date].filter(Boolean).join(' · ');
+    return `<div class="meet-item${isActive ? ' active' : ''}" data-id="${esc(m.id)}">
+      <div class="meet-item-body" data-action="load" data-id="${esc(m.id)}">
+        <div class="meet-item-name" id="mname-${esc(m.id)}">${esc(m.name)}</div>
+        <div class="meet-item-meta">${esc(metaStr)}</div>
+      </div>
+      <div class="meet-item-actions">
+        <button class="meet-act-btn" data-action="rename" data-id="${esc(m.id)}" title="Rename">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
+        <button class="meet-act-btn del" data-action="delete" data-id="${esc(m.id)}" title="Delete">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openMeetsTray() {
+  renderMeetsTray();
+  document.getElementById('meets-overlay').classList.add('open');
+}
+function closeMeetsTray() {
+  document.getElementById('meets-overlay').classList.remove('open');
+}
+
+function initMeetsTray() {
+  // Single delegated listener — no per-item leaks
+  document.getElementById('meets-list').addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const { action, id } = btn.dataset;
+    if (action === 'load')   loadMeet(id);
+    if (action === 'rename') startRename(id);
+    if (action === 'delete') {
+      const meet = meets.find(m => m.id === id);
+      if (meet && confirm(`Delete "${meet.name}"?\nThis cannot be undone.`)) deleteMeet(id);
+    }
+  });
+}
+
+function startRename(meetId) {
+  const nameEl = document.getElementById('mname-' + meetId);
+  if (!nameEl) return;
+  const current = nameEl.textContent;
+  const input   = document.createElement('input');
+  input.className = 'meet-rename-input';
+  input.value     = current;
+  input.maxLength = 100;
+  nameEl.textContent = '';
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  let committed = false;
+  const commit = async () => {
+    if (committed) return;
+    committed = true;
+    const newName = input.value.trim() || current;
+    nameEl.textContent = newName; // optimistic
+    if (newName !== current) await renameMeet(meetId, newName);
+  };
+  input.addEventListener('blur', commit, { once: true });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { committed = true; nameEl.textContent = current; input.blur(); }
+  });
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+renderPreview();
+
+window.addEventListener('DOMContentLoaded', () => {
+  initMeetsTray();
+  Auth.onReady(async user => {
+    if (!user) return;
+    const prefs = await Auth.loadSettings('psych-sheet');
+    if (prefs && prefs.preset && PRESETS[prefs.preset]) {
+      if (prefs.preset === 'custom' && Array.isArray(prefs.customPts)) {
+        customPts = prefs.customPts;
+        document.getElementById('custom-input').value = customPts.join(', ');
+      }
+      setPreset(prefs.preset);
+    }
+    await loadMeetsList();
+  });
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+</body>
+</html>

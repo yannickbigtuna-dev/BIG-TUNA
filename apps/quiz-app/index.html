@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Quizzes — BIG TUNA</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0a0a0a;
+    color: #eee;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    transition: background-color 0.25s ease;
+  }
+  body.flash-right { background-color: #071a07; }
+  body.flash-wrong { background-color: #1a0707; }
+
+  #app {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── LIST & EDITOR wrapper ── */
+  .scroll-view {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 24px 20px 60px;
+    max-width: 680px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── Shared ── */
+  .loading { text-align: center; padding: 80px 20px; color: #444; font-size: 0.9rem; }
+  .error-msg { color: #ff6b6b; font-size: 0.85rem; margin-top: 10px; min-height: 1.2em; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border: none; border-radius: 12px; cursor: pointer;
+    font-family: inherit; font-weight: 800; letter-spacing: 0.06em;
+    transition: opacity .15s, transform .1s;
+    touch-action: manipulation;
+    text-decoration: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary   { background: #fff; color: #0a0a0a; padding: 13px 22px; font-size: 0.85rem; }
+  .btn-secondary { background: #1e1e1e; color: #ccc; padding: 11px 18px; font-size: 0.82rem; border: 1px solid #2a2a2a; }
+  .btn-ghost     { background: transparent; color: #555; padding: 10px 14px; font-size: 0.82rem; }
+  .btn-ghost:hover { color: #aaa; }
+  .btn-sm { padding: 8px 14px; font-size: 0.78rem; }
+  .btn-danger-text { background: transparent; color: #ff6b6b; border: none; cursor: pointer; font-family: inherit; font-size: 0.78rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; touch-action: manipulation; }
+  .btn-danger-text:hover { background: rgba(255,80,80,0.1); }
+
+  /* ── LIST VIEW ── */
+  .list-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; gap: 12px; flex-wrap: wrap;
+  }
+  .list-header h2 { font-size: 1.2rem; font-weight: 900; letter-spacing: -0.02em; color: #fff; }
+  .list-header-actions { display: flex; gap: 8px; }
+
+  .quiz-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .quiz-card {
+    background: #111;
+    border: 1px solid #1e1e1e;
+    border-radius: 16px;
+    padding: 18px 20px;
+    display: flex; align-items: center; gap: 16px;
+    transition: border-color .15s;
+  }
+  .quiz-card:hover { border-color: #2a2a2a; }
+  .quiz-card-body { flex: 1; min-width: 0; }
+  .quiz-card-title {
+    font-size: 1rem; font-weight: 700; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .quiz-card-meta { font-size: 0.72rem; color: #555; letter-spacing: 0.04em; }
+  .quiz-card-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+
+  .empty-state {
+    text-align: center; padding: 80px 20px;
+    color: #444; font-size: 0.9rem; line-height: 2;
+  }
+  .empty-state .empty-icon { font-size: 3.5rem; margin-bottom: 16px; display: block; }
+
+  /* ── EDITOR VIEW ── */
+  .editor-title-row {
+    margin-bottom: 28px;
+  }
+  .field-label {
+    display: block; font-size: 0.62rem; text-transform: uppercase;
+    letter-spacing: 0.14em; color: #555; margin-bottom: 8px; font-weight: 700;
+  }
+  .field-input {
+    width: 100%; background: #111; border: 1px solid #252525;
+    border-radius: 12px; padding: 13px 16px; color: #fff;
+    font-size: 1rem; outline: none; font-family: inherit;
+    transition: border-color .15s;
+  }
+  .field-input:focus { border-color: #3a3a3a; }
+  textarea.field-input { resize: none; line-height: 1.5; }
+
+  .questions-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+
+  .q-block {
+    background: #0e0e0e;
+    border: 1px solid #1e1e1e;
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .q-block-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .q-num {
+    font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em;
+    color: #444; font-weight: 700;
+  }
+  .q-fields { display: flex; flex-direction: column; gap: 10px; }
+  .q-field-wrap { position: relative; }
+
+  .editor-actions {
+    display: flex; gap: 10px; align-items: center; margin-bottom: 24px; flex-wrap: wrap;
+  }
+  .editor-footer {
+    display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;
+    padding-top: 20px; border-top: 1px solid #1a1a1a;
+  }
+
+  /* ── QUIZ MODE ── */
+  #quiz-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Score strip */
+  #quiz-scorebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
+  }
+  .score-side {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 1rem; font-weight: 900; letter-spacing: -0.01em;
+    min-width: 80px;
+  }
+  .score-side.right-score { color: #4caf50; justify-content: flex-start; }
+  .score-side.wrong-score { color: #ef5350; justify-content: flex-end; }
+  .score-icon { font-size: 1.1rem; }
+  #quiz-progress {
+    font-size: 0.72rem; color: #555; letter-spacing: 0.1em;
+    text-transform: uppercase; text-align: center;
+  }
+
+  /* Question area */
+  #quiz-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 28px;
+    text-align: center;
+  }
+  #quiz-question {
+    font-size: clamp(1.6rem, 5vw, 2.8rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    color: #fff;
+    margin-bottom: 0;
+    max-width: 600px;
+  }
+  #quiz-answer-reveal {
+    margin-top: 32px;
+    padding: 20px 28px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 16px;
+    font-size: clamp(1rem, 3vw, 1.4rem);
+    font-weight: 700;
+    color: #eee;
+    line-height: 1.4;
+    max-width: 560px;
+    width: 100%;
+    display: none;
+  }
+  #quiz-answer-reveal.visible { display: block; }
+  #quiz-answer-label {
+    font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em;
+    color: #555; font-weight: 700; margin-bottom: 8px;
+  }
+
+  /* Action buttons */
+  #quiz-footer {
+    padding: 20px 24px calc(20px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+  }
+  #quiz-grade-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .grade-btn {
+    padding: 20px 12px;
+    border: none; border-radius: 16px;
+    font-family: inherit; font-size: 1rem; font-weight: 900;
+    letter-spacing: 0.04em; cursor: pointer;
+    touch-action: manipulation;
+    transition: opacity .15s, transform .1s;
+  }
+  .grade-btn:active { transform: scale(0.97); }
+  #btn-wrong { background: rgba(239,83,80,0.15); color: #ef5350; border: 1px solid rgba(239,83,80,0.3); }
+  #btn-right { background: rgba(76,175,80,0.15); color: #4caf50; border: 1px solid rgba(76,175,80,0.3); }
+  #btn-wrong:hover { background: rgba(239,83,80,0.25); }
+  #btn-right:hover { background: rgba(76,175,80,0.25); }
+
+  #quiz-next-btn {
+    width: 100%;
+    padding: 18px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background .15s, transform .1s;
+    display: none;
+  }
+  #quiz-next-btn:active { transform: scale(0.98); }
+  #quiz-next-btn.visible { display: block; }
+  #quiz-next-btn:hover { background: rgba(255,255,255,0.16); }
+
+  /* ── RESULTS VIEW ── */
+  .results-wrap { text-align: center; }
+  .results-score-block {
+    padding: 40px 20px 32px;
+    border-bottom: 1px solid #1a1a1a;
+    margin-bottom: 32px;
+  }
+  .results-fraction {
+    font-size: clamp(3rem, 14vw, 5.5rem);
+    font-weight: 900; letter-spacing: -0.04em;
+    line-height: 1;
+    color: #fff;
+  }
+  .results-fraction .r-right { color: #4caf50; }
+  .results-fraction .r-wrong { color: #ef5350; }
+  .results-sub {
+    font-size: 0.8rem; color: #555; letter-spacing: 0.12em;
+    text-transform: uppercase; margin-top: 10px;
+  }
+  .results-breakdown { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+  .result-row {
+    background: #0e0e0e; border-radius: 12px; padding: 14px 18px;
+    border-left: 3px solid transparent; text-align: left;
+  }
+  .result-row.r-correct { border-left-color: #4caf50; }
+  .result-row.r-wrong   { border-left-color: #ef5350; }
+  .result-q  { font-size: 0.88rem; color: #aaa; margin-bottom: 6px; line-height: 1.4; }
+  .result-a  { font-size: 0.82rem; font-weight: 700; }
+  .result-a.ok  { color: #4caf50; }
+  .result-a.bad { color: #ef5350; }
+  .results-footer-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div id="app"><div class="loading">Loading...</div></div>
+<input type="file" id="file-input" accept=".json" style="display:none">
+
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+<script>
+'use strict';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const app = document.getElementById('app');
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function uid() { return crypto.randomUUID(); }
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+}
+function authHdr() {
+  return { 'Content-Type':'application/json', 'Authorization':`Bearer ${Auth.token}` };
+}
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: authHdr(),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let quizzes    = [];
+let editId     = null;
+let editTitle  = '';
+let editQs     = []; // [{id, question, answer}]
+
+let takeQuiz   = null;
+let takeIdx    = 0;
+let scoreRight = 0;
+let scoreWrong = 0;
+let revealed   = false;
+
+// ── Body flash ────────────────────────────────────────────────────────────────
+function setFlash(cls) {
+  document.body.classList.remove('flash-right', 'flash-wrong');
+  if (cls) document.body.classList.add(cls);
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIST VIEW
+// ═══════════════════════════════════════════════════════════
+async function showList() {
+  setFlash(null);
+  Topbar.setTitle('Quizzes');
+  app.innerHTML = '<div class="loading">Loading...</div>';
+  try { quizzes = await api('GET', '/api/quizzes'); }
+  catch (e) {
+    app.innerHTML = `<div class="scroll-view"><div class="error-msg">Failed to load: ${esc(e.message)}</div></div>`;
+    return;
+  }
+
+  const cardsHTML = quizzes.length === 0
+    ? `<div class="empty-state">
+         <span class="empty-icon">❓</span>
+         No quizzes yet.<br>Create your first one.
+       </div>`
+    : `<div class="quiz-list">${quizzes.map(q => `
+        <div class="quiz-card">
+          <div class="quiz-card-body">
+            <div class="quiz-card-title">${esc(q.title)}</div>
+            <div class="quiz-card-meta">${q.questionCount} question${q.questionCount !== 1 ? 's' : ''} &nbsp;·&nbsp; ${fmtDate(q.updatedAt)}</div>
+          </div>
+          <div class="quiz-card-actions">
+            <button class="btn btn-primary btn-sm" onclick="startQuiz('${q.id}')">▶ Play</button>
+            <button class="btn btn-secondary btn-sm" onclick="openEditor('${q.id}')">Edit</button>
+            <button class="btn-danger-text" onclick="deleteQuiz('${q.id}',${JSON.stringify(esc(q.title))})">✕</button>
+          </div>
+        </div>`).join('')}
+      </div>`;
+
+  app.innerHTML = `
+    <div class="scroll-view">
+      <div class="list-header">
+        <h2>My Quizzes</h2>
+        <div class="list-header-actions">
+          <button class="btn btn-primary" onclick="openEditor(null)">+ New Quiz</button>
+        </div>
+      </div>
+      ${cardsHTML}
+      <div id="list-err" class="error-msg"></div>
+    </div>`;
+}
+
+async function deleteQuiz(id, title) {
+  if (!confirm(`Delete "${title}"?`)) return;
+  try { await api('DELETE', `/api/quizzes/${id}`); await showList(); }
+  catch (e) {
+    const el = document.getElementById('list-err');
+    if (el) el.textContent = e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// EDITOR VIEW
+// ═══════════════════════════════════════════════════════════
+async function openEditor(id) {
+  setFlash(null);
+  editId = id;
+  if (id) {
+    app.innerHTML = '<div class="loading">Loading...</div>';
+    try {
+      const quiz = await api('GET', `/api/quizzes/${id}`);
+      editTitle = quiz.title;
+      editQs = quiz.questions.map(q => ({ id: q.id || uid(), question: q.question || '', answer: q.answer || '' }));
+    } catch (e) {
+      app.innerHTML = `<div class="scroll-view"><div class="error-msg">${esc(e.message)}</div></div>`;
+      return;
+    }
+  } else {
+    editTitle = '';
+    editQs = [newQ()];
+  }
+  renderEditor();
+}
+
+function newQ() { return { id: uid(), question: '', answer: '' }; }
+
+function captureEditor() {
+  const t = document.getElementById('edit-title');
+  if (t) editTitle = t.value;
+  editQs.forEach((q, i) => {
+    const qEl = document.querySelector(`#qb-${i} .qa-question`);
+    const aEl = document.querySelector(`#qb-${i} .qa-answer`);
+    if (qEl) q.question = qEl.value;
+    if (aEl) q.answer   = aEl.value;
+  });
+}
+
+function renderEditor() {
+  Topbar.setTitle(editId ? 'Edit Quiz' : 'New Quiz');
+
+  const blocksHTML = editQs.map((q, i) => `
+    <div class="q-block" id="qb-${i}">
+      <div class="q-block-header">
+        <span class="q-num">Question ${i + 1}</span>
+        ${editQs.length > 1
+          ? `<button class="btn-danger-text" onclick="removeQ(${i})">Remove</button>`
+          : ''}
+      </div>
+      <div class="q-fields">
+        <div class="q-field-wrap">
+          <label class="field-label">Question</label>
+          <textarea class="field-input qa-question" rows="2" placeholder="e.g. What is the capital of France?">${esc(q.question)}</textarea>
+        </div>
+        <div class="q-field-wrap">
+          <label class="field-label">Answer</label>
+          <textarea class="field-input qa-answer" rows="2" placeholder="e.g. Paris">${esc(q.answer)}</textarea>
+        </div>
+      </div>
+    </div>`).join('');
+
+  app.innerHTML = `
+    <div class="scroll-view">
+      <div class="editor-title-row">
+        <label class="field-label">Quiz Title</label>
+        <input class="field-input" type="text" id="edit-title"
+               value="${esc(editTitle)}" placeholder="e.g. Geography Basics">
+      </div>
+
+      <div class="questions-list">${blocksHTML}</div>
+
+      <div class="editor-actions">
+        <button class="btn btn-secondary" onclick="addQ()">+ Add Question</button>
+      </div>
+
+      <div id="edit-err" class="error-msg"></div>
+
+      <div class="editor-footer">
+        <button class="btn btn-ghost" onclick="showList()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveQuiz()">Save Quiz</button>
+      </div>
+    </div>`;
+}
+
+function addQ() {
+  captureEditor();
+  editQs.push(newQ());
+  renderEditor();
+  setTimeout(() => {
+    const blocks = document.querySelectorAll('.q-block');
+    if (blocks.length) blocks[blocks.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 40);
+}
+
+function removeQ(i) {
+  captureEditor();
+  editQs.splice(i, 1);
+  renderEditor();
+}
+
+async function saveQuiz() {
+  captureEditor();
+  const errEl = document.getElementById('edit-err');
+  if (!editTitle.trim()) { errEl.textContent = 'Please enter a quiz title.'; return; }
+  if (!editQs.length)    { errEl.textContent = 'Add at least one question.'; return; }
+  for (let i = 0; i < editQs.length; i++) {
+    if (!editQs[i].question.trim()) { errEl.textContent = `Question ${i+1} is empty.`; return; }
+    if (!editQs[i].answer.trim())   { errEl.textContent = `Question ${i+1} has no answer.`; return; }
+  }
+  errEl.textContent = '';
+  const body = { title: editTitle, questions: editQs };
+  try {
+    if (editId) await api('PUT',  `/api/quizzes/${editId}`, body);
+    else        await api('POST', '/api/quizzes', body);
+    await showList();
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+// ═══════════════════════════════════════════════════════════
+// QUIZ MODE
+// ═══════════════════════════════════════════════════════════
+async function startQuiz(id) {
+  app.innerHTML = '<div class="loading">Loading...</div>';
+  try { takeQuiz = await api('GET', `/api/quizzes/${id}`); }
+  catch (e) {
+    app.innerHTML = `<div class="scroll-view"><div class="error-msg">${esc(e.message)}</div></div>`;
+    return;
+  }
+  if (!takeQuiz.questions || !takeQuiz.questions.length) {
+    app.innerHTML = `<div class="scroll-view"><div class="empty-state"><span class="empty-icon">❓</span>This quiz has no questions.</div></div>`;
+    return;
+  }
+  takeIdx    = 0;
+  scoreRight = 0;
+  scoreWrong = 0;
+  revealed   = false;
+  setFlash(null);
+  renderQuiz();
+}
+
+function renderQuiz() {
+  Topbar.setTitle(takeQuiz.title);
+  const q     = takeQuiz.questions[takeIdx];
+  const total = takeQuiz.questions.length;
+
+  app.innerHTML = `
+    <div id="quiz-screen">
+      <div id="quiz-scorebar">
+        <div class="score-side right-score">
+          <span class="score-icon">✓</span>
+          <span id="score-right">${scoreRight}</span>
+        </div>
+        <div id="quiz-progress">${takeIdx + 1} / ${total}</div>
+        <div class="score-side wrong-score">
+          <span id="score-wrong">${scoreWrong}</span>
+          <span class="score-icon">✗</span>
+        </div>
+      </div>
+
+      <div id="quiz-body">
+        <div id="quiz-question">${esc(q.question)}</div>
+        <div id="quiz-answer-reveal">
+          <div id="quiz-answer-label">Answer</div>
+          <div id="quiz-answer-text"></div>
+        </div>
+      </div>
+
+      <div id="quiz-footer">
+        <div id="quiz-grade-btns">
+          <button class="grade-btn" id="btn-wrong" onclick="grade(false)">✗&nbsp; Wrong</button>
+          <button class="grade-btn" id="btn-right" onclick="grade(true)">✓&nbsp; Right</button>
+        </div>
+        <button id="quiz-next-btn" onclick="nextQuestion()">
+          ${takeIdx + 1 < total ? 'Next Question →' : 'See Results →'}
+        </button>
+      </div>
+    </div>`;
+}
+
+function grade(isRight) {
+  if (revealed) return;
+  revealed = true;
+
+  const q = takeQuiz.questions[takeIdx];
+  if (isRight) { scoreRight++; setFlash('flash-right'); }
+  else         { scoreWrong++; setFlash('flash-wrong'); }
+
+  // Update score display
+  document.getElementById('score-right').textContent = scoreRight;
+  document.getElementById('score-wrong').textContent = scoreWrong;
+
+  // Reveal answer
+  document.getElementById('quiz-answer-text').textContent = q.answer;
+  document.getElementById('quiz-answer-reveal').classList.add('visible');
+
+  // Swap buttons
+  document.getElementById('quiz-grade-btns').style.display = 'none';
+  document.getElementById('quiz-next-btn').classList.add('visible');
+}
+
+function nextQuestion() {
+  takeIdx++;
+  revealed = false;
+  setFlash(null);
+  if (takeIdx >= takeQuiz.questions.length) {
+    renderResults();
+  } else {
+    renderQuiz();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESULTS VIEW
+// ═══════════════════════════════════════════════════════════
+function renderResults() {
+  setFlash(null);
+  Topbar.setTitle('Results');
+  const total = takeQuiz.questions.length;
+  const pct   = total ? Math.round((scoreRight / total) * 100) : 0;
+
+  app.innerHTML = `
+    <div class="scroll-view">
+      <div class="results-wrap">
+        <div class="results-score-block">
+          <div class="results-fraction">
+            <span class="r-right">${scoreRight}</span>
+            <span style="color:#333"> / </span>
+            <span>${total}</span>
+          </div>
+          <div class="results-sub">${pct}% correct &nbsp;·&nbsp; ${scoreWrong} wrong</div>
+        </div>
+        <div class="results-footer-btns">
+          <button class="btn btn-secondary" onclick="startQuiz('${takeQuiz.id}')">Play Again</button>
+          <button class="btn btn-primary" onclick="showList()">Back to Quizzes</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+Auth.onReady(() => showList());
+</script>
+</body>
+</html>

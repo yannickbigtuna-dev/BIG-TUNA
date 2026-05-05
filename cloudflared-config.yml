@@ -1,0 +1,17 @@
+tunnel: ffbbb852-ac17-46b1-a09a-ba5dbb756190
+credentials-file: C:\Users\yanni\.cloudflared\ffbbb852-ac17-46b1-a09a-ba5dbb756190.json
+
+ingress:
+  - hostname: yannickmorgans.ca
+    service: http://localhost:3000
+
+  - hostname: www.yannickmorgans.ca
+    service: http://localhost:3000
+
+  - hostname: mcp.yannickmorgans.ca
+    service: http://localhost:3001
+
+  - hostname: ssh.yannickmorgans.ca
+    service: ssh://localhost:22
+
+  - service: http_status:404

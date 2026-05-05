@@ -1,0 +1,12 @@
+id=mn6ptg8zexih
+date=2026-03-26T00:09:25.379Z
+grade=Blue
+holdsColor=
+status=complete
+tries=8
+rating=0
+flash=false
+styles=
+notes=
+sessionId=mn6pshg5rgqt
+hasPhoto=true
