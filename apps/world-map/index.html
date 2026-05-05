@@ -9,6 +9,7 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  :root { --game-vh: 100dvh; }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -26,7 +27,7 @@
      or let it scroll out of view. iOS is handled separately via visualViewport. */
   body.game-active {
     height: 100svh;
-    height: 100dvh;
+    height: var(--game-vh);
     overflow: hidden;
   }
   body.game-active #app {
@@ -84,7 +85,7 @@
   .map-container {
     flex: 1; position: relative; overflow: hidden;
     background: #0b141f;
-    min-height: 0;
+    min-height: 150px;
   }
   .map-container svg {
     display: block; width: 100%; height: 100%;
@@ -134,6 +135,34 @@
   #country-input:focus { border-color: #3a3a3a; }
   #country-input.correct { border-color: #4caf50; background: #0c1c0e; }
   #country-input.wrong   { border-color: #ef5350; background: #1a0808; }
+
+  body.keyboard-open .bottom-bar {
+    padding: 6px 10px 7px;
+    padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
+  }
+  body.keyboard-open .stats-row { margin-bottom: 6px; gap: 3px; }
+  body.keyboard-open .stat-box { min-width: 42px; }
+  body.keyboard-open .stat-val { font-size: 1rem; }
+  body.keyboard-open .stat-lbl { font-size: 0.5rem; letter-spacing: 0.08em; }
+  body.keyboard-open .btn-sm {
+    padding: 7px 10px;
+    font-size: 0.7rem;
+    border-radius: 9px;
+  }
+  body.keyboard-open #country-input {
+    padding: 9px 12px;
+    font-size: 16px;
+    border-radius: 9px;
+  }
+
+  @media (max-height: 560px) {
+    body.game-active .bottom-bar {
+      padding-top: 6px;
+      padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
+    }
+    body.game-active .stats-row { margin-bottom: 6px; }
+    body.game-active .stat-val { font-size: 1rem; }
+  }
 
   /* ── SCREEN (settings / highscores / results) ── */
   .screen {
@@ -752,6 +781,60 @@ function showToast(msg) {
   t._timer = setTimeout(() => t.classList.remove('show'), 1600);
 }
 
+function installKeyboardViewportFix(input) {
+  const root = document.documentElement;
+  const baselineHeight = window.innerHeight;
+  let focused = document.activeElement === input;
+
+  const setCompact = () => {
+    const vv = window.visualViewport;
+    const viewportHeight = vv ? vv.height : window.innerHeight;
+    const topbarEl = document.getElementById('topbar');
+    const tbH = topbarEl ? topbarEl.offsetHeight : 52;
+    const available = Math.max(260, viewportHeight - tbH);
+    const keyboardLikelyOpen = focused && (
+      (vv && baselineHeight - viewportHeight > 90) ||
+      window.innerHeight < baselineHeight - 90
+    );
+
+    root.style.setProperty('--game-vh', `${viewportHeight}px`);
+    document.body.classList.toggle('keyboard-open', keyboardLikelyOpen);
+
+    const wrap = document.querySelector('.game-wrap');
+    if (wrap) wrap.style.height = `${available}px`;
+  };
+
+  const onFocus = () => { focused = true; setCompact(); };
+  const onBlur = () => {
+    focused = false;
+    setTimeout(setCompact, 80);
+  };
+
+  input.addEventListener('focus', onFocus);
+  input.addEventListener('blur', onBlur);
+  window.addEventListener('resize', setCompact);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', setCompact);
+    window.visualViewport.addEventListener('scroll', setCompact);
+  }
+
+  setCompact();
+
+  return () => {
+    input.removeEventListener('focus', onFocus);
+    input.removeEventListener('blur', onBlur);
+    window.removeEventListener('resize', setCompact);
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', setCompact);
+      window.visualViewport.removeEventListener('scroll', setCompact);
+    }
+    document.body.classList.remove('keyboard-open');
+    root.style.removeProperty('--game-vh');
+    const wrap = document.querySelector('.game-wrap');
+    if (wrap) wrap.style.height = '';
+  };
+}
+
 let _toastHide;
 let _sync = null;
 
@@ -765,6 +848,7 @@ function render() {
   if (state.view !== 'game') ExpertAudio.stop();
   // Clean up visualViewport handler and game-active body class when leaving game
   if (state.vvCleanup) { state.vvCleanup(); state.vvCleanup = null; }
+  document.body.classList.remove('keyboard-open');
   document.body.classList.toggle('game-active', state.view === 'game');
   document.body.classList.toggle('expert-mode', state.mode === 'world' && state.difficulty === 'expert');
   clearTopbarLeft();
@@ -946,27 +1030,7 @@ function renderGame(app) {
   // Map
   initMap(document.getElementById('map-container'));
 
-  // iOS keyboard fix: visualViewport shrinks when keyboard appears but the
-  // layout viewport does NOT, so we manually resize the game-wrap to fit.
-  if (window.visualViewport) {
-    const onVV = () => {
-      const wrap = document.querySelector('.game-wrap');
-      if (!wrap) return;
-      const topbarEl = document.getElementById('topbar');
-      const tbH = topbarEl ? topbarEl.offsetHeight : 52;
-      const available = window.visualViewport.height - tbH;
-      wrap.style.height = available + 'px';
-    };
-    window.visualViewport.addEventListener('resize', onVV);
-    window.visualViewport.addEventListener('scroll', onVV);
-    onVV();
-    state.vvCleanup = () => {
-      window.visualViewport.removeEventListener('resize', onVV);
-      window.visualViewport.removeEventListener('scroll', onVV);
-      const wrap = document.querySelector('.game-wrap');
-      if (wrap) wrap.style.height = '';
-    };
-  }
+  state.vvCleanup = installKeyboardViewportFix(input);
 
   // Timer (delayed for expert intro)
   const startGameTimer = () => {
