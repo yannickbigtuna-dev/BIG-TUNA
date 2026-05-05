@@ -33,7 +33,7 @@ const Auth = (() => {
     }
     #auth-card .auth-logo {
       font-size: 2rem; font-weight: 900; letter-spacing: -0.04em;
-      background: linear-gradient(135deg, #ff0000 40%, #aa0000 100%);
+      background: linear-gradient(135deg, #28e07a 35%, #0f8f4f 100%);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
       background-clip: text; margin-bottom: 4px; display: block;
     }
