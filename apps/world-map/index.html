@@ -9,7 +9,11 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-  :root { --game-vh: 100dvh; }
+  :root {
+    --game-vh: 100dvh;
+    --game-top: 52px;
+    --game-height: calc(100dvh - 52px);
+  }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -81,6 +85,16 @@
     flex: 1; display: flex; flex-direction: column;
     min-height: 0; overflow: hidden;
   }
+  body.keyboard-open .game-wrap {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--game-top);
+    height: var(--game-height);
+    width: 100%;
+    z-index: 150;
+    background: #0a0a0a;
+  }
 
   .map-container {
     flex: 1; position: relative; overflow: hidden;
@@ -140,6 +154,7 @@
     padding: 6px 10px 7px;
     padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
   }
+  body.keyboard-open .map-container { min-height: 0; }
   body.keyboard-open .stats-row { margin-bottom: 6px; gap: 3px; }
   body.keyboard-open .stat-box { min-width: 42px; }
   body.keyboard-open .stat-val { font-size: 1rem; }
@@ -789,15 +804,19 @@ function installKeyboardViewportFix(input) {
   const setCompact = () => {
     const vv = window.visualViewport;
     const viewportHeight = vv ? vv.height : window.innerHeight;
+    const viewportTop = vv ? vv.offsetTop : 0;
     const topbarEl = document.getElementById('topbar');
     const tbH = topbarEl ? topbarEl.offsetHeight : 52;
-    const available = Math.max(260, viewportHeight - tbH);
+    const gameTop = Math.max(tbH, viewportTop + tbH);
+    const available = Math.max(1, viewportHeight - tbH);
     const keyboardLikelyOpen = focused && (
       (vv && baselineHeight - viewportHeight > 90) ||
       window.innerHeight < baselineHeight - 90
     );
 
     root.style.setProperty('--game-vh', `${viewportHeight}px`);
+    root.style.setProperty('--game-top', `${gameTop}px`);
+    root.style.setProperty('--game-height', `${available}px`);
     document.body.classList.toggle('keyboard-open', keyboardLikelyOpen);
 
     const wrap = document.querySelector('.game-wrap');
@@ -830,9 +849,16 @@ function installKeyboardViewportFix(input) {
     }
     document.body.classList.remove('keyboard-open');
     root.style.removeProperty('--game-vh');
+    root.style.removeProperty('--game-top');
+    root.style.removeProperty('--game-height');
     const wrap = document.querySelector('.game-wrap');
     if (wrap) wrap.style.height = '';
   };
+}
+
+function focusWithoutScroll(input) {
+  try { input.focus({ preventScroll: true }); }
+  catch { input.focus(); }
 }
 
 let _toastHide;
@@ -970,7 +996,7 @@ function renderGame(app) {
 
   // Input
   const input = document.getElementById('country-input');
-  setTimeout(() => input.focus(), 100);
+  setTimeout(() => focusWithoutScroll(input), 100);
 
   input.addEventListener('input', () => {
     const val = input.value.trim();
@@ -1035,7 +1061,7 @@ function renderGame(app) {
   // Timer (delayed for expert intro)
   const startGameTimer = () => {
     const inp = document.getElementById('country-input');
-    if (inp) { inp.disabled = false; inp.focus(); }
+    if (inp) { inp.disabled = false; focusWithoutScroll(inp); }
     if (state.settings.timeLimit > 0) {
       state.timer = setInterval(() => {
         state.timeLeft--;
@@ -1096,7 +1122,7 @@ function confirmGuess(id, input) {
     setTimeout(() => {
       input.classList.remove('correct');
       input.value = '';
-      input.focus();
+      focusWithoutScroll(input);
     }, 700);
   }
 
