@@ -121,6 +121,7 @@ Current `npm test` is a placeholder that exits with failure, so do not treat it 
 - `data/climb-tracker/`
 - `data/quizzes/`
 - `data/shared-lists/`
+- `data/lights/`
 
 It creates `data/users.json` and `data/sessions.json` if missing.
 
@@ -210,6 +211,7 @@ Current app folders:
 
 - `apps/capitals-quiz/`
 - `apps/list-maker/`
+- `apps/lights/`
 - `apps/pace-calculator/`
 - `apps/psych-sheet/`
 - `apps/quiz-app/`
@@ -251,6 +253,14 @@ data/quizzes/{userId}/{quizId}.json
 
 data/shared-lists/{id}.json
   Shared list documents with owner/member metadata and list content.
+
+data/lights/state.json
+  Desired light relay state for the Lights app and ESP8266 polling integration:
+  { on: boolean, updatedAt: ISO string, updatedBy: username or "device" }.
+
+data/lights/device-status.json
+  Optional future ESP8266 heartbeat/status written by the device status endpoint:
+  { on: boolean, receivedAt: ISO string }.
 ```
 
 Legacy migrations exist in `server.js` for older `data/settings.json` and single-file climbs. Do not remove migration code unless all production data has been verified and backed up.
@@ -302,6 +312,17 @@ GET/POST/DELETE /api/shared-lists/:id
 GET             /api/shared-lists/:id/events?t=<token>
 GET             /api/users/lookup?username=<name>
 ```
+
+Lights:
+
+```text
+GET  /api/lights
+POST /api/lights
+GET  /api/lights/device
+POST /api/lights/device/status
+```
+
+`GET /api/lights` is public and returns `{ on, updatedAt }`. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`. Device routes require `Authorization: Bearer <LIGHTS_DEVICE_SECRET>` and are intended for ESP8266 polling/status; do not commit the secret.
 
 External/proxy/parser endpoints:
 
@@ -358,6 +379,13 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 
 - Requires auth and connects to `/terminal/ws`.
 - Server additionally restricts access to username `yannick`.
+
+`lights`:
+
+- Public static app at `/lights/`.
+- Does not load `auth.js`, because the page must remain publicly viewable without showing the login modal.
+- Reads `/api/lights` for state and enables toggling only when localStorage contains username `yannick`; the server enforces the same rule on `POST /api/lights`.
+- ESP8266 relay integration should poll `/api/lights/device` every 1-3 seconds with `LIGHTS_DEVICE_SECRET`, apply the returned desired `on` value, and keep last known relay state if the website is temporarily unreachable.
 
 ## Coding Standards
 

@@ -16,15 +16,25 @@ const MEETS_DIR    = path.join(DATA, 'meets');
 const CLIMBV2_DIR  = path.join(DATA, 'climb-tracker');
 const QUIZZES_DIR       = path.join(DATA, 'quizzes');
 const SHARED_LISTS_DIR  = path.join(DATA, 'shared-lists');
+const LIGHTS_DIR        = path.join(DATA, 'lights');
 const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
+const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
+const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
-for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR])
+for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR])
   fs.mkdirSync(dir, { recursive: true });
 
 if (!fs.existsSync(USERS_FILE))    fs.writeFileSync(USERS_FILE,    '[]');
 if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '[]');
+if (!fs.existsSync(LIGHTS_STATE_FILE)) {
+  fs.writeFileSync(LIGHTS_STATE_FILE, JSON.stringify({
+    on: false,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'device',
+  }, null, 2));
+}
 
 // ── Migrate settings.json → per-user-per-app files ───────────────────────────
 (function migrateSettings() {
@@ -56,6 +66,42 @@ function atomicWrite(filePath, data) {
   const tmp = filePath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
   fs.renameSync(tmp, filePath);
+}
+
+function readLightsState() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LIGHTS_STATE_FILE, 'utf8'));
+    return {
+      on: raw.on === true,
+      updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
+      updatedBy: typeof raw.updatedBy === 'string' ? raw.updatedBy : 'device',
+    };
+  } catch {
+    return { on: false, updatedAt: new Date(0).toISOString(), updatedBy: 'device' };
+  }
+}
+
+function writeLightsState(on, updatedBy) {
+  const state = {
+    on: on === true,
+    updatedAt: new Date().toISOString(),
+    updatedBy: updatedBy || 'device',
+  };
+  atomicWrite(LIGHTS_STATE_FILE, state);
+  return state;
+}
+
+function writeLightsDeviceStatus(status) {
+  atomicWrite(LIGHTS_DEVICE_STATUS_FILE, status);
+}
+
+function hasLightsDeviceAuth(req) {
+  const expected = process.env.LIGHTS_DEVICE_SECRET || '';
+  const token = getToken(req) || '';
+  if (!expected || !token) return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // ── Input validation ──────────────────────────────────────────────────────────
@@ -559,6 +605,50 @@ function parsePbestPDF(buf) {
 
 // ── API router ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res, urlPath) {
+
+  // GET /api/lights - public desired light state
+  if (req.method === 'GET' && urlPath === '/api/lights') {
+    const { on, updatedAt } = readLightsState();
+    return jsonRes(res, 200, { on, updatedAt });
+  }
+
+  // POST /api/lights - only yannick can change the desired light state
+  if (req.method === 'POST' && urlPath === '/api/lights') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const body = await parseBody(req);
+    if (!body || typeof body.on !== 'boolean') {
+      return jsonRes(res, 400, { error: 'on must be boolean' });
+    }
+
+    const { on, updatedAt } = writeLightsState(body.on, user.username);
+    return jsonRes(res, 200, { on, updatedAt });
+  }
+
+  // GET /api/lights/device - ESP8266 polling endpoint for desired state
+  if (req.method === 'GET' && urlPath === '/api/lights/device') {
+    if (!hasLightsDeviceAuth(req)) return jsonRes(res, 401, { error: 'Unauthorized' });
+    const { on, updatedAt } = readLightsState();
+    return jsonRes(res, 200, { on, updatedAt });
+  }
+
+  // POST /api/lights/device/status - optional relay heartbeat/status
+  if (req.method === 'POST' && urlPath === '/api/lights/device/status') {
+    if (!hasLightsDeviceAuth(req)) return jsonRes(res, 401, { error: 'Unauthorized' });
+    const body = await parseBody(req);
+    if (!body || typeof body.on !== 'boolean') {
+      return jsonRes(res, 400, { error: 'on must be boolean' });
+    }
+
+    const status = {
+      on: body.on,
+      receivedAt: new Date().toISOString(),
+    };
+    writeLightsDeviceStatus(status);
+    return jsonRes(res, 200, { ok: true });
+  }
 
   // POST /api/auth/register
   if (req.method === 'POST' && urlPath === '/api/auth/register') {

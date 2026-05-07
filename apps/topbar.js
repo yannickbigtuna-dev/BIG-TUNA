@@ -14,6 +14,7 @@ const Topbar = (() => {
     { name: 'Lists',            href: '/list-maker/',         icon: '📋' },
     { name: 'World Map',        href: '/world-map/',          icon: '🌍' },
     { name: 'Pace Calculator',  href: '/pace-calculator/',    icon: '🏃' },
+    { name: 'Lights',           href: '/lights/',             icon: '💡' },
     { name: 'Terminal',         href: '/terminal/',           icon: '🖥' },
   ];
 

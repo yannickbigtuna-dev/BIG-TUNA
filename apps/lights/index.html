@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Lights</title>
+<style>
+  * { box-sizing: border-box; }
+
+  :root {
+    --bg: #111316;
+    --wall: #20252a;
+    --wall-lit: #efe0ba;
+    --plate: #f3f0e8;
+    --plate-edge: #b9b2a3;
+    --switch: #faf7ee;
+    --switch-shadow: #b5afa3;
+    --text: #f5f5f5;
+    --muted: #8d949b;
+    --accent: #ffd36d;
+  }
+
+  html { min-height: 100%; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 50% 42%, rgba(255, 211, 109, 0.12), transparent 34%),
+      linear-gradient(180deg, #171b20, #08090b);
+    transition: background 360ms ease;
+  }
+
+  body.is-on {
+    background:
+      radial-gradient(circle at 50% 38%, rgba(255, 225, 154, 0.6), transparent 38%),
+      linear-gradient(180deg, var(--wall-lit), #6f5f47);
+    color: #201b14;
+  }
+
+  main {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    padding: 32px 18px 44px;
+  }
+
+  .room {
+    width: min(100%, 520px);
+    display: grid;
+    justify-items: center;
+    gap: 24px;
+  }
+
+  .light-cone {
+    position: fixed;
+    inset: 52px 0 0;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(ellipse at 50% 36%, rgba(255, 226, 156, 0.55), transparent 44%);
+    transition: opacity 360ms ease;
+  }
+
+  body.is-on .light-cone { opacity: 1; }
+
+  .switch-wrap {
+    width: min(74vw, 210px);
+    aspect-ratio: 0.64;
+    display: grid;
+    place-items: center;
+    filter: drop-shadow(0 30px 34px rgba(0, 0, 0, 0.45));
+  }
+
+  .plate {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.95), rgba(211,205,192,0.98)),
+      var(--plate);
+    border: 1px solid var(--plate-edge);
+    box-shadow:
+      inset 2px 2px 2px rgba(255,255,255,0.85),
+      inset -3px -3px 6px rgba(90, 82, 68, 0.22),
+      0 12px 28px rgba(0, 0, 0, 0.36);
+  }
+
+  .plate::before,
+  .plate::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    width: 9px;
+    height: 9px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 35%, #fff, #aba393 58%, #6f685e 100%);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.35);
+  }
+
+  .plate::before { top: 21px; }
+  .plate::after { bottom: 21px; }
+
+  .switch {
+    width: 45%;
+    height: 46%;
+    min-width: 78px;
+    border: 0;
+    padding: 0;
+    position: relative;
+    cursor: pointer;
+    border-radius: 7px;
+    background: transparent;
+    perspective: 600px;
+    touch-action: manipulation;
+  }
+
+  .switch:focus-visible {
+    outline: 3px solid rgba(63, 130, 248, 0.9);
+    outline-offset: 8px;
+  }
+
+  .switch[disabled] {
+    cursor: default;
+  }
+
+  .paddle {
+    position: absolute;
+    inset: 0;
+    border-radius: 7px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.98), rgba(218,213,202,0.98));
+    border: 1px solid #b8b0a0;
+    box-shadow:
+      inset 0 10px 18px rgba(255,255,255,0.72),
+      inset 0 -16px 20px rgba(126, 115, 95, 0.25),
+      0 5px 8px rgba(0,0,0,0.23);
+    transform: rotateX(-13deg);
+    transform-origin: 50% 82%;
+    transition: transform 210ms cubic-bezier(.2,.9,.2,1), box-shadow 210ms ease;
+  }
+
+  .paddle::after {
+    content: "";
+    position: absolute;
+    inset: 50% 8px auto;
+    height: 1px;
+    background: rgba(111, 102, 86, 0.18);
+  }
+
+  body.is-on .paddle {
+    transform: rotateX(13deg);
+    transform-origin: 50% 18%;
+    box-shadow:
+      inset 0 16px 20px rgba(255,255,255,0.72),
+      inset 0 -9px 15px rgba(126, 115, 95, 0.18),
+      0 2px 6px rgba(0,0,0,0.26),
+      0 0 24px rgba(255, 208, 92, 0.38);
+  }
+
+  .status-panel {
+    width: min(100%, 340px);
+    display: grid;
+    gap: 7px;
+    text-align: center;
+    min-height: 62px;
+  }
+
+  .state-label {
+    font-size: 0.86rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .access-label {
+    min-height: 1.25em;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.4;
+  }
+
+  body.is-on .access-label { color: rgba(32, 27, 20, 0.66); }
+
+  .switch[aria-busy="true"] .paddle {
+    transition-duration: 80ms;
+    filter: saturate(0.78);
+  }
+
+  @media (max-width: 520px) {
+    main { padding: 24px 14px 34px; }
+    .switch-wrap { width: min(72vw, 180px); }
+    .room { gap: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="light-cone"></div>
+<main>
+  <section class="room" aria-label="Light switch">
+    <div class="switch-wrap">
+      <div class="plate">
+        <button class="switch" id="switch" type="button" role="switch" aria-checked="false" aria-label="Lights" disabled>
+          <span class="paddle"></span>
+        </button>
+      </div>
+    </div>
+    <div class="status-panel">
+      <div class="state-label" id="state-label">Loading</div>
+      <div class="access-label" id="access-label"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/topbar.js"></script>
+<script>
+  Topbar.setTitle('Lights');
+
+  const TOKEN_KEY = 'auth_token';
+  const USER_KEY = 'auth_user';
+  const switchBtn = document.getElementById('switch');
+  const stateLabel = document.getElementById('state-label');
+  const accessLabel = document.getElementById('access-label');
+
+  let currentOn = false;
+  let canControl = false;
+  let pending = false;
+
+  function getCachedUser() {
+    try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
+    catch { return null; }
+  }
+
+  function getToken() {
+    return localStorage.getItem(TOKEN_KEY) || '';
+  }
+
+  function setVisual(on) {
+    currentOn = on === true;
+    document.body.classList.toggle('is-on', currentOn);
+    switchBtn.setAttribute('aria-checked', String(currentOn));
+    stateLabel.textContent = currentOn ? 'On' : 'Off';
+  }
+
+  function updateAccess() {
+    const user = getCachedUser();
+    canControl = !!user && typeof user.username === 'string' && user.username.toLowerCase() === 'yannick';
+    switchBtn.disabled = !canControl || pending;
+    if (pending) {
+      accessLabel.textContent = 'Saving...';
+    } else if (canControl) {
+      accessLabel.textContent = 'Signed in as yannick';
+    } else {
+      accessLabel.textContent = 'Read only';
+    }
+  }
+
+  async function loadState() {
+    try {
+      const res = await fetch('/api/lights', { cache: 'no-store' });
+      if (!res.ok) throw new Error('load failed');
+      const data = await res.json();
+      setVisual(data.on);
+    } catch {
+      stateLabel.textContent = 'Unavailable';
+    } finally {
+      updateAccess();
+    }
+  }
+
+  async function saveState(on) {
+    if (!canControl || pending) return;
+    const previous = currentOn;
+    pending = true;
+    switchBtn.setAttribute('aria-busy', 'true');
+    setVisual(on);
+    updateAccess();
+
+    try {
+      const res = await fetch('/api/lights', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + getToken(),
+        },
+        body: JSON.stringify({ on }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'save failed');
+      setVisual(data.on);
+    } catch {
+      setVisual(previous);
+      accessLabel.textContent = 'Save failed';
+    } finally {
+      pending = false;
+      switchBtn.setAttribute('aria-busy', 'false');
+      updateAccess();
+    }
+  }
+
+  switchBtn.addEventListener('click', () => saveState(!currentOn));
+  window.addEventListener('storage', updateAccess);
+
+  updateAccess();
+  loadState();
+  setInterval(() => {
+    if (!pending) loadState();
+  }, 5000);
+</script>
+</body>
+</html>
