@@ -236,6 +236,7 @@
   let pending = false;
   let eventsConnected = false;
   let lastUpdatedAt = '';
+  let hasLoadedState = false;
 
   function getCachedUser() {
     try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
@@ -248,6 +249,7 @@
 
   function setVisual(on, updatedAt) {
     if (updatedAt) lastUpdatedAt = updatedAt;
+    hasLoadedState = true;
     currentOn = on === true;
     document.body.classList.toggle('is-on', currentOn);
     switchBtn.setAttribute('aria-checked', String(currentOn));
@@ -276,6 +278,7 @@
         setVisual(data.on, data.updatedAt);
       }
     } catch {
+      if (hasLoadedState || pending) return;
       stateLabel.textContent = 'Unavailable';
     } finally {
       updateAccess();
@@ -332,7 +335,15 @@
     }
   }
 
-  switchBtn.addEventListener('click', () => saveState(!currentOn));
+  function handleSwitchPress(event) {
+    event.preventDefault();
+    saveState(!currentOn);
+  }
+
+  switchBtn.addEventListener('pointerdown', handleSwitchPress);
+  switchBtn.addEventListener('keydown', event => {
+    if (event.key === ' ' || event.key === 'Enter') handleSwitchPress(event);
+  });
   window.addEventListener('storage', updateAccess);
 
   updateAccess();
