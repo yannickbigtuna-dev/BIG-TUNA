@@ -233,6 +233,55 @@
   }
   #dev-btn:hover { color: #555; }
 
+  #minimal-btn {
+    position: fixed;
+    left: 18px;
+    bottom: 14px;
+    min-width: 42px;
+    height: 32px;
+    padding: 0 10px;
+    display: grid;
+    place-items: center;
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #343434;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.045);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: color 0.18s, background 0.18s, border-color 0.18s;
+    user-select: none;
+  }
+  #minimal-btn:hover,
+  #minimal-btn:focus-visible {
+    color: #58a6ff;
+    background: rgba(88, 166, 255, 0.08);
+    border-color: rgba(88, 166, 255, 0.18);
+    outline: none;
+  }
+
+  body.minimal-mode {
+    justify-content: center;
+    padding: clamp(16px, 5vh, 40px) 20px;
+  }
+  body.minimal-mode [data-auth-widget],
+  body.minimal-mode #temp-widget,
+  body.minimal-mode .grid,
+  body.minimal-mode #dev-btn {
+    display: none !important;
+  }
+  body.minimal-mode .logo {
+    font-size: clamp(4rem, 16vw, 9rem);
+    margin-bottom: 10px;
+  }
+  body.minimal-mode .date-display {
+    margin-bottom: clamp(20px, 5vh, 42px);
+  }
+  body.minimal-mode .clock-digital {
+    margin-bottom: 0;
+  }
+
   #lights-btn {
     position: fixed;
     right: 20px;
@@ -348,9 +397,26 @@
       bottom: calc(env(safe-area-inset-bottom, 0px) + 21px);
     }
 
+    #minimal-btn {
+      left: 16px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 17px);
+      height: 30px;
+      padding: 0 9px;
+      font-size: 9px;
+    }
+
     #lights-btn {
       right: 16px;
       bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    }
+
+    body.minimal-mode {
+      justify-content: center;
+      padding: calc(env(safe-area-inset-top, 0px) + 24px) 14px calc(env(safe-area-inset-bottom, 0px) + 52px);
+    }
+
+    body.minimal-mode .logo {
+      font-size: clamp(3rem, 18vw, 4.4rem);
     }
   }
 </style>
@@ -414,6 +480,21 @@
 </div>
 
 <script>
+  const MINIMAL_MODE_KEY = 'home_minimal_mode';
+
+  function setMinimalMode(enabled) {
+    document.body.classList.toggle('minimal-mode', enabled);
+    localStorage.setItem(MINIMAL_MODE_KEY, enabled ? '1' : '0');
+    const btn = document.getElementById('minimal-btn');
+    if (btn) {
+      btn.textContent = enabled ? 'Exit' : 'Min';
+      btn.setAttribute('aria-label', enabled ? 'Exit minimal mode' : 'Enter minimal mode');
+      btn.setAttribute('aria-pressed', String(enabled));
+    }
+  }
+
+  setMinimalMode(localStorage.getItem(MINIMAL_MODE_KEY) === '1');
+
   // Date display
   const now = new Date();
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -477,6 +558,7 @@
   }
 </script>
 
+<button id="minimal-btn" type="button" aria-label="Enter minimal mode" aria-pressed="false">Min</button>
 <a href="/lights/" id="lights-btn" aria-label="Lights">
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M9 21h6v-1.5H9V21Zm3-20C8.14 1 5 4.08 5 7.86c0 2.24 1.11 4.23 2.82 5.49.72.53 1.18 1.35 1.18 2.24V17h6v-1.41c0-.89.46-1.71 1.18-2.24A6.78 6.78 0 0 0 19 7.86C19 4.08 15.86 1 12 1Zm2.99 10.74A4.75 4.75 0 0 0 13 15.5h-2a4.75 4.75 0 0 0-1.99-3.76A4.77 4.77 0 0 1 7 7.86C7 5.18 9.24 3 12 3s5 2.18 5 4.86c0 1.54-.74 2.99-2.01 3.88Z"/>
@@ -485,5 +567,12 @@
 <a href="/terminal/" id="dev-btn">&gt;_ dev</a>
 
 <script src="/auth.js"></script>
+<script>
+  const minimalBtn = document.getElementById('minimal-btn');
+  setMinimalMode(document.body.classList.contains('minimal-mode'));
+  minimalBtn.addEventListener('click', () => {
+    setMinimalMode(!document.body.classList.contains('minimal-mode'));
+  });
+</script>
 </body>
 </html>

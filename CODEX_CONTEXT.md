@@ -205,6 +205,7 @@ Homepage:
 
 - File: `apps/index.html`
 - Custom launcher page with clock, weather/temperature widget, and app cards.
+- Has a persisted minimal mode toggled by the bottom-left button; minimal mode hides homepage chrome and app cards, leaving BIG TUNA, date, clock, lights link, and the exit button.
 - Adding an app may require updating both homepage cards and `topbar.js`, even though the static server can auto-index folders.
 
 Current app folders:
