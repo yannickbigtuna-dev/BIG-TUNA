@@ -21,6 +21,7 @@ const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
 const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
+const LIGHTS_DEVICE_POLL_MS = 250;
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
 for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR])
@@ -88,6 +89,7 @@ function writeLightsState(on, updatedBy) {
     updatedBy: updatedBy || 'device',
   };
   atomicWrite(LIGHTS_STATE_FILE, state);
+  broadcastLightsState(state);
   return state;
 }
 
@@ -290,6 +292,7 @@ function writeSharedList(id, listData) {
 
 // SSE client registry: listId -> Set of { res, userId }
 const sseClients  = new Map();
+const lightsSseClients = new Set();
 const termSessions = new Map(); // sessionId -> { ws, shell, userId }
 
 function broadcastSharedList(listId, list) {
@@ -298,6 +301,18 @@ function broadcastSharedList(listId, list) {
   const msg = `data: ${JSON.stringify(list)}\n\n`;
   for (const client of [...clients]) {
     try { client.res.write(msg); } catch {}
+  }
+}
+
+function sendLightsSse(res, state) {
+  const { on, updatedAt } = state;
+  res.write(`data: ${JSON.stringify({ on, updatedAt })}\n\n`);
+}
+
+function broadcastLightsState(state) {
+  if (!lightsSseClients.size) return;
+  for (const client of [...lightsSseClients]) {
+    try { sendLightsSse(client.res, state); } catch {}
   }
 }
 
@@ -606,10 +621,37 @@ function parsePbestPDF(buf) {
 // ── API router ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res, urlPath) {
 
+  // GET /api/lights/events - public live desired light state stream
+  if (req.method === 'GET' && urlPath === '/api/lights/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    const client = { res };
+    lightsSseClients.add(client);
+    sendLightsSse(res, readLightsState());
+
+    const ping = setInterval(() => {
+      try { res.write(':\n\n'); } catch { clearInterval(ping); }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(ping);
+      lightsSseClients.delete(client);
+    });
+    return;
+  }
+
   // GET /api/lights - public desired light state
   if (req.method === 'GET' && urlPath === '/api/lights') {
     const { on, updatedAt } = readLightsState();
-    return jsonRes(res, 200, { on, updatedAt });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    });
+    return res.end(JSON.stringify({ on, updatedAt }));
   }
 
   // POST /api/lights - only yannick can change the desired light state
@@ -631,7 +673,11 @@ async function handleAPI(req, res, urlPath) {
   if (req.method === 'GET' && urlPath === '/api/lights/device') {
     if (!hasLightsDeviceAuth(req)) return jsonRes(res, 401, { error: 'Unauthorized' });
     const { on, updatedAt } = readLightsState();
-    return jsonRes(res, 200, { on, updatedAt });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    });
+    return res.end(JSON.stringify({ on, updatedAt, pollAfterMs: LIGHTS_DEVICE_POLL_MS }));
   }
 
   // POST /api/lights/device/status - optional relay heartbeat/status

@@ -234,6 +234,8 @@
   let currentOn = false;
   let canControl = false;
   let pending = false;
+  let eventsConnected = false;
+  let lastUpdatedAt = '';
 
   function getCachedUser() {
     try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
@@ -244,7 +246,8 @@
     return localStorage.getItem(TOKEN_KEY) || '';
   }
 
-  function setVisual(on) {
+  function setVisual(on, updatedAt) {
+    if (updatedAt) lastUpdatedAt = updatedAt;
     currentOn = on === true;
     document.body.classList.toggle('is-on', currentOn);
     switchBtn.setAttribute('aria-checked', String(currentOn));
@@ -269,12 +272,34 @@
       const res = await fetch('/api/lights', { cache: 'no-store' });
       if (!res.ok) throw new Error('load failed');
       const data = await res.json();
-      setVisual(data.on);
+      if (!lastUpdatedAt || !data.updatedAt || data.updatedAt >= lastUpdatedAt) {
+        setVisual(data.on, data.updatedAt);
+      }
     } catch {
       stateLabel.textContent = 'Unavailable';
     } finally {
       updateAccess();
     }
+  }
+
+  function connectEvents() {
+    if (!window.EventSource) return false;
+
+    const events = new EventSource('/api/lights/events');
+    events.onopen = () => {
+      eventsConnected = true;
+    };
+    events.onmessage = event => {
+      try {
+        const data = JSON.parse(event.data);
+        setVisual(data.on, data.updatedAt);
+        updateAccess();
+      } catch {}
+    };
+    events.onerror = () => {
+      eventsConnected = false;
+    };
+    return true;
   }
 
   async function saveState(on) {
@@ -296,7 +321,7 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'save failed');
-      setVisual(data.on);
+      setVisual(data.on, data.updatedAt);
     } catch {
       setVisual(previous);
       accessLabel.textContent = 'Save failed';
@@ -312,9 +337,10 @@
 
   updateAccess();
   loadState();
+  connectEvents();
   setInterval(() => {
-    if (!pending) loadState();
-  }, 5000);
+    if (!pending && !eventsConnected) loadState();
+  }, 1000);
 </script>
 </body>
 </html>
