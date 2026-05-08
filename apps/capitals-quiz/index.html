@@ -955,10 +955,16 @@ function renderGame(app) {
 
   const input = document.getElementById('capital-input');
 
-  // Enter key submits — stopPropagation prevents the event reaching any other element
+  // Keyboard shortcuts while typing; stopPropagation prevents duplicate handling.
   input.addEventListener('keydown', e => {
     e.stopPropagation();
-    if (e.key === 'Enter') {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      revealLetter();
+    } else if (e.key === '\\' || e.code === 'Backslash') {
+      e.preventDefault();
+      skipQuestion();
+    } else if (e.key === 'Enter') {
       e.preventDefault();
       const val = input.value.trim();
       if (val) submitAnswer(val);
