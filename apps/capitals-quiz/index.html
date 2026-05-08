@@ -126,6 +126,13 @@
   }
   .outline-wrap svg { max-width: 100%; max-height: 100%; display: block; }
   .outline-placeholder { color: #1e1e1e; font-size: 2.2rem; }
+  .capital-dot {
+    fill: #ff2d2d;
+    stroke: #fff;
+    stroke-width: 1.4;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.85));
+  }
 
   /* Wrong answer reveal */
   .country-display.wrong-state {
@@ -227,10 +234,20 @@
   }
 
   .bottom-actions {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
   }
-  .score-inline { font-size: 0.78rem; color: #444; font-variant-numeric: tabular-nums; }
+  .score-inline { font-size: 0.78rem; color: #444; font-variant-numeric: tabular-nums; margin-right: auto; }
   .score-inline strong { color: #4caf50; font-weight: 800; }
+  .training-grid { display: flex; flex-direction: column; gap: 10px; }
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 12px 14px; border: 1px solid #202020; border-radius: 10px; background: #0f0f0f;
+    cursor: pointer;
+  }
+  .toggle-copy { flex: 1; min-width: 0; }
+  .toggle-title { font-size: 0.9rem; color: #ddd; font-weight: 800; }
+  .toggle-sub { margin-top: 3px; font-size: 0.73rem; color: #555; line-height: 1.25; }
+  .toggle-row input { width: 18px; height: 18px; accent-color: #eee; flex-shrink: 0; }
 
   /* Screen (settings/results/highscores) */
   .screen {
@@ -568,6 +585,28 @@ function matchCapital(input, countryId) {
 // ─────────────────────────────────────────────────────────────────────────────
 const REGION_OPTS = ['All', 'Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
 const COUNT_OPTS  = [10, 20, 30, 'All'];
+const DIFFICULTY_OPTS = [
+  { key: 'easy', label: 'Easy', limit: 50 },
+  { key: 'medium', label: 'Medium', limit: 100 },
+  { key: 'hard', label: 'Hard', limit: Infinity },
+];
+const CAPITAL_DIFFICULTY_ORDER = [
+  '124','840','826','250','276','380','724','620','528','056',
+  '756','040','208','578','752','246','352','372','643','804',
+  '616','300','792','818','156','392','410','356','586','050',
+  '360','608','764','704','036','554','484','076','032','152',
+  '604','170','192','388','682','376','368','364','760','784',
+  '634','408','012','504','788','710','566','404','231','288',
+  '686','120','180','716','450','646','834','800','024','508',
+  '894','729','434','466','384','562','854','148','706','516',
+  '072','454','694','430','204','768','266','232','188','591',
+  '320','340','222','558','214','332','044','052','780','858',
+];
+const CAPITAL_COORD_OVERRIDES = {
+  '308': [12.0564, -61.7486],
+  '446': [22.1987, 113.5439],
+  '732': [27.1536, -13.2033],
+};
 const TIME_OPTS   = [
   { label: '5 min',    val: 300 },
   { label: '10 min',   val: 600 },
@@ -578,12 +617,13 @@ const TIME_OPTS   = [
 
 const state = {
   view: 'home',
-  settings: { region: 'All', count: 'All', timeLimit: 0 },
+  settings: { region: 'All', count: 'All', timeLimit: 0, difficulty: 'hard', showCapitalDot: false, revealLetters: false },
   // game
   questions: [],
   currentIdx: 0,
   correctIds: new Set(),
   missedIds: [],
+  revealedLetters: 0,
   timer: null,
   timeLeft: 0,
   gameStartTime: 0,
@@ -593,6 +633,7 @@ const state = {
   // persistence
   highscores: { All: [], Africa: [], Americas: [], Asia: [], Europe: [], Oceania: [] },
   worldData: null,
+  capitalCoordCache: {},
   vvCleanup: null,
 };
 
@@ -720,6 +761,9 @@ function renderHome(app) {
   const regionBtns = REGION_OPTS.map(r => `
     <button class="opt-btn${state.settings.region === r ? ' on' : ''}" data-region="${r}">${r}</button>
   `).join('');
+  const difficultyBtns = DIFFICULTY_OPTS.map(d => `
+    <button class="opt-btn${state.settings.difficulty === d.key ? ' on' : ''}" data-difficulty="${d.key}">${d.label}</button>
+  `).join('');
 
   app.innerHTML = `
     <div class="home">
@@ -733,6 +777,10 @@ function renderHome(app) {
           <div class="card-label">Region</div>
           <div class="opt-grid-6">${regionBtns}</div>
         </div>
+        <div class="card" style="padding:16px">
+          <div class="card-label">Difficulty</div>
+          <div class="opt-grid">${difficultyBtns}</div>
+        </div>
         <button class="btn btn-primary btn-full" id="btn-start">Start Game</button>
         <button class="btn btn-secondary btn-full" id="btn-settings">Settings</button>
         <button class="btn btn-secondary btn-full" id="btn-hs">Highscores</button>
@@ -742,6 +790,13 @@ function renderHome(app) {
   document.querySelectorAll('[data-region]').forEach(btn => {
     btn.onclick = () => {
       state.settings.region = btn.dataset.region;
+      saveSettings();
+      renderHome(app);
+    };
+  });
+  document.querySelectorAll('[data-difficulty]').forEach(btn => {
+    btn.onclick = () => {
+      state.settings.difficulty = btn.dataset.difficulty;
       saveSettings();
       renderHome(app);
     };
@@ -773,6 +828,25 @@ function renderSettings(app) {
         <div class="card-label">Time Limit</div>
         <div class="opt-grid">${timeBtns}</div>
       </div>
+      <div class="card">
+        <div class="card-label">Training Options</div>
+        <div class="training-grid">
+          <label class="toggle-row">
+            <span class="toggle-copy">
+              <span class="toggle-title">Capital location dot</span>
+              <span class="toggle-sub">Show a red dot on the country outline where the capital city is.</span>
+            </span>
+            <input type="checkbox" id="setting-capital-dot" ${state.settings.showCapitalDot ? 'checked' : ''}>
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-copy">
+              <span class="toggle-title">Reveal letter button</span>
+              <span class="toggle-sub">Add a hint button that fills in the capital one letter at a time.</span>
+            </span>
+            <input type="checkbox" id="setting-reveal-letters" ${state.settings.revealLetters ? 'checked' : ''}>
+          </label>
+        </div>
+      </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btn-save">Save</button>
         <button class="btn btn-secondary" id="btn-back">Back</button>
@@ -792,6 +866,12 @@ function renderSettings(app) {
       document.querySelectorAll('[data-time]').forEach(b => b.classList.toggle('on', b === btn));
     };
   });
+  document.getElementById('setting-capital-dot').onchange = e => {
+    state.settings.showCapitalDot = e.target.checked;
+  };
+  document.getElementById('setting-reveal-letters').onchange = e => {
+    state.settings.revealLetters = e.target.checked;
+  };
   document.getElementById('btn-save').onclick = () => { saveSettings(); state.view = 'home'; render(); };
   document.getElementById('btn-back').onclick = () => { state.view = 'home'; render(); };
 }
@@ -801,7 +881,11 @@ function renderSettings(app) {
 // ─────────────────────────────────────────────────────────────────────────────
 function buildQuestions() {
   const region = state.settings.region;
-  let pool = Object.keys(CAPITALS).filter(id =>
+  const difficulty = DIFFICULTY_OPTS.find(d => d.key === state.settings.difficulty) || DIFFICULTY_OPTS[2];
+  const rankedPool = difficulty.limit === Infinity
+    ? Object.keys(CAPITALS)
+    : CAPITAL_DIFFICULTY_ORDER.slice(0, difficulty.limit).filter(id => CAPITALS[id]);
+  let pool = rankedPool.filter(id =>
     region === 'All' || CAPITALS[id].region === region
   );
   shuffle(pool);
@@ -851,6 +935,7 @@ function renderGame(app) {
         </div>
         <div class="bottom-actions">
           <span class="score-inline" id="score-inline">0 / 0 correct</span>
+          ${state.settings.revealLetters ? '<button type="button" class="btn btn-secondary btn-sm" id="btn-reveal" tabindex="-1">Reveal Letter</button>' : ''}
           <button type="button" class="btn btn-danger btn-sm" id="btn-skip" tabindex="-1">Skip</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-giveup" tabindex="-1">Give Up</button>
         </div>
@@ -886,6 +971,12 @@ function renderGame(app) {
   // If focus ever lands on skip (e.g. via browser quirk), immediately redirect it
   skipBtn.addEventListener('focus', () => focusWithoutScroll(input));
 
+  const revealBtn = document.getElementById('btn-reveal');
+  if (revealBtn) {
+    revealBtn.addEventListener('pointerdown', e => { e.preventDefault(); revealLetter(); });
+    revealBtn.addEventListener('focus', () => focusWithoutScroll(input));
+  }
+
   document.getElementById('btn-giveup').addEventListener('pointerdown', e => { e.preventDefault(); endGame(); });
 
   state.vvCleanup = installKeyboardViewportFix(input);
@@ -916,12 +1007,15 @@ function showQuestion() {
 
   const qEl = document.getElementById('stat-q');
   if (qEl) qEl.textContent = `${Math.min(idx + 1, total)} / ${total}`;
+  const revealBtn = document.getElementById('btn-reveal');
+  if (revealBtn) revealBtn.disabled = false;
 
   if (idx >= total) { endGame(); return; }
 
   const countryId = state.questions[idx];
   const data = CAPITALS[countryId];
   const flagSrc = `https://flagcdn.com/w160/${data.a2.toLowerCase()}.png`;
+  state.revealedLetters = 0;
 
   const display = document.getElementById('country-display');
   if (!display) return;
@@ -935,6 +1029,21 @@ function showQuestion() {
 
   updateScoreInline();
   renderOutline('outline-wrap', countryId);
+}
+
+function revealLetter() {
+  if (state.advancing) return;
+  const countryId = state.questions[state.currentIdx];
+  const input = document.getElementById('capital-input');
+  const btn = document.getElementById('btn-reveal');
+  if (!input || !CAPITALS[countryId]) return;
+
+  const capital = CAPITALS[countryId].capital;
+  state.revealedLetters = Math.min(capital.length, state.revealedLetters + 1);
+  input.value = capital.slice(0, state.revealedLetters);
+  input.setSelectionRange(input.value.length, input.value.length);
+  if (btn) btn.disabled = state.revealedLetters >= capital.length;
+  focusWithoutScroll(input);
 }
 
 function getCountryName(id) {
@@ -1071,6 +1180,7 @@ function endGame() {
     date: new Date().toLocaleDateString(),
     timestamp: Date.now(),
     region: state.settings.region,
+    difficulty: state.settings.difficulty,
   };
   state.lastScore = score;
 
@@ -1124,6 +1234,38 @@ async function renderOutline(wrapperId, countryId) {
     .attr('stroke', '#666')
     .attr('stroke-width', 1.2)
     .attr('d', pathGen);
+
+  if (state.settings.showCapitalDot) {
+    const coords = await getCapitalCoords(countryId);
+    if (coords) {
+      const xy = projection([coords[1], coords[0]]);
+      if (xy && Number.isFinite(xy[0]) && Number.isFinite(xy[1])) {
+        svg.append('circle')
+          .attr('class', 'capital-dot')
+          .attr('cx', xy[0])
+          .attr('cy', xy[1])
+          .attr('r', Math.max(4, Math.min(7, Math.min(W, H) * 0.035)));
+      }
+    }
+  }
+}
+
+async function getCapitalCoords(countryId) {
+  if (CAPITAL_COORD_OVERRIDES[countryId]) return CAPITAL_COORD_OVERRIDES[countryId];
+  if (state.capitalCoordCache[countryId] !== undefined) return state.capitalCoordCache[countryId];
+
+  const data = CAPITALS[countryId];
+  if (!data) return null;
+
+  try {
+    const r = await fetch(`https://restcountries.com/v3.1/alpha/${data.a2}?fields=capitalInfo`);
+    const body = await r.json();
+    const latlng = body && body.capitalInfo && body.capitalInfo.latlng;
+    state.capitalCoordCache[countryId] = Array.isArray(latlng) && latlng.length === 2 ? latlng : null;
+  } catch {
+    state.capitalCoordCache[countryId] = null;
+  }
+  return state.capitalCoordCache[countryId];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1276,6 +1418,9 @@ function applySettings(data) {
   if (!data) return;
   if (data.settings)   state.settings   = { ...state.settings,   ...data.settings };
   if (data.highscores) state.highscores  = { ...state.highscores, ...data.highscores };
+  if (!DIFFICULTY_OPTS.some(d => d.key === state.settings.difficulty)) state.settings.difficulty = 'hard';
+  state.settings.showCapitalDot = !!state.settings.showCapitalDot;
+  state.settings.revealLetters = !!state.settings.revealLetters;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
