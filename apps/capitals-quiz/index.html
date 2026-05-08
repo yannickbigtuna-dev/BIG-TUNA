@@ -1211,6 +1211,7 @@ async function renderOutline(wrapperId, countryId) {
   const countries = topojson.feature(state.worldData, state.worldData.objects.countries);
   const feature = countries.features.find(f => String(f.id).padStart(3, '0') === countryId);
   if (!feature) return;
+  const outlineFeature = mainPolygonFeature(feature);
 
   const W = wrapper.clientWidth  || 280;
   const H = wrapper.clientHeight || 150;
@@ -1219,7 +1220,7 @@ async function renderOutline(wrapperId, countryId) {
 
   const projection = d3.geoMercator();
   try {
-    projection.fitExtent([[8, 8], [W - 8, H - 8]], feature);
+    projection.fitExtent([[8, 8], [W - 8, H - 8]], outlineFeature);
   } catch { return; }
 
   const pathGen = d3.geoPath().projection(projection);
@@ -1229,7 +1230,7 @@ async function renderOutline(wrapperId, countryId) {
     .style('display', 'block');
 
   svg.append('path')
-    .datum(feature)
+    .datum(outlineFeature)
     .attr('fill', '#252525')
     .attr('stroke', '#666')
     .attr('stroke-width', 1.2)
@@ -1248,6 +1249,33 @@ async function renderOutline(wrapperId, countryId) {
       }
     }
   }
+}
+
+function mainPolygonFeature(feature) {
+  if (!feature || !feature.geometry || feature.geometry.type !== 'MultiPolygon') return feature;
+
+  let largest = null;
+  let largestArea = -Infinity;
+  for (const polygon of feature.geometry.coordinates) {
+    const polygonFeature = {
+      type: 'Feature',
+      properties: feature.properties || {},
+      geometry: { type: 'Polygon', coordinates: polygon },
+    };
+    const area = d3.geoArea(polygonFeature);
+    if (area > largestArea) {
+      largest = polygon;
+      largestArea = area;
+    }
+  }
+
+  if (!largest) return feature;
+  return {
+    type: 'Feature',
+    id: feature.id,
+    properties: feature.properties || {},
+    geometry: { type: 'Polygon', coordinates: largest },
+  };
 }
 
 async function getCapitalCoords(countryId) {

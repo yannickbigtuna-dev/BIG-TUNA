@@ -371,7 +371,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Use `Auth.loadSettings(...)` and `Auth.autoSync(...)`.
 - Keep localStorage fallback data under app-specific keys.
 - Manipulate the topbar title and left slot for navigation.
-- `capitals-quiz` settings include region, question count, time limit, difficulty (`easy` 50-capital pool, `medium` 100-capital pool, `hard` all capitals), and training toggles for capital-location dots and reveal-letter hints. The capital dot overlay uses the existing D3/topojson outline projection and fetches capital coordinates from REST Countries with a few local overrides.
+- `capitals-quiz` settings include region, question count, time limit, difficulty (`easy` 50-capital pool, `medium` 100-capital pool, `hard` all capitals), and training toggles for capital-location dots and reveal-letter hints. The outline renderer draws only the largest polygon for multipolygon countries so detached colonies/islands do not dominate the prompt. The capital dot overlay uses the existing D3/topojson outline projection and fetches capital coordinates from REST Countries with a few local overrides.
 
 `pace-calculator`:
 
