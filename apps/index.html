@@ -506,24 +506,40 @@
   // Track last displayed value per slot
   const slotState = {};
 
+  function pruneSlot(slot, keep) {
+    slot.querySelectorAll('.digit-val').forEach(el => {
+      if (el !== keep) el.remove();
+    });
+  }
+
   function setSlot(id, char) {
     const slot = document.getElementById(id);
-    if (slotState[id] === char) return; // no change, skip
-    slotState[id] = char;
+    const existing = Array.from(slot.querySelectorAll('.digit-val'));
+    const current = existing[existing.length - 1] || null;
 
-    // Remove any currently-arriving element instantly
-    const old = slot.querySelector('.digit-val');
-    if (old) {
-      old.classList.add('leaving');
-      // clean up after animation
-      old.addEventListener('animationend', () => old.remove(), { once: true });
+    if (slotState[id] === char) {
+      pruneSlot(slot, current);
+      if (current) current.classList.remove('leaving', 'arriving');
+      return; // no change, skip
+    }
+
+    slotState[id] = char;
+    pruneSlot(slot, current);
+
+    if (current) {
+      current.classList.remove('arriving');
+      current.classList.add('leaving');
+      current.addEventListener('animationend', () => current.remove(), { once: true });
     }
 
     const next = document.createElement('div');
     next.className = 'digit-val arriving';
     next.textContent = char;
     slot.appendChild(next);
-    next.addEventListener('animationend', () => next.classList.remove('arriving'), { once: true });
+    next.addEventListener('animationend', () => {
+      next.classList.remove('arriving');
+      pruneSlot(slot, next);
+    }, { once: true });
   }
 
   function tickClock() {
