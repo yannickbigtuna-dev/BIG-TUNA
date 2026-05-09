@@ -1,8 +1,7 @@
-# ESP8266 Lights Firmware Prompt
+ESP8266 LIGHTS FIRMWARE PROMPT
 
 Use this prompt to generate Arduino IDE firmware for an ESP8266 NodeMCU that follows the BIG TUNA Lights app's desired on/off state.
 
-```text
 Write Arduino IDE firmware for an ESP8266 NodeMCU that controls one relay from the BIG TUNA Lights website.
 
 Hardware:
@@ -45,13 +44,12 @@ Implementation requirements:
 - Reconnect Wi-Fi automatically if disconnected.
 - On boot, leave the relay in a known safe initial state, then poll the website as soon as Wi-Fi is connected.
 - Include the full complete sketch, not fragments.
-```
 
 Expected behavior summary:
 
 - The website stores the desired state.
-- The ESP8266 polls `/api/lights/device` with the device bearer token.
-- The response field `on` is the source of truth.
-- `on: true` means energize the relay according to the configured relay polarity.
-- `on: false` means de-energize the relay according to the configured relay polarity.
+- The ESP8266 polls /api/lights/device with the device bearer token.
+- The response field "on" is the source of truth.
+- on: true means energize the relay according to the configured relay polarity.
+- on: false means de-energize the relay according to the configured relay polarity.
 - If the website is unreachable, the ESP8266 keeps the last state it successfully applied.

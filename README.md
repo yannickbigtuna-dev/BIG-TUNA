@@ -278,7 +278,7 @@ GET               /api/lights/device
 POST              /api/lights/device/status
 ```
 
-The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.md](docs/lights-esp8266-prompt.md).
+The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.txt](docs/lights-esp8266-prompt.txt).
 
 ## MCP Server
 
