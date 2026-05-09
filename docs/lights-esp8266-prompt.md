@@ -1,0 +1,57 @@
+# ESP8266 Lights Firmware Prompt
+
+Use this prompt to generate Arduino IDE firmware for an ESP8266 NodeMCU that follows the BIG TUNA Lights app's desired on/off state.
+
+```text
+Write Arduino IDE firmware for an ESP8266 NodeMCU that controls one relay from the BIG TUNA Lights website.
+
+Hardware:
+- Board: ESP8266 NodeMCU.
+- Relay control pin: D1 by default. Define it as RELAY_PIN and make it easy to change.
+- The relay may be active-low or active-high. Add a RELAY_ACTIVE_LOW constant and write one applyRelay(bool on) function that handles the inversion in one place.
+
+Network configuration:
+- Use ESP8266WiFi.h and ESP8266HTTPClient.h.
+- Define WIFI_SSID, WIFI_PASSWORD, and LIGHTS_DEVICE_SECRET constants at the top as placeholders.
+- Do not hardcode the real secret in shared code.
+- The website base URL is https://yannickmorgans.ca.
+
+Website API:
+- Poll GET https://yannickmorgans.ca/api/lights/device.
+- Send this HTTP header on every device request:
+  Authorization: Bearer <LIGHTS_DEVICE_SECRET>
+- The successful response is JSON with this shape:
+  { "on": true or false, "updatedAt": "ISO timestamp", "pollAfterMs": 250 }
+- The ESP8266 must decide whether the light should be on or off only from the boolean JSON field named "on".
+- If "on" is true, call applyRelay(true). If "on" is false, call applyRelay(false).
+- Respect the returned pollAfterMs value when it is present and reasonable. Clamp it to a safe range such as 250 ms minimum and 10000 ms maximum.
+- If the request fails, keep the last known relay state instead of toggling or defaulting off. Retry after a slower backoff delay, for example 5000 ms.
+
+Device status reporting:
+- After applying a new state, POST to https://yannickmorgans.ca/api/lights/device/status.
+- Use the same Authorization bearer header.
+- Send Content-Type: application/json.
+- Send a JSON body with the relay's actual state:
+  { "on": true }
+  or
+  { "on": false }
+- Status reporting is helpful but must not block relay control. If the status POST fails, continue polling normally.
+
+Implementation requirements:
+- Use WiFiClientSecure for HTTPS and HTTPClient for requests.
+- Parse the small JSON response safely. If using ArduinoJson, include the needed library and show the exact include. If avoiding ArduinoJson, parse only the "on" boolean and pollAfterMs carefully without relying on field order.
+- Print useful Serial logs: Wi-Fi connection, HTTP status codes, desired state changes, parse failures, and retry delays.
+- Keep loop() non-blocking except for short HTTP requests. Use millis() scheduling instead of delay() for the polling interval.
+- Reconnect Wi-Fi automatically if disconnected.
+- On boot, leave the relay in a known safe initial state, then poll the website as soon as Wi-Fi is connected.
+- Include the full complete sketch, not fragments.
+```
+
+Expected behavior summary:
+
+- The website stores the desired state.
+- The ESP8266 polls `/api/lights/device` with the device bearer token.
+- The response field `on` is the source of truth.
+- `on: true` means energize the relay according to the configured relay polarity.
+- `on: false` means de-energize the relay according to the configured relay polarity.
+- If the website is unreachable, the ESP8266 keeps the last state it successfully applied.

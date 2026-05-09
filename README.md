@@ -33,6 +33,7 @@ Current apps include:
 
 - `capitals-quiz`
 - `list-maker`
+- `lights`
 - `pace-calculator`
 - `psych-sheet`
 - `quiz-app`
@@ -271,7 +272,13 @@ GET               /api/users/lookup
 GET               /api/waquatics/search
 GET               /api/waquatics/athlete
 POST              /api/parse-pbest
+GET/POST          /api/lights
+GET               /api/lights/events
+GET               /api/lights/device
+POST              /api/lights/device/status
 ```
+
+The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.md](docs/lights-esp8266-prompt.md).
 
 ## MCP Server
 
