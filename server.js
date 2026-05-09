@@ -23,6 +23,7 @@ const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
 const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
+const LIGHTS_DEVICE_INVERT_OUTPUT = true;
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
 for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR])
@@ -701,11 +702,12 @@ async function handleAPI(req, res, urlPath) {
   if (req.method === 'GET' && urlPath === '/api/lights/device') {
     markLightsDevicePolled();
     const { on, updatedAt } = readLightsState();
+    const deviceOn = LIGHTS_DEVICE_INVERT_OUTPUT ? !on : on;
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
-    return res.end(JSON.stringify({ on, updatedAt, pollAfterMs: LIGHTS_DEVICE_POLL_MS }));
+    return res.end(JSON.stringify({ on: deviceOn, updatedAt, pollAfterMs: LIGHTS_DEVICE_POLL_MS }));
   }
 
   // GET /api/lights/device/status - public ESP8266 polling heartbeat

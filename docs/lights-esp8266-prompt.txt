@@ -20,7 +20,7 @@ Website API:
 - Each GET request also updates the website's device poll timestamp, which the Lights page uses to show whether the device has polled in the last 5 seconds.
 - The successful response is JSON with this shape:
   { "on": true or false, "updatedAt": "ISO timestamp", "pollAfterMs": 250 }
-- The ESP8266 must decide whether the light should be on or off only from the boolean JSON field named "on".
+- The ESP8266 must decide whether the relay output should be on or off only from the boolean JSON field named "on". The website currently applies the relay inversion workaround before returning this value.
 - If "on" is true, call applyRelay(true). If "on" is false, call applyRelay(false).
 - Respect the returned pollAfterMs value when it is present and reasonable. Clamp it to a safe range such as 250 ms minimum and 10000 ms maximum.
 - If the request fails, keep the last known relay state instead of toggling or defaulting off. Retry after a slower backoff delay, for example 5000 ms.
