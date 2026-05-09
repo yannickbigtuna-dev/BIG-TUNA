@@ -275,7 +275,7 @@ POST              /api/parse-pbest
 GET/POST          /api/lights
 GET               /api/lights/events
 GET               /api/lights/device
-POST              /api/lights/device/status
+GET/POST          /api/lights/device/status
 ```
 
 The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.txt](docs/lights-esp8266-prompt.txt).

@@ -22,6 +22,7 @@ const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
 const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
+const LIGHTS_DEVICE_RECENT_MS = 5000;
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
 for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR])
@@ -95,6 +96,42 @@ function writeLightsState(on, updatedBy) {
 
 function writeLightsDeviceStatus(status) {
   atomicWrite(LIGHTS_DEVICE_STATUS_FILE, status);
+}
+
+function readLightsDeviceStatus() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LIGHTS_DEVICE_STATUS_FILE, 'utf8'));
+    return {
+      on: raw.on === true,
+      receivedAt: typeof raw.receivedAt === 'string' ? raw.receivedAt : '',
+      polledAt: typeof raw.polledAt === 'string' ? raw.polledAt : '',
+    };
+  } catch {
+    return { on: false, receivedAt: '', polledAt: '' };
+  }
+}
+
+function markLightsDevicePolled() {
+  const status = readLightsDeviceStatus();
+  const now = Date.now();
+  const lastPoll = Date.parse(status.polledAt) || 0;
+  if (now - lastPoll < 1000) return status;
+
+  const updated = { ...status, polledAt: new Date(now).toISOString() };
+  writeLightsDeviceStatus(updated);
+  return updated;
+}
+
+function getLightsDeviceStatusPayload() {
+  const status = readLightsDeviceStatus();
+  const lastPoll = Date.parse(status.polledAt) || 0;
+  return {
+    on: status.on,
+    receivedAt: status.receivedAt,
+    polledAt: status.polledAt,
+    recentlyPolled: lastPoll > 0 && Date.now() - lastPoll <= LIGHTS_DEVICE_RECENT_MS,
+    recentWindowMs: LIGHTS_DEVICE_RECENT_MS,
+  };
 }
 
 // ── Input validation ──────────────────────────────────────────────────────────
@@ -662,12 +699,18 @@ async function handleAPI(req, res, urlPath) {
 
   // GET /api/lights/device - ESP8266 polling endpoint for desired state
   if (req.method === 'GET' && urlPath === '/api/lights/device') {
+    markLightsDevicePolled();
     const { on, updatedAt } = readLightsState();
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
     return res.end(JSON.stringify({ on, updatedAt, pollAfterMs: LIGHTS_DEVICE_POLL_MS }));
+  }
+
+  // GET /api/lights/device/status - public ESP8266 polling heartbeat
+  if (req.method === 'GET' && urlPath === '/api/lights/device/status') {
+    return jsonRes(res, 200, getLightsDeviceStatusPayload());
   }
 
   // POST /api/lights/device/status - optional relay heartbeat/status
@@ -678,6 +721,7 @@ async function handleAPI(req, res, urlPath) {
     }
 
     const status = {
+      ...readLightsDeviceStatus(),
       on: body.on,
       receivedAt: new Date().toISOString(),
     };

@@ -260,8 +260,8 @@ data/lights/state.json
   { on: boolean, updatedAt: ISO string, updatedBy: username or "device" }.
 
 data/lights/device-status.json
-  Optional future ESP8266 heartbeat/status written by the device status endpoint:
-  { on: boolean, receivedAt: ISO string }.
+  ESP8266 polling heartbeat/status written by the device endpoints:
+  { on: boolean, receivedAt: ISO string, polledAt: ISO string }.
 ```
 
 Legacy migrations exist in `server.js` for older `data/settings.json` and single-file climbs. Do not remove migration code unless all production data has been verified and backed up.
@@ -321,10 +321,10 @@ GET  /api/lights
 POST /api/lights
 GET  /api/lights/events
 GET  /api/lights/device
-POST /api/lights/device/status
+GET/POST /api/lights/device/status
 ```
 
-`GET /api/lights` is public and returns `{ on, updatedAt }`. `GET /api/lights/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`. Device routes are public and intended for ESP8266 polling/status. `GET /api/lights/device` includes an additive `pollAfterMs` hint, currently `250`, so ESP firmware can poll aggressively without hardcoding the cadence.
+`GET /api/lights` is public and returns `{ on, updatedAt }`. `GET /api/lights/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`. Device routes are public and intended for ESP8266 polling/status. `GET /api/lights/device` records `polledAt` and includes an additive `pollAfterMs` hint, currently `250`, so ESP firmware can poll aggressively without hardcoding the cadence. `GET /api/lights/device/status` returns `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` for the Lights page device-poll indicator.
 
 External/proxy/parser endpoints:
 
@@ -389,6 +389,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Does not load `auth.js`, because the page must remain publicly viewable without showing the login modal.
 - Reads `/api/lights` for state and enables toggling only when localStorage contains username `yannick`; the server enforces the same rule on `POST /api/lights`.
 - Uses `/api/lights/events` SSE for near-instant same-page updates across open browsers, with 1-second `/api/lights` polling only as a fallback.
+- Shows a small device-poll indicator based on whether `/api/lights/device` has been called in the last 5 seconds.
 - ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned desired `on` value, and keep last known relay state if the website is temporarily unreachable.
 
 ## Coding Standards

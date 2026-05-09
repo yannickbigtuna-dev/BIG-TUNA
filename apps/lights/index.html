@@ -191,6 +191,35 @@
 
   body.is-on .access-label { color: rgba(32, 27, 20, 0.66); }
 
+  .poll-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 1.2em;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  .poll-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 50%;
+    background: #697079;
+    box-shadow: 0 0 0 3px rgba(105, 112, 121, 0.18);
+  }
+
+  .poll-label.is-recent { color: #62d48f; }
+  .poll-label.is-recent .poll-dot {
+    background: #62d48f;
+    box-shadow: 0 0 0 3px rgba(98, 212, 143, 0.2);
+  }
+
+  body.is-on .poll-label { color: rgba(32, 27, 20, 0.66); }
+  body.is-on .poll-label.is-recent { color: #1c7a3c; }
+
   .switch[aria-busy="true"] .paddle {
     transition-duration: 80ms;
     filter: saturate(0.78);
@@ -217,6 +246,10 @@
     <div class="status-panel">
       <div class="state-label" id="state-label">Loading</div>
       <div class="access-label" id="access-label"></div>
+      <div class="poll-label" id="poll-label">
+        <span class="poll-dot" aria-hidden="true"></span>
+        <span id="poll-text">No device poll</span>
+      </div>
     </div>
   </section>
 </main>
@@ -230,6 +263,8 @@
   const switchBtn = document.getElementById('switch');
   const stateLabel = document.getElementById('state-label');
   const accessLabel = document.getElementById('access-label');
+  const pollLabel = document.getElementById('poll-label');
+  const pollText = document.getElementById('poll-text');
 
   let currentOn = false;
   let canControl = false;
@@ -282,6 +317,20 @@
       stateLabel.textContent = 'Unavailable';
     } finally {
       updateAccess();
+    }
+  }
+
+  async function loadDeviceStatus() {
+    try {
+      const res = await fetch('/api/lights/device/status', { cache: 'no-store' });
+      if (!res.ok) throw new Error('status failed');
+      const data = await res.json();
+      const recent = data.recentlyPolled === true;
+      pollLabel.classList.toggle('is-recent', recent);
+      pollText.textContent = recent ? 'Polled in last 5s' : 'No poll in last 5s';
+    } catch {
+      pollLabel.classList.remove('is-recent');
+      pollText.textContent = 'Poll status unavailable';
     }
   }
 
@@ -348,10 +397,12 @@
 
   updateAccess();
   loadState();
+  loadDeviceStatus();
   connectEvents();
   setInterval(() => {
     if (!pending && !eventsConnected) loadState();
   }, 1000);
+  setInterval(loadDeviceStatus, 1000);
 </script>
 </body>
 </html>

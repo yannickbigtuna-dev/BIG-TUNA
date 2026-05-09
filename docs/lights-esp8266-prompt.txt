@@ -17,6 +17,7 @@ Network configuration:
 Website API:
 - Poll GET https://yannickmorgans.ca/api/lights/device.
 - No device secret or Authorization header is required.
+- Each GET request also updates the website's device poll timestamp, which the Lights page uses to show whether the device has polled in the last 5 seconds.
 - The successful response is JSON with this shape:
   { "on": true or false, "updatedAt": "ISO timestamp", "pollAfterMs": 250 }
 - The ESP8266 must decide whether the light should be on or off only from the boolean JSON field named "on".
