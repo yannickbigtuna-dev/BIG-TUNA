@@ -11,14 +11,12 @@ Hardware:
 
 Network configuration:
 - Use ESP8266WiFi.h and ESP8266HTTPClient.h.
-- Define WIFI_SSID, WIFI_PASSWORD, and LIGHTS_DEVICE_SECRET constants at the top as placeholders.
-- Do not hardcode the real secret in shared code.
+- Define WIFI_SSID and WIFI_PASSWORD constants at the top as placeholders.
 - The website base URL is https://yannickmorgans.ca.
 
 Website API:
 - Poll GET https://yannickmorgans.ca/api/lights/device.
-- Send this HTTP header on every device request:
-  Authorization: Bearer <LIGHTS_DEVICE_SECRET>
+- No device secret or Authorization header is required.
 - The successful response is JSON with this shape:
   { "on": true or false, "updatedAt": "ISO timestamp", "pollAfterMs": 250 }
 - The ESP8266 must decide whether the light should be on or off only from the boolean JSON field named "on".
@@ -28,7 +26,6 @@ Website API:
 
 Device status reporting:
 - After applying a new state, POST to https://yannickmorgans.ca/api/lights/device/status.
-- Use the same Authorization bearer header.
 - Send Content-Type: application/json.
 - Send a JSON body with the relay's actual state:
   { "on": true }
@@ -48,7 +45,7 @@ Implementation requirements:
 Expected behavior summary:
 
 - The website stores the desired state.
-- The ESP8266 polls /api/lights/device with the device bearer token.
+- The ESP8266 polls /api/lights/device.
 - The response field "on" is the source of truth.
 - on: true means energize the relay according to the configured relay polarity.
 - on: false means de-energize the relay according to the configured relay polarity.

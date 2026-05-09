@@ -97,15 +97,6 @@ function writeLightsDeviceStatus(status) {
   atomicWrite(LIGHTS_DEVICE_STATUS_FILE, status);
 }
 
-function hasLightsDeviceAuth(req) {
-  const expected = process.env.LIGHTS_DEVICE_SECRET || '';
-  const token = getToken(req) || '';
-  if (!expected || !token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
 // ── Input validation ──────────────────────────────────────────────────────────
 // appId comes from URL — validate before using as a filename component
 function isValidId(id) {
@@ -671,7 +662,6 @@ async function handleAPI(req, res, urlPath) {
 
   // GET /api/lights/device - ESP8266 polling endpoint for desired state
   if (req.method === 'GET' && urlPath === '/api/lights/device') {
-    if (!hasLightsDeviceAuth(req)) return jsonRes(res, 401, { error: 'Unauthorized' });
     const { on, updatedAt } = readLightsState();
     res.writeHead(200, {
       'Content-Type': 'application/json',
@@ -682,7 +672,6 @@ async function handleAPI(req, res, urlPath) {
 
   // POST /api/lights/device/status - optional relay heartbeat/status
   if (req.method === 'POST' && urlPath === '/api/lights/device/status') {
-    if (!hasLightsDeviceAuth(req)) return jsonRes(res, 401, { error: 'Unauthorized' });
     const body = await parseBody(req);
     if (!body || typeof body.on !== 'boolean') {
       return jsonRes(res, 400, { error: 'on must be boolean' });
