@@ -5,6 +5,8 @@ echo  ============================================================
 echo    Starting BIG TUNA services
 echo  ============================================================
 echo.
+echo  Includes apps-server, mcp-server, Cloudflare Tunnel, and git reloader.
+echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\SERVER\start-everything.ps1"
 
