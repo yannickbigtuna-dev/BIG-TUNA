@@ -105,6 +105,15 @@ sc stop cloudflared
 sc query cloudflared
 ```
 
+One-click live startup:
+
+```powershell
+.\start-all.bat
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\SERVER\start-everything.ps1
+```
+
+`start-everything.ps1` is the canonical local orchestrator. It starts or restarts PM2 apps `apps-server` and `mcp-server`, saves the PM2 process list, starts `cloudflared.exe` with `cloudflared-config.yml` only when the tunnel process is absent, and starts `auto-update.ps1` hidden when the git reloader is absent. `auto-update.ps1` polls `origin/main` every 10 seconds and pulls newer commits.
+
 There is no build step. Frontend files in `apps/` are served directly. Restart Node after changing `server.js` or `pty-worker.js`.
 
 Current `npm test` is a placeholder that exits with failure, so do not treat it as a useful test suite unless it has been changed.

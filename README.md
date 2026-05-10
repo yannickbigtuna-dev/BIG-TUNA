@@ -11,6 +11,7 @@ The main server is a plain Node.js HTTP server with no web framework. It serves 
 - [Requirements](#requirements)
 - [Local Development](#local-development)
 - [Windows Service Setup](#windows-service-setup)
+- [One-Click Startup](#one-click-startup)
 - [Cloudflare Tunnel](#cloudflare-tunnel)
 - [Adding Apps](#adding-apps)
 - [Shared Frontend Libraries](#shared-frontend-libraries)
@@ -116,14 +117,33 @@ Common entry points:
 .\install-as-service.bat
 ```
 
-The intended long-running setup uses pm2 for the Node server:
+The intended long-running setup uses pm2 for the Node servers:
 
 ```powershell
 pm2 start C:\SERVER\server.js --name apps-server
+pm2 start C:\SERVER\mcp-server\ecosystem.config.cjs
 pm2 save
 ```
 
 If this repository is not located at `C:\SERVER`, update the batch files, pm2 commands, and Cloudflare configuration paths before installing services.
+
+## One-Click Startup
+
+Use `start-all.bat` or the Desktop `BIG-TUNA-Start-Everything.bat` shortcut file to start the production stack in one step. Both call `start-everything.ps1`, which:
+
+- starts or restarts the main `apps-server` PM2 process on port `3000`
+- starts or restarts the `mcp-server` PM2 process on port `3001`
+- saves the PM2 process list
+- starts `cloudflared.exe` with `cloudflared-config.yml` if the tunnel is not already running
+- starts `auto-update.ps1` hidden in the background if the git reloader is not already running
+
+Run it directly if needed:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\SERVER\start-everything.ps1
+```
+
+The git reloader polls `origin/main` every 10 seconds and pulls when GitHub has a newer commit.
 
 ## Cloudflare Tunnel
 
@@ -329,6 +349,12 @@ Cloudflare Tunnel service:
 sc start cloudflared
 sc stop cloudflared
 sc query cloudflared
+```
+
+Everything needed on the live machine:
+
+```powershell
+.\start-all.bat
 ```
 
 ## Notes
