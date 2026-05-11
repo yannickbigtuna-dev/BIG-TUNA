@@ -233,7 +233,7 @@ Desktop app source:
 
 - `desktop/big-tuna-lights/` contains an Electron macOS menu-bar controller for the Lights API.
 - It defaults to `https://yannickmorgans.ca`, logs in through `/api/auth/login`, stores only the returned session token and username in Electron `userData`, and controls `/api/lights` as username `yannick`.
-- Packaging command: `cd desktop/big-tuna-lights && npm install && npm run package:mac`. This must run on macOS so Electron framework symlinks are preserved. The `.github/workflows/build-lights-mac.yml` workflow builds the unsigned zip and commits it to `apps/lights/downloads/big-tuna-lights-mac.zip`.
+- Packaging command: `cd desktop/big-tuna-lights && npm install && npm run package:mac`. This must run on macOS so Electron framework symlinks are preserved. The `.github/workflows/build-lights-mac.yml` workflow builds the unsigned zip and publishes it as the `lights-mac-latest` GitHub Release asset.
 
 ## Data Storage Map
 
@@ -406,7 +406,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Uses `/api/lights/events` SSE for near-instant same-page updates across open browsers, with 1-second `/api/lights` polling only as a fallback.
 - Shows a small device-poll indicator based on whether `/api/lights/device` has been called in the last 5 seconds.
 - ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, and keep last known relay state if the website is temporarily unreachable. The device endpoint currently inverts the stored website state before returning `on` to work around reversed relay behavior.
-- The bottom of the Lights page links to the unsigned macOS desktop controller zip at `/lights/downloads/big-tuna-lights-mac.zip`.
+- The bottom of the Lights page links to the unsigned macOS desktop controller zip at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip`. The app zip is too large for GitHub's normal per-file repository limit, so it is hosted as a release asset rather than committed under `apps/`.
 
 ## Coding Standards
 

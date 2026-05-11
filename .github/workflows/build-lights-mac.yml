@@ -37,14 +37,15 @@ jobs:
         working-directory: desktop/big-tuna-lights
         run: npm run package:mac
 
-      - name: Commit website download zip
+      - name: Publish release download
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/lights/downloads/big-tuna-lights-mac.zip
-          if git diff --cached --quiet; then
-            echo "No zip changes to commit."
+          zip_path="apps/lights/downloads/big-tuna-lights-mac.zip"
+          if gh release view lights-mac-latest >/dev/null 2>&1; then
+            gh release upload lights-mac-latest "$zip_path" --clobber
           else
-            git commit -m "Build Lights macOS app download"
-            git push
+            gh release create lights-mac-latest "$zip_path" \
+              --title "BIG TUNA Lights macOS app" \
+              --notes "Unsigned macOS build of the BIG TUNA Lights desktop controller."
           fi
