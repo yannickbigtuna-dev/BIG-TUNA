@@ -41,15 +41,14 @@ function weatherMeta(code) {
   return map[code] || ['🌤️', 'Partly Cloudy'];
 }
 
-function compass(deg) {
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-}
-
 function windArrowStyle(speed, direction) {
   const size = Math.round(Math.min(112, Math.max(58, 58 + (Number(speed) || 0) * 2.2)));
   const rotation = (((Number(direction) || 0) + 180) % 360).toFixed(0);
   return `--wind-size:${size}px;--wind-rotation:${rotation}deg`;
+}
+
+function heading(deg) {
+  return `${Math.round((((Number(deg) || 0) % 360) + 360) % 360)}°`;
 }
 
 function fmtTemp(value) {
@@ -95,7 +94,7 @@ function render(state) {
   els.high.textContent = `H: ${fmtTemp(hi)}`;
   els.low.textContent = `L: ${fmtTemp(lo)}`;
   els.feels.textContent = fmtTemp(current.apparent_temperature);
-  els.windMeta.innerHTML = `<span class="wind-arrow" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}">➜</span><span>${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}</span>`;
+  els.windMeta.innerHTML = `<span class="wind-compass" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}"><span class="wind-arrow"></span></span><span>${Math.round(current.wind_speed_10m)} km/h · ${heading(current.wind_direction_10m)}</span>`;
   els.precip.textContent = `${(Number(current.precipitation) || 0).toFixed(1)} mm/hr`;
   els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
   els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;

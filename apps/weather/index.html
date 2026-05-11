@@ -241,19 +241,50 @@
     text-align: center;
     z-index: 2;
   }
-  .wind-arrow {
+  .wind-compass {
     width: var(--wind-size, 64px);
     height: var(--wind-size, 64px);
     display: inline-grid;
     place-items: center;
-    color: #77c8ad;
-    font-size: var(--wind-size, 64px);
-    font-weight: 800;
-    line-height: 1;
-    transform: rotate(var(--wind-rotation, 0deg));
-    transform-origin: center;
-    filter: drop-shadow(0 8px 12px rgba(80,91,110,0.12));
-    transition: width 180ms ease, height 180ms ease, font-size 180ms ease, transform 180ms ease;
+    position: relative;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle, rgba(255,255,255,0.76) 0 48%, transparent 49%),
+      conic-gradient(from 0deg, rgba(28,28,30,0.34) 0deg 2deg, transparent 2deg 45deg, rgba(28,28,30,0.18) 45deg 47deg, transparent 47deg 90deg);
+    border: 1px solid rgba(94, 104, 120, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.86), 0 8px 18px rgba(80,91,110,0.1);
+  }
+  .wind-compass::before {
+    content: "";
+    position: absolute;
+    inset: 16%;
+    border-radius: 50%;
+    border: 1px solid rgba(94, 104, 120, 0.14);
+  }
+  .wind-arrow {
+    position: absolute;
+    left: 50%;
+    top: 17%;
+    width: max(2px, calc(var(--wind-size, 64px) * 0.035));
+    height: 50%;
+    border-radius: 999px;
+    background: #1c1c1e;
+    transform: translateX(-50%) rotate(var(--wind-rotation, 0deg));
+    transform-origin: 50% 86%;
+    filter: drop-shadow(0 4px 7px rgba(80,91,110,0.16));
+    transition: transform 180ms ease;
+  }
+  .wind-arrow::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: -2px;
+    width: 0;
+    height: 0;
+    border-left: max(5px, calc(var(--wind-size, 64px) * 0.08)) solid transparent;
+    border-right: max(5px, calc(var(--wind-size, 64px) * 0.08)) solid transparent;
+    border-bottom: max(10px, calc(var(--wind-size, 64px) * 0.16)) solid #1c1c1e;
+    transform: translateX(-50%);
   }
   .current-meta span:last-child {
     white-space: nowrap;
@@ -494,7 +525,7 @@
       font-size: 1rem;
       text-align: left;
     }
-    .wind-arrow {
+    .wind-compass {
       --wind-size: min(var(--wind-size), 34px);
     }
     .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -532,7 +563,7 @@
           <div class="temp" id="temp">--°</div>
           <div class="condition" id="condition">Loading forecast...</div>
           <div class="hi-lo"><span id="high">H: --°</span><span id="low">L: --°</span></div>
-          <div class="current-meta" id="wind-meta"><span class="wind-arrow">➜</span><span>Wind --</span></div>
+          <div class="current-meta" id="wind-meta"><span class="wind-compass"><span class="wind-arrow"></span></span><span>Wind --</span></div>
         </div>
         <div class="sky-card" aria-hidden="true"></div>
         <button class="toolbar-more" type="button" aria-label="More">•••</button>
@@ -613,14 +644,13 @@
     };
     return map[code] || ['🌤️', 'Partly Cloudy'];
   }
-  function compass(deg) {
-    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-  }
   function windArrowStyle(speed, direction) {
     const size = Math.round(Math.min(120, Math.max(62, 62 + (Number(speed) || 0) * 2.2)));
     const rotation = (((Number(direction) || 0) + 180) % 360).toFixed(0);
     return `--wind-size:${size}px;--wind-rotation:${rotation}deg`;
+  }
+  function heading(deg) {
+    return `${Math.round((((Number(deg) || 0) % 360) + 360) % 360)}°`;
   }
   function fmtTemp(value) {
     return Number.isFinite(value) ? `${Math.round(value)}°` : '--°';
@@ -656,7 +686,7 @@
     els.high.textContent = `H: ${fmtTemp(hi)}`;
     els.low.textContent = `L: ${fmtTemp(lo)}`;
     els.feels.textContent = fmtTemp(current.apparent_temperature);
-    document.getElementById('wind-meta').innerHTML = `<span class="wind-arrow" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}">➜</span><span>${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}</span>`;
+    document.getElementById('wind-meta').innerHTML = `<span class="wind-compass" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}"><span class="wind-arrow"></span></span><span>${Math.round(current.wind_speed_10m)} km/h · ${heading(current.wind_direction_10m)}</span>`;
     els.precip.textContent = `${(Number(current.precipitation) || 0).toFixed(1)} mm/hr`;
     els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
     els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;

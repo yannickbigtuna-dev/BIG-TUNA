@@ -106,9 +106,8 @@ function weatherLabel(code) {
   return labels[code] || 'Partly Cloudy';
 }
 
-function compass(deg) {
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+function heading(deg) {
+  return `${Math.round((((Number(deg) || 0) % 360) + 360) % 360)}°`;
 }
 
 function displayName(hit) {
@@ -128,13 +127,13 @@ function trayImage() {
 function updateTray() {
   if (!tray) return;
   const current = weather && weather.current;
-  const wind = current ? `${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}` : '';
+  const wind = current ? `${Math.round(current.wind_speed_10m)} km/h ${heading(current.wind_direction_10m)}` : '';
   const temp = current ? `${Math.round(current.temperature_2m)}°` : '';
   const condition = current ? weatherLabel(current.weather_code) : '';
   const icon = current ? weatherIcon(current.weather_code) : '';
   const title = current
     ? {
-      compact: `${icon} ${temp}  ≋ ${Math.round(current.wind_speed_10m)} ${compass(current.wind_direction_10m)}`,
+      compact: `${icon} ${temp}  ≋ ${Math.round(current.wind_speed_10m)} ${heading(current.wind_direction_10m)}`,
       balanced: `${icon} ${temp}  |  ≋ ${wind}`,
       detailed: `${icon} ${temp} ${condition}  |  ≋ ${wind}`,
     }[store.menuBarStyle || 'balanced']
