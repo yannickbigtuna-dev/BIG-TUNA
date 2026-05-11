@@ -419,7 +419,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Does not load `topbar.js`; it is intentionally styled as a standalone Monterey-style macOS window to match the provided design references.
 - Uses Open-Meteo forecast and geocoding APIs directly from the browser; no API key or BIG TUNA auth is required.
 - Uses browser geolocation on first load when available, otherwise falls back to Halifax. Saved searched cities and last selected location are stored in `localStorage` under `weather_locations` and `weather_last_location`.
-- The website version renders only the Monterey-style main weather window: translucent panel, saved-location sidebar, current temperature, metric cards, hourly strip, and 7-day forecast rows. The macOS menu bar widget is only in `desktop/big-tuna-weather/`.
+- The website version renders only the Monterey-style main weather window: translucent panel, saved-location sidebar, current temperature, metric cards, hourly strip, and 7-day forecast rows. Current wind is shown as a direction arrow whose size scales with wind speed; the metric cards include precipitation in mm/hr instead of wind. The macOS menu bar widget is only in `desktop/big-tuna-weather/`.
 - The homepage downloads menu links the unsigned macOS zip at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/weather-mac-latest/big-tuna-weather-mac.zip`.
 
 ## Coding Standards

@@ -13,7 +13,8 @@ const els = {
   high: document.getElementById('high'),
   low: document.getElementById('low'),
   feels: document.getElementById('feels'),
-  wind: document.getElementById('wind'),
+  windMeta: document.getElementById('wind-meta'),
+  precip: document.getElementById('precip'),
   humidity: document.getElementById('humidity'),
   pressure: document.getElementById('pressure'),
   hourly: document.getElementById('hourly'),
@@ -43,6 +44,12 @@ function weatherMeta(code) {
 function compass(deg) {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+function windArrowStyle(speed, direction) {
+  const size = Math.round(Math.min(42, Math.max(17, 17 + (Number(speed) || 0) * 1.1)));
+  const rotation = (((Number(direction) || 0) + 180) % 360).toFixed(0);
+  return `--wind-size:${size}px;--wind-rotation:${rotation}deg`;
 }
 
 function fmtTemp(value) {
@@ -88,7 +95,8 @@ function render(state) {
   els.high.textContent = `H: ${fmtTemp(hi)}`;
   els.low.textContent = `L: ${fmtTemp(lo)}`;
   els.feels.textContent = fmtTemp(current.apparent_temperature);
-  els.wind.textContent = `${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}`;
+  els.windMeta.innerHTML = `<span class="wind-arrow" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}">➜</span><span>${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}</span>`;
+  els.precip.textContent = `${(Number(current.precipitation) || 0).toFixed(1)} mm/hr`;
   els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
   els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;
   els.updated.textContent = 'Updated now';

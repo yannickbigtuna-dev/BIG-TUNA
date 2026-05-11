@@ -224,6 +224,34 @@
     font-size: 1.05rem;
     font-weight: 560;
   }
+  .current-meta {
+    margin-top: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 38px;
+    padding: 6px 12px 6px 8px;
+    border: 1px solid rgba(130, 138, 150, 0.16);
+    border-radius: 13px;
+    background: rgba(255,255,255,0.46);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.74);
+    color: #5d6676;
+    font-size: 0.9rem;
+    font-weight: 560;
+  }
+  .wind-arrow {
+    width: var(--wind-size, 24px);
+    height: var(--wind-size, 24px);
+    display: inline-grid;
+    place-items: center;
+    color: #7ac5a8;
+    font-size: var(--wind-size, 24px);
+    line-height: 1;
+    transform: rotate(var(--wind-rotation, 0deg));
+    transform-origin: center;
+    filter: drop-shadow(0 3px 4px rgba(80,91,110,0.12));
+    transition: width 180ms ease, height 180ms ease, font-size 180ms ease, transform 180ms ease;
+  }
   .sky-card {
     position: relative;
     min-height: 232px;
@@ -486,13 +514,14 @@
           <div class="temp" id="temp">--°</div>
           <div class="condition" id="condition">Loading forecast...</div>
           <div class="hi-lo"><span id="high">H: --°</span><span id="low">L: --°</span></div>
+          <div class="current-meta" id="wind-meta"><span class="wind-arrow">➜</span><span>Wind --</span></div>
         </div>
         <div class="sky-card" aria-hidden="true"></div>
         <button class="toolbar-more" type="button" aria-label="More">•••</button>
       </div>
       <section class="metrics" aria-label="Current conditions">
         <div class="metric"><span class="metric-icon">♨</span><span><span class="metric-label">Feels Like</span><span class="metric-value" id="feels">--°</span></span></div>
-        <div class="metric"><span class="metric-icon">≋</span><span><span class="metric-label">Wind</span><span class="metric-value" id="wind">--</span></span></div>
+        <div class="metric"><span class="metric-icon">☂</span><span><span class="metric-label">Precipitation</span><span class="metric-value" id="precip">--</span></span></div>
         <div class="metric"><span class="metric-icon">♢</span><span><span class="metric-label">Humidity</span><span class="metric-value" id="humidity">--</span></span></div>
         <div class="metric"><span class="metric-icon">◷</span><span><span class="metric-label">Pressure</span><span class="metric-value" id="pressure">--</span></span></div>
       </section>
@@ -527,7 +556,7 @@
     high: document.getElementById('high'),
     low: document.getElementById('low'),
     feels: document.getElementById('feels'),
-    wind: document.getElementById('wind'),
+    precip: document.getElementById('precip'),
     humidity: document.getElementById('humidity'),
     pressure: document.getElementById('pressure'),
     hourly: document.getElementById('hourly'),
@@ -570,6 +599,11 @@
     const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
     return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
   }
+  function windArrowStyle(speed, direction) {
+    const size = Math.round(Math.min(44, Math.max(18, 18 + (Number(speed) || 0) * 1.1)));
+    const rotation = (((Number(direction) || 0) + 180) % 360).toFixed(0);
+    return `--wind-size:${size}px;--wind-rotation:${rotation}deg`;
+  }
   function fmtTemp(value) {
     return Number.isFinite(value) ? `${Math.round(value)}°` : '--°';
   }
@@ -604,7 +638,8 @@
     els.high.textContent = `H: ${fmtTemp(hi)}`;
     els.low.textContent = `L: ${fmtTemp(lo)}`;
     els.feels.textContent = fmtTemp(current.apparent_temperature);
-    els.wind.textContent = `${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}`;
+    document.getElementById('wind-meta').innerHTML = `<span class="wind-arrow" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}">➜</span><span>${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}</span>`;
+    els.precip.textContent = `${(Number(current.precipitation) || 0).toFixed(1)} mm/hr`;
     els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
     els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;
 
@@ -639,7 +674,7 @@
     const params = new URLSearchParams({
       latitude: loc.latitude,
       longitude: loc.longitude,
-      current: 'temperature_2m,apparent_temperature,relative_humidity_2m,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
+      current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
       hourly: 'temperature_2m,weather_code',
       daily: 'weather_code,temperature_2m_max,temperature_2m_min',
       timezone: 'auto',
