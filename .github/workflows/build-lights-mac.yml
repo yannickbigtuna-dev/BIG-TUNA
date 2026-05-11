@@ -1,0 +1,50 @@
+name: Build Lights Mac App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-lights-mac.yml'
+      - 'desktop/big-tuna-lights/**'
+      - 'apps/lights/index.html'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/big-tuna-lights/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: desktop/big-tuna-lights
+        run: npm ci
+
+      - name: Package unsigned macOS app
+        working-directory: desktop/big-tuna-lights
+        run: npm run package:mac
+
+      - name: Commit website download zip
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/lights/downloads/big-tuna-lights-mac.zip
+          if git diff --cached --quiet; then
+            echo "No zip changes to commit."
+          else
+            git commit -m "Build Lights macOS app download"
+            git push
+          fi

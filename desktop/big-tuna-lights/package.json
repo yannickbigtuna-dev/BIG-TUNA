@@ -1,0 +1,15 @@
+{
+  "name": "big-tuna-lights",
+  "version": "1.0.0",
+  "description": "BIG TUNA Lights macOS menu bar controller",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "package:mac": "node scripts/package-mac.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.0",
+    "electron": "^42.0.1"
+  }
+}

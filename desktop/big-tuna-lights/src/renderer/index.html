@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BIG TUNA Lights</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="titlebar">
+    <div class="traffic">
+      <button id="hide-btn" class="traffic-dot" type="button" aria-label="Hide window"></button>
+    </div>
+    <div class="title">BIG TUNA Lights</div>
+  </header>
+
+  <main>
+    <section class="switch-scene" aria-label="Light control">
+      <div class="glow"></div>
+      <button id="switch" class="switch" type="button" role="switch" aria-checked="false" disabled>
+        <span class="switch-track">
+          <span class="paddle"></span>
+        </span>
+      </button>
+      <div id="state-label" class="state-label">Loading</div>
+      <div id="message" class="message">Checking light state...</div>
+    </section>
+
+    <form id="login-form" class="login-form" autocomplete="on">
+      <input id="username" name="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
+      <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password">
+      <button id="login-btn" type="submit">Log In</button>
+    </form>
+
+    <section id="session-row" class="session-row" hidden>
+      <span id="session-label"></span>
+      <button id="logout-btn" type="button">Logout</button>
+    </section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

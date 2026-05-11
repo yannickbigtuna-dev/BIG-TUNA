@@ -225,6 +225,30 @@
     filter: saturate(0.78);
   }
 
+  .download-link {
+    position: fixed;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    opacity: 0.72;
+    transition: color 0.18s ease, opacity 0.18s ease;
+  }
+
+  .download-link:hover,
+  .download-link:focus-visible {
+    color: var(--accent);
+    opacity: 1;
+    outline: none;
+  }
+
+  body.is-on .download-link { color: rgba(32, 27, 20, 0.58); }
+  body.is-on .download-link:hover,
+  body.is-on .download-link:focus-visible { color: #201b14; }
+
   @media (max-width: 520px) {
     main { padding: 24px 14px 34px; }
     .switch-wrap { width: min(72vw, 180px); }
@@ -253,6 +277,7 @@
     </div>
   </section>
 </main>
+<a class="download-link" href="/lights/downloads/big-tuna-lights-mac.zip" download>Mac app</a>
 
 <script src="/topbar.js"></script>
 <script>
