@@ -334,6 +334,65 @@
     box-shadow: var(--card-shadow);
     color: #677083;
     font-weight: 800;
+    cursor: pointer;
+  }
+  .source-menu {
+    position: absolute;
+    top: 42px;
+    right: 8px;
+    width: 244px;
+    z-index: 8;
+    padding: 8px;
+    border: 1px solid rgba(130, 138, 150, 0.18);
+    border-radius: 13px;
+    background: rgba(247, 248, 251, 0.9);
+    box-shadow: 0 18px 42px rgba(62, 73, 94, 0.18), inset 0 1px 0 rgba(255,255,255,0.86);
+    backdrop-filter: blur(24px) saturate(1.15);
+    -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  }
+  .source-menu[hidden] { display: none; }
+  .source-title {
+    padding: 6px 8px 7px;
+    color: #737b89;
+    font-size: 0.72rem;
+    font-weight: 760;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .source-option {
+    width: 100%;
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 9px;
+    padding: 8px 9px;
+    color: #1f222a;
+    background: transparent;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+  }
+  .source-option:hover,
+  .source-option.is-selected {
+    background: rgba(74, 136, 255, 0.12);
+  }
+  .source-name {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 720;
+  }
+  .source-note {
+    display: block;
+    margin-top: 2px;
+    color: #737b89;
+    font-size: 0.72rem;
+  }
+  .source-check {
+    color: #4a88ff;
+    font-weight: 800;
   }
   .metrics {
     display: grid;
@@ -342,6 +401,12 @@
     margin-bottom: 22px;
   }
   .metric {
+    appearance: none;
+    border: 1px solid rgba(130, 138, 150, 0.16);
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
     min-height: 86px;
     display: grid;
     grid-template-columns: 30px 1fr;
@@ -349,11 +414,19 @@
     gap: 11px;
     padding: 15px 18px;
     border-radius: 14px;
-    border: 1px solid rgba(130, 138, 150, 0.16);
     background: var(--panel);
     box-shadow: var(--card-shadow);
     backdrop-filter: blur(22px);
     -webkit-backdrop-filter: blur(22px);
+  }
+  .metric:hover,
+  .metric.is-selected {
+    border-color: rgba(74, 136, 255, 0.32);
+    background: rgba(255,255,255,0.72);
+  }
+  .metric:focus-visible {
+    outline: 3px solid rgba(74, 136, 255, 0.18);
+    outline-offset: 2px;
   }
   .metric-icon {
     color: #596273;
@@ -566,7 +639,14 @@
           <div class="current-meta" id="wind-meta"><span class="wind-compass"><span class="wind-arrow"></span></span><span>Wind --</span></div>
         </div>
         <div class="sky-card" aria-hidden="true"></div>
-        <button class="toolbar-more" type="button" aria-label="More">•••</button>
+        <button class="toolbar-more" id="source-menu-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Weather data source">•••</button>
+        <div class="source-menu" id="source-menu" hidden>
+          <div class="source-title">Data Source</div>
+          <button class="source-option" type="button" data-source="auto"><span><span class="source-name">Auto Best</span><span class="source-note">NWS in US, Open-Meteo elsewhere</span></span><span class="source-check"></span></button>
+          <button class="source-option" type="button" data-source="open-meteo"><span><span class="source-name">Open-Meteo</span><span class="source-note">Global, full app features</span></span><span class="source-check"></span></button>
+          <button class="source-option" type="button" data-source="met-no"><span><span class="source-name">MET Norway</span><span class="source-note">Global government forecast</span></span><span class="source-check"></span></button>
+          <button class="source-option" type="button" data-source="nws"><span><span class="source-name">NOAA / NWS</span><span class="source-note">Official US locations only</span></span><span class="source-check"></span></button>
+        </div>
       </div>
       <section class="metrics" aria-label="Current conditions">
         <div class="metric"><span class="metric-icon">♨</span><span><span class="metric-label">Feels Like</span><span class="metric-value" id="feels">--°</span></span></div>
@@ -592,7 +672,20 @@
   const HALIFAX = { name: 'Halifax, NS', admin: 'Nova Scotia', country: 'Canada', latitude: 44.6488, longitude: -63.5752, fallback: true };
   const STORAGE_KEY = 'weather_locations';
   const LAST_KEY = 'weather_last_location';
-  const state = { locations: loadLocations(), selected: null, weatherByKey: new Map() };
+  const SOURCE_KEY = 'weather_data_source';
+  const SOURCES = {
+    auto: 'Auto Best',
+    'open-meteo': 'Open-Meteo',
+    'met-no': 'MET Norway',
+    nws: 'NOAA / NWS',
+  };
+  const state = {
+    locations: loadLocations(),
+    selected: null,
+    weatherByKey: new Map(),
+    source: localStorage.getItem(SOURCE_KEY) || 'auto',
+    activeSource: '',
+  };
 
   const els = {
     form: document.getElementById('search-form'),
@@ -612,6 +705,8 @@
     pressure: document.getElementById('pressure'),
     hourly: document.getElementById('hourly'),
     daily: document.getElementById('daily'),
+    sourceBtn: document.getElementById('source-menu-btn'),
+    sourceMenu: document.getElementById('source-menu'),
   };
 
   function keyFor(loc) {
@@ -699,8 +794,8 @@
       els.precipLabel.textContent = 'UV Index';
       els.precip.textContent = Number.isFinite(current.uv_index) ? current.uv_index.toFixed(1) : '--';
     }
-    els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
-    els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;
+    els.humidity.textContent = Number.isFinite(current.relative_humidity_2m) ? `${Math.round(current.relative_humidity_2m)}%` : '--';
+    els.pressure.textContent = Number.isFinite(current.pressure_msl) ? `${Math.round(current.pressure_msl)} hPa` : '--';
 
     const nowIndex = Math.max(0, data.hourly.time.findIndex(t => new Date(t) >= new Date()));
     els.hourly.innerHTML = data.hourly.time.slice(nowIndex, nowIndex + 10).map((time, offset) => {
@@ -729,7 +824,71 @@
       </div>`;
     }).join('');
   }
-  async function fetchWeather(loc) {
+  function renderSourceMenu() {
+    els.sourceMenu.querySelectorAll('.source-option').forEach(btn => {
+      const selected = btn.dataset.source === state.source;
+      btn.classList.toggle('is-selected', selected);
+      btn.querySelector('.source-check').textContent = selected ? '✓' : '';
+    });
+  }
+  function setSourceMenuOpen(open) {
+    els.sourceMenu.hidden = !open;
+    els.sourceBtn.setAttribute('aria-expanded', String(open));
+  }
+  function setSource(source) {
+    state.source = SOURCES[source] ? source : 'auto';
+    localStorage.setItem(SOURCE_KEY, state.source);
+    state.weatherByKey.clear();
+    renderSourceMenu();
+    setSourceMenuOpen(false);
+    if (state.selected) selectLocation(state.selected);
+  }
+  function wmoFromText(text) {
+    const value = String(text || '').toLowerCase();
+    if (value.includes('thunder')) return 95;
+    if (value.includes('snow') || value.includes('sleet')) return 73;
+    if (value.includes('rain') || value.includes('shower') || value.includes('drizzle')) return 61;
+    if (value.includes('fog') || value.includes('haze')) return 45;
+    if (value.includes('cloud') || value.includes('overcast')) return 3;
+    if (value.includes('sun') || value.includes('clear')) return 0;
+    return 2;
+  }
+  function directionDegrees(direction) {
+    const map = { N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5, S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5 };
+    return map[String(direction || '').toUpperCase()] ?? 0;
+  }
+  function symbolToWmo(symbol) {
+    const value = String(symbol || '').toLowerCase();
+    if (value.includes('thunder')) return 95;
+    if (value.includes('snow') || value.includes('sleet')) return 73;
+    if (value.includes('rain') || value.includes('showers')) return 61;
+    if (value.includes('fog')) return 45;
+    if (value.includes('cloudy')) return 3;
+    if (value.includes('partlycloudy') || value.includes('fair')) return 2;
+    if (value.includes('clearsky')) return 0;
+    return 2;
+  }
+  function emptyDaily() {
+    return { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [] };
+  }
+  function groupDailyFromHourly(hourly) {
+    const daily = emptyDaily();
+    const byDay = new Map();
+    hourly.time.forEach((iso, index) => {
+      const day = iso.slice(0, 10);
+      if (!byDay.has(day)) byDay.set(day, { temps: [], codes: [] });
+      byDay.get(day).temps.push(hourly.temperature_2m[index]);
+      byDay.get(day).codes.push(hourly.weather_code[index]);
+    });
+    Array.from(byDay.entries()).slice(0, 7).forEach(([day, entry]) => {
+      daily.time.push(day);
+      daily.temperature_2m_min.push(Math.min(...entry.temps));
+      daily.temperature_2m_max.push(Math.max(...entry.temps));
+      daily.weather_code.push(entry.codes[0] ?? 2);
+    });
+    return daily;
+  }
+  async function fetchOpenMeteo(loc) {
     const params = new URLSearchParams({
       latitude: loc.latitude,
       longitude: loc.longitude,
@@ -742,7 +901,106 @@
     });
     const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
     if (!res.ok) throw new Error('Weather request failed');
-    return res.json();
+    const data = await res.json();
+    data.source = 'open-meteo';
+    data.sourceLabel = SOURCES['open-meteo'];
+    return data;
+  }
+  async function fetchMetNo(loc) {
+    const params = new URLSearchParams({ lat: loc.latitude, lon: loc.longitude });
+    const res = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?${params}`, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('MET Norway unavailable');
+    const raw = await res.json();
+    const times = raw.properties.timeseries.slice(0, 72);
+    const hourly = { time: [], temperature_2m: [], weather_code: [] };
+    const first = times[0];
+    const currentDetails = first.data.instant.details;
+    const currentSummary = (first.data.next_1_hours && first.data.next_1_hours.summary && first.data.next_1_hours.summary.symbol_code) || '';
+    times.forEach(item => {
+      const details = item.data.instant.details;
+      hourly.time.push(item.time);
+      hourly.temperature_2m.push(details.air_temperature);
+      hourly.weather_code.push(symbolToWmo(item.data.next_1_hours && item.data.next_1_hours.summary && item.data.next_1_hours.summary.symbol_code));
+    });
+    const data = {
+      source: 'met-no',
+      sourceLabel: SOURCES['met-no'],
+      current: {
+        temperature_2m: currentDetails.air_temperature,
+        apparent_temperature: currentDetails.air_temperature,
+        relative_humidity_2m: currentDetails.relative_humidity,
+        precipitation: (first.data.next_1_hours && first.data.next_1_hours.details && first.data.next_1_hours.details.precipitation_amount) || 0,
+        uv_index: NaN,
+        pressure_msl: currentDetails.air_pressure_at_sea_level,
+        weather_code: symbolToWmo(currentSummary),
+        wind_speed_10m: currentDetails.wind_speed * 3.6,
+        wind_direction_10m: currentDetails.wind_from_direction,
+      },
+      hourly,
+      daily: groupDailyFromHourly(hourly),
+    };
+    return data;
+  }
+  async function fetchNws(loc) {
+    const pointRes = await fetch(`https://api.weather.gov/points/${Number(loc.latitude).toFixed(4)},${Number(loc.longitude).toFixed(4)}`, { headers: { Accept: 'application/geo+json' } });
+    if (!pointRes.ok) throw new Error('NWS is only available for US locations');
+    const point = await pointRes.json();
+    const [hourlyRes, gridRes] = await Promise.all([
+      fetch(point.properties.forecastHourly, { headers: { Accept: 'application/geo+json' } }),
+      fetch(point.properties.forecastGridData, { headers: { Accept: 'application/geo+json' } }),
+    ]);
+    if (!hourlyRes.ok || !gridRes.ok) throw new Error('NWS forecast unavailable');
+    const hourlyRaw = await hourlyRes.json();
+    const grid = await gridRes.json();
+    const periods = hourlyRaw.properties.periods.slice(0, 72);
+    const gridProps = grid.properties;
+    const valueAt = (name, index, fallback = NaN) => {
+      const values = gridProps[name] && gridProps[name].values;
+      return values && values[index] && Number.isFinite(values[index].value) ? values[index].value : fallback;
+    };
+    const toC = f => (f - 32) * 5 / 9;
+    const hourly = { time: [], temperature_2m: [], weather_code: [] };
+    periods.forEach(period => {
+      hourly.time.push(period.startTime);
+      hourly.temperature_2m.push(period.temperatureUnit === 'F' ? toC(period.temperature) : period.temperature);
+      hourly.weather_code.push(wmoFromText(period.shortForecast));
+    });
+    const first = periods[0];
+    const temp = first.temperatureUnit === 'F' ? toC(first.temperature) : first.temperature;
+    return {
+      source: 'nws',
+      sourceLabel: SOURCES.nws,
+      current: {
+        temperature_2m: temp,
+        apparent_temperature: valueAt('apparentTemperature', 0, temp),
+        relative_humidity_2m: valueAt('relativeHumidity', 0, NaN),
+        precipitation: valueAt('quantitativePrecipitation', 0, 0),
+        uv_index: NaN,
+        pressure_msl: 1013,
+        weather_code: wmoFromText(first.shortForecast),
+        wind_speed_10m: parseFloat(first.windSpeed) * 1.60934 || valueAt('windSpeed', 0, 0),
+        wind_direction_10m: directionDegrees(first.windDirection) || valueAt('windDirection', 0, 0),
+      },
+      hourly,
+      daily: groupDailyFromHourly(hourly),
+    };
+  }
+  async function fetchWeather(loc) {
+    const requested = state.source;
+    const attempts = requested === 'auto'
+      ? ['nws', 'open-meteo']
+      : [requested, 'open-meteo'].filter((item, index, arr) => arr.indexOf(item) === index);
+    let lastError = null;
+    for (const source of attempts) {
+      try {
+        const data = source === 'nws' ? await fetchNws(loc) : source === 'met-no' ? await fetchMetNo(loc) : await fetchOpenMeteo(loc);
+        state.activeSource = data.source;
+        return data;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error('Weather unavailable');
   }
   async function selectLocation(loc) {
     state.selected = loc;
@@ -754,7 +1012,7 @@
       state.weatherByKey.set(keyFor(loc), data);
       renderWeather(loc, data);
       renderLocations();
-      setStatus('');
+      setStatus(`Source: ${data.sourceLabel || SOURCES[state.source] || 'Weather'}`);
     } catch {
       if (keyFor(loc) !== keyFor(HALIFAX)) {
         setStatus('Weather unavailable. Showing Halifax.', true);
@@ -812,8 +1070,26 @@
       setStatus(error.message || 'Search failed', true);
     }
   });
+  els.sourceBtn.addEventListener('click', event => {
+    event.stopPropagation();
+    setSourceMenuOpen(els.sourceMenu.hidden);
+  });
+  els.sourceMenu.addEventListener('click', event => {
+    const btn = event.target.closest('.source-option');
+    if (!btn) return;
+    setSource(btn.dataset.source);
+  });
+  document.addEventListener('click', event => {
+    if (!els.sourceMenu.hidden && !els.sourceMenu.contains(event.target) && event.target !== els.sourceBtn) {
+      setSourceMenuOpen(false);
+    }
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') setSourceMenuOpen(false);
+  });
 
   (async function init() {
+    renderSourceMenu();
     renderLocations();
     const last = localStorage.getItem(LAST_KEY);
     const saved = state.locations.find(loc => keyFor(loc) === last);
