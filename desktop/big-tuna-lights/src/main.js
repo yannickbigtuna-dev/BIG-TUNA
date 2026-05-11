@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, ipcMain, nativeImage } = require('electron');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
@@ -77,8 +77,8 @@ function requestJson(method, apiPath, body, token) {
 }
 
 function bulbIconSvg(on) {
-  const fill = on ? '#ffffff' : 'none';
-  const stroke = '#ffffff';
+  const fill = on ? '#000000' : 'none';
+  const stroke = '#000000';
   return `
     <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
       <path d="M9 21h6v-1.7H9V21Zm1-3.3h4v-1.35c0-1.22.61-2.35 1.63-3.04A6.1 6.1 0 0 0 18.35 8.2C18.35 4.78 15.5 2 12 2S5.65 4.78 5.65 8.2c0 2.05 1.03 3.96 2.72 5.11A3.65 3.65 0 0 1 10 16.35v1.35Z" fill="${fill}" stroke="${stroke}" stroke-width="1.65" stroke-linejoin="round"/>
@@ -88,21 +88,16 @@ function bulbIconSvg(on) {
 function createBulbImage(on) {
   const svg = bulbIconSvg(on).replace(/\s+/g, ' ').trim();
   const image = nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
-  return image.resize({ width: 18, height: 18 });
+  const resized = image.resize({ width: 18, height: 18 });
+  resized.setTemplateImage(true);
+  return resized;
 }
 
 function updateTrayIcon() {
   if (!tray) return;
   tray.setImage(createBulbImage(currentOn));
   tray.setToolTip(`BIG TUNA Lights: ${currentOn ? 'On' : 'Off'}`);
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: currentOn ? 'Turn Off' : 'Turn On', click: () => toggleFromTray() },
-    { label: 'Show Window', click: showWindow },
-    { label: 'Refresh', click: refreshState },
-    { type: 'separator' },
-    { label: credentials.token ? 'Logout' : 'Login', click: () => credentials.token ? logout() : showWindow() },
-    { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
-  ]));
+  tray.setContextMenu(null);
 }
 
 function sendToWindow(channel, data) {
