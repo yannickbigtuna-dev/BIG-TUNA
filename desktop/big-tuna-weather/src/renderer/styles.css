@@ -171,32 +171,38 @@ html, body {
   font-weight: 560;
 }
 .current-meta {
-  margin-top: 15px;
+  position: absolute;
+  left: clamp(178px, 20vw, 260px);
+  top: 106px;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 6px 12px 6px 8px;
-  border: 1px solid rgba(130,138,150,0.16);
-  border-radius: 13px;
-  background: rgba(255,255,255,0.46);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.74);
+  justify-content: center;
+  gap: 7px;
+  min-width: 118px;
   color: #5d6676;
-  font-size: 0.86rem;
-  font-weight: 560;
+  font-size: 1.14rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-align: center;
+  z-index: 2;
 }
 .wind-arrow {
-  width: var(--wind-size, 23px);
-  height: var(--wind-size, 23px);
+  width: var(--wind-size, 60px);
+  height: var(--wind-size, 60px);
   display: inline-grid;
   place-items: center;
   color: #7ac5a8;
-  font-size: var(--wind-size, 23px);
+  font-size: var(--wind-size, 60px);
+  font-weight: 800;
   line-height: 1;
   transform: rotate(var(--wind-rotation, 0deg));
   transform-origin: center;
-  filter: drop-shadow(0 3px 4px rgba(80,91,110,0.12));
+  filter: drop-shadow(0 8px 12px rgba(80,91,110,0.12));
   transition: width 180ms ease, height 180ms ease, font-size 180ms ease, transform 180ms ease;
+}
+.current-meta span:last-child {
+  white-space: nowrap;
 }
 .sky-card {
   position: relative;
@@ -390,9 +396,16 @@ body.panel .temp { font-size: 4.4rem; }
 body.panel .condition { margin-top: 6px; font-size: 1rem; }
 body.panel .hi-lo { font-size: 0.86rem; }
 body.panel .current-meta {
+  position: static;
+  flex-direction: row;
+  justify-content: flex-start;
   margin-top: 10px;
   min-height: 32px;
   font-size: 0.8rem;
+  text-align: left;
+}
+body.panel .wind-arrow {
+  --wind-size: min(var(--wind-size), 30px);
 }
 body.panel .metrics {
   grid-template-columns: repeat(2, minmax(0, 1fr));

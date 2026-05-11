@@ -47,7 +47,7 @@ function compass(deg) {
 }
 
 function windArrowStyle(speed, direction) {
-  const size = Math.round(Math.min(42, Math.max(17, 17 + (Number(speed) || 0) * 1.1)));
+  const size = Math.round(Math.min(112, Math.max(58, 58 + (Number(speed) || 0) * 2.2)));
   const rotation = (((Number(direction) || 0) + 180) % 360).toFixed(0);
   return `--wind-size:${size}px;--wind-rotation:${rotation}deg`;
 }
