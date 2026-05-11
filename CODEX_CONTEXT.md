@@ -233,7 +233,7 @@ Desktop app source:
 
 - `desktop/big-tuna-lights/` contains an Electron macOS menu-bar controller for the Lights API.
 - It defaults to `https://yannickmorgans.ca`, logs in through `/api/auth/login`, stores only the returned session token and username in Electron `userData`, and controls `/api/lights` as username `yannick`.
-- Its macOS status item uses a template bulb icon so it remains visible on light and dark menu bars; clicking the icon directly toggles the light and does not open a menu.
+- Its macOS status item uses a template bulb icon plus a text fallback (`●` on, `○` off) so it remains visible on light and dark menu bars; clicking it directly toggles the light and does not open a menu.
 - Packaging command: `cd desktop/big-tuna-lights && npm install && npm run package:mac`. This must run on macOS so Electron framework symlinks are preserved. The `.github/workflows/build-lights-mac.yml` workflow builds the unsigned zip and publishes it as the `lights-mac-latest` GitHub Release asset.
 
 ## Data Storage Map

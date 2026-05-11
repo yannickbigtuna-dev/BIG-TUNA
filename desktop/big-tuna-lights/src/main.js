@@ -96,6 +96,9 @@ function createBulbImage(on) {
 function updateTrayIcon() {
   if (!tray) return;
   tray.setImage(createBulbImage(currentOn));
+  if (process.platform === 'darwin') {
+    tray.setTitle(currentOn ? '●' : '○');
+  }
   tray.setToolTip(`BIG TUNA Lights: ${currentOn ? 'On' : 'Off'}`);
   tray.setContextMenu(null);
 }
