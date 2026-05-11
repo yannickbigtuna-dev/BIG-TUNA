@@ -3,14 +3,14 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 
-const HALIFAX = { name: 'Halifax', admin: 'Nova Scotia', country: 'Canada', latitude: 44.6488, longitude: -63.5752, fallback: true };
-const MAIN_SIZE = { width: 980, height: 680 };
-const PANEL_SIZE = { width: 360, height: 470 };
+const HALIFAX = { name: 'Halifax, NS', admin: 'Nova Scotia', country: 'Canada', latitude: 44.6488, longitude: -63.5752, fallback: true };
+const MAIN_SIZE = { width: 1180, height: 760 };
+const PANEL_SIZE = { width: 430, height: 610 };
 
 let mainWindow = null;
 let panelWindow = null;
 let tray = null;
-let store = { locations: [HALIFAX], selectedKey: keyFor(HALIFAX) };
+let store = { locations: [HALIFAX], selectedKey: keyFor(HALIFAX), menuBarStyle: 'balanced' };
 let weather = null;
 let selectedLocation = HALIFAX;
 let refreshTimer = null;
@@ -30,10 +30,11 @@ function loadStore() {
       store = {
         locations: parsed.locations,
         selectedKey: parsed.selectedKey || keyFor(parsed.locations[0]),
+        menuBarStyle: parsed.menuBarStyle || 'balanced',
       };
     }
   } catch {
-    store = { locations: [HALIFAX], selectedKey: keyFor(HALIFAX) };
+    store = { locations: [HALIFAX], selectedKey: keyFor(HALIFAX), menuBarStyle: 'balanced' };
   }
   selectedLocation = store.locations.find(loc => keyFor(loc) === store.selectedKey) || store.locations[0] || HALIFAX;
 }
@@ -71,38 +72,48 @@ function requestJson(urlString) {
 }
 
 function weatherIcon(code) {
-  if (code === 0) return '☀';
-  if ([1, 2].includes(code)) return '🌤';
-  if (code === 3) return '☁';
-  if ([45, 48].includes(code)) return '🌫';
-  if ([71, 73, 75].includes(code)) return '🌨';
-  if ([95, 96, 99].includes(code)) return '⛈';
-  return '🌧';
+  if (code === 0) return '☀️';
+  if ([1, 2].includes(code)) return '🌤️';
+  if (code === 3) return '☁️';
+  if ([45, 48].includes(code)) return '🌫️';
+  if ([71, 73, 75].includes(code)) return '🌨️';
+  if ([95, 96, 99].includes(code)) return '⛈️';
+  return '🌧️';
 }
 
 function weatherLabel(code) {
   const labels = {
-    0: 'Clear',
-    1: 'Mostly clear',
-    2: 'Partly cloudy',
+    0: 'Sunny',
+    1: 'Mostly Clear',
+    2: 'Partly Cloudy',
     3: 'Cloudy',
     45: 'Fog',
-    48: 'Rime fog',
-    51: 'Light drizzle',
+    48: 'Fog',
+    51: 'Light Drizzle',
     53: 'Drizzle',
-    55: 'Heavy drizzle',
-    61: 'Light rain',
+    55: 'Heavy Drizzle',
+    61: 'Light Rain',
     63: 'Rain',
-    65: 'Heavy rain',
-    71: 'Light snow',
+    65: 'Heavy Rain',
+    71: 'Light Snow',
     73: 'Snow',
-    75: 'Heavy snow',
-    80: 'Rain showers',
-    81: 'Rain showers',
-    82: 'Heavy showers',
+    75: 'Heavy Snow',
+    80: 'Showers',
+    81: 'Showers',
+    82: 'Heavy Showers',
     95: 'Thunderstorm',
   };
-  return labels[code] || 'Forecast';
+  return labels[code] || 'Partly Cloudy';
+}
+
+function compass(deg) {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+function displayName(hit) {
+  const region = hit.admin1 || hit.country_code || hit.country || '';
+  return region ? `${hit.name}, ${region}` : hit.name;
 }
 
 function trayImage() {
@@ -117,14 +128,35 @@ function trayImage() {
 function updateTray() {
   if (!tray) return;
   const current = weather && weather.current;
+  const wind = current ? `${Math.round(current.wind_speed_10m)} km/h ${compass(current.wind_direction_10m)}` : '';
+  const temp = current ? `${Math.round(current.temperature_2m)}°` : '';
+  const condition = current ? weatherLabel(current.weather_code) : '';
+  const icon = current ? weatherIcon(current.weather_code) : '';
   const title = current
-    ? `${weatherIcon(current.weather_code)} ${Math.round(current.temperature_2m)}° ${Math.round(current.wind_speed_10m)}km/h`
+    ? {
+      compact: `${icon} ${temp}  ≋ ${Math.round(current.wind_speed_10m)} ${compass(current.wind_direction_10m)}`,
+      balanced: `${icon} ${temp}  |  ≋ ${wind}`,
+      detailed: `${icon} ${temp} ${condition}  |  ≋ ${wind}`,
+    }[store.menuBarStyle || 'balanced']
     : 'Weather';
   if (process.platform === 'darwin') tray.setTitle(title);
-  tray.setToolTip(current ? `${selectedLocation.name}: ${weatherLabel(current.weather_code)}` : 'BIG TUNA Weather');
+  tray.setToolTip(current ? `${selectedLocation.name}: ${condition}` : 'BIG TUNA Weather');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open Weather', click: showMainWindow },
     { label: 'Refresh', click: refreshWeather },
+    {
+      label: 'Menu Bar Style',
+      submenu: ['compact', 'balanced', 'detailed'].map(style => ({
+        label: style[0].toUpperCase() + style.slice(1),
+        type: 'radio',
+        checked: (store.menuBarStyle || 'balanced') === style,
+        click: () => {
+          store.menuBarStyle = style;
+          saveStore();
+          updateTray();
+        },
+      })),
+    },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]));
@@ -135,6 +167,7 @@ function sendState() {
     locations: store.locations,
     selectedKey: keyFor(selectedLocation),
     selectedLocation,
+    menuBarStyle: store.menuBarStyle || 'balanced',
     weather,
   };
   for (const win of [mainWindow, panelWindow]) {
@@ -147,9 +180,9 @@ async function fetchWeather(loc) {
   const params = new URLSearchParams({
     latitude: loc.latitude,
     longitude: loc.longitude,
-    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m',
+    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
     hourly: 'temperature_2m,weather_code',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min',
     timezone: 'auto',
     temperature_unit: 'celsius',
     wind_speed_unit: 'kmh',
@@ -176,7 +209,7 @@ async function searchCity(query) {
   const hit = data.results && data.results[0];
   if (!hit) throw new Error('City not found');
   const loc = {
-    name: hit.name,
+    name: displayName(hit),
     admin: hit.admin1 || '',
     country: hit.country || '',
     latitude: hit.latitude,
@@ -204,11 +237,11 @@ async function selectLocation(key) {
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     ...MAIN_SIZE,
-    minWidth: 760,
-    minHeight: 560,
+    minWidth: 920,
+    minHeight: 640,
     show: false,
     title: 'BIG TUNA Weather',
-    backgroundColor: '#1d3150',
+    backgroundColor: '#f5f6f8',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -234,7 +267,8 @@ function createPanelWindow() {
     resizable: false,
     fullscreenable: false,
     title: 'Weather',
-    backgroundColor: '#1d3150',
+    backgroundColor: '#00000000',
+    transparent: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

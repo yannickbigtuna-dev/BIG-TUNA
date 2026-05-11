@@ -8,39 +8,46 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="titlebar">
-    <div class="traffic">
-      <button id="hide-btn" class="traffic-dot" type="button" aria-label="Hide panel"></button>
-    </div>
-    <div class="title">BIG TUNA Weather</div>
-    <button id="open-main" type="button">Open Weather</button>
-  </header>
-  <main>
-    <aside>
+  <section class="window">
+    <aside class="sidebar">
+      <div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>
       <form id="search-form" class="search">
-        <input id="city-input" type="search" placeholder="Search city" autocomplete="off" spellcheck="false">
-        <button type="submit" aria-label="Search">⌕</button>
+        <input id="city-input" type="search" placeholder="Search Locations" autocomplete="off" spellcheck="false">
+        <button type="submit" aria-label="Search"></button>
       </form>
       <div id="locations" class="locations"></div>
+      <div class="sidebar-foot"><span>°C / °F</span><span id="updated">Updated now</span></div>
     </aside>
-    <section class="weather">
+    <main class="content">
+      <button id="hide-btn" class="traffic-dot panel-close" type="button" aria-label="Hide panel"></button>
+      <button id="open-main" class="open-main" type="button">Open Weather</button>
       <div class="hero">
         <div>
-          <div id="place" class="place">Weather</div>
+          <div class="place-row"><span id="place">Weather</span><span>⌄</span></div>
+          <div class="current-line">
+            <span id="large-icon" class="large-icon">🌤️</span>
+            <span id="temp" class="temp">--°</span>
+          </div>
           <div id="condition" class="condition">Loading forecast...</div>
+          <div class="hi-lo"><span id="high">H: --°</span><span id="low">L: --°</span></div>
         </div>
-        <div id="temp" class="temp">--°</div>
+        <div class="sky-card" aria-hidden="true"></div>
+        <button class="toolbar-more" type="button" aria-label="More">•••</button>
       </div>
       <section class="metrics">
-        <div><span>Feels</span><strong id="feels">--°</strong></div>
-        <div><span>Wind</span><strong id="wind">--</strong></div>
-        <div><span>Humidity</span><strong id="humidity">--</strong></div>
+        <div class="metric"><span>♨</span><small>Feels Like</small><strong id="feels">--°</strong></div>
+        <div class="metric"><span>≋</span><small>Wind</small><strong id="wind">--</strong></div>
+        <div class="metric"><span>♢</span><small>Humidity</small><strong id="humidity">--</strong></div>
+        <div class="metric"><span>◷</span><small>Pressure</small><strong id="pressure">--</strong></div>
       </section>
-      <section class="hourly" id="hourly"></section>
+      <section class="hour-wrap">
+        <div class="hourly" id="hourly"></div>
+      </section>
       <section class="daily" id="daily"></section>
+      <button id="panel-open-row" class="panel-open-row" type="button">Open Weather <span>›</span></button>
       <div id="message" class="message"></div>
-    </section>
-  </main>
+    </main>
+  </section>
   <script src="renderer.js"></script>
 </body>
 </html>
