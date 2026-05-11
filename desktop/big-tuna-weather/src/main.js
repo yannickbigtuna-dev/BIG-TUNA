@@ -179,7 +179,7 @@ async function fetchWeather(loc) {
   const params = new URLSearchParams({
     latitude: loc.latitude,
     longitude: loc.longitude,
-    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
+    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,uv_index,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
     hourly: 'temperature_2m,weather_code',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min',
     timezone: 'auto',

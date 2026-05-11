@@ -570,7 +570,7 @@
       </div>
       <section class="metrics" aria-label="Current conditions">
         <div class="metric"><span class="metric-icon">♨</span><span><span class="metric-label">Feels Like</span><span class="metric-value" id="feels">--°</span></span></div>
-        <div class="metric"><span class="metric-icon">☂</span><span><span class="metric-label">Precipitation</span><span class="metric-value" id="precip">--</span></span></div>
+        <div class="metric"><span class="metric-icon" id="precip-icon">☂</span><span><span class="metric-label" id="precip-label">Precipitation</span><span class="metric-value" id="precip">--</span></span></div>
         <div class="metric"><span class="metric-icon">♢</span><span><span class="metric-label">Humidity</span><span class="metric-value" id="humidity">--</span></span></div>
         <div class="metric"><span class="metric-icon">◷</span><span><span class="metric-label">Pressure</span><span class="metric-value" id="pressure">--</span></span></div>
       </section>
@@ -605,6 +605,8 @@
     high: document.getElementById('high'),
     low: document.getElementById('low'),
     feels: document.getElementById('feels'),
+    precipIcon: document.getElementById('precip-icon'),
+    precipLabel: document.getElementById('precip-label'),
     precip: document.getElementById('precip'),
     humidity: document.getElementById('humidity'),
     pressure: document.getElementById('pressure'),
@@ -687,7 +689,16 @@
     els.low.textContent = `L: ${fmtTemp(lo)}`;
     els.feels.textContent = fmtTemp(current.apparent_temperature);
     document.getElementById('wind-meta').innerHTML = `<span class="wind-compass" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}"><span class="wind-arrow"></span></span><span>${Math.round(current.wind_speed_10m)} km/h · ${heading(current.wind_direction_10m)}</span>`;
-    els.precip.textContent = `${(Number(current.precipitation) || 0).toFixed(1)} mm/hr`;
+    const precipitation = Number(current.precipitation) || 0;
+    if (precipitation > 0) {
+      els.precipIcon.textContent = '☂';
+      els.precipLabel.textContent = 'Precipitation';
+      els.precip.textContent = `${precipitation.toFixed(1)} mm/hr`;
+    } else {
+      els.precipIcon.textContent = '☀';
+      els.precipLabel.textContent = 'UV Index';
+      els.precip.textContent = Number.isFinite(current.uv_index) ? current.uv_index.toFixed(1) : '--';
+    }
     els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
     els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;
 
@@ -722,7 +733,7 @@
     const params = new URLSearchParams({
       latitude: loc.latitude,
       longitude: loc.longitude,
-      current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
+      current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,uv_index,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
       hourly: 'temperature_2m,weather_code',
       daily: 'weather_code,temperature_2m_max,temperature_2m_min',
       timezone: 'auto',

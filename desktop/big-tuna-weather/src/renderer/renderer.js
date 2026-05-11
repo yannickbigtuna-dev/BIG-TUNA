@@ -14,6 +14,8 @@ const els = {
   low: document.getElementById('low'),
   feels: document.getElementById('feels'),
   windMeta: document.getElementById('wind-meta'),
+  precipIcon: document.getElementById('precip-icon'),
+  precipLabel: document.getElementById('precip-label'),
   precip: document.getElementById('precip'),
   humidity: document.getElementById('humidity'),
   pressure: document.getElementById('pressure'),
@@ -95,7 +97,16 @@ function render(state) {
   els.low.textContent = `L: ${fmtTemp(lo)}`;
   els.feels.textContent = fmtTemp(current.apparent_temperature);
   els.windMeta.innerHTML = `<span class="wind-compass" style="${windArrowStyle(current.wind_speed_10m, current.wind_direction_10m)}"><span class="wind-arrow"></span></span><span>${Math.round(current.wind_speed_10m)} km/h · ${heading(current.wind_direction_10m)}</span>`;
-  els.precip.textContent = `${(Number(current.precipitation) || 0).toFixed(1)} mm/hr`;
+  const precipitation = Number(current.precipitation) || 0;
+  if (precipitation > 0) {
+    els.precipIcon.textContent = '☂';
+    els.precipLabel.textContent = 'Precipitation';
+    els.precip.textContent = `${precipitation.toFixed(1)} mm/hr`;
+  } else {
+    els.precipIcon.textContent = '☀';
+    els.precipLabel.textContent = 'UV Index';
+    els.precip.textContent = Number.isFinite(current.uv_index) ? current.uv_index.toFixed(1) : '--';
+  }
   els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
   els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;
   els.updated.textContent = 'Updated now';
