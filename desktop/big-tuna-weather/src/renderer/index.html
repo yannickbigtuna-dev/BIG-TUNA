@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BIG TUNA Weather</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="titlebar">
+    <div class="traffic">
+      <button id="hide-btn" class="traffic-dot" type="button" aria-label="Hide panel"></button>
+    </div>
+    <div class="title">BIG TUNA Weather</div>
+    <button id="open-main" type="button">Open Weather</button>
+  </header>
+  <main>
+    <aside>
+      <form id="search-form" class="search">
+        <input id="city-input" type="search" placeholder="Search city" autocomplete="off" spellcheck="false">
+        <button type="submit" aria-label="Search">⌕</button>
+      </form>
+      <div id="locations" class="locations"></div>
+    </aside>
+    <section class="weather">
+      <div class="hero">
+        <div>
+          <div id="place" class="place">Weather</div>
+          <div id="condition" class="condition">Loading forecast...</div>
+        </div>
+        <div id="temp" class="temp">--°</div>
+      </div>
+      <section class="metrics">
+        <div><span>Feels</span><strong id="feels">--°</strong></div>
+        <div><span>Wind</span><strong id="wind">--</strong></div>
+        <div><span>Humidity</span><strong id="humidity">--</strong></div>
+      </section>
+      <section class="hourly" id="hourly"></section>
+      <section class="daily" id="daily"></section>
+      <div id="message" class="message"></div>
+    </section>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>

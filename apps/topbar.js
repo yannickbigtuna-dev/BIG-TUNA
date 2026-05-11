@@ -17,6 +17,7 @@ const Topbar = (() => {
     { name: 'Lights',           href: '/lights/',             icon: '💡' },
     { name: 'Terminal',         href: '/terminal/',           icon: '🖥' },
   ];
+  APPS.splice(5, 0, { name: 'Weather', href: '/weather/', icon: '\u2600' });
 
   let _leftQueue   = [];   // elements queued before init
   let _titleText   = null; // title queued before init

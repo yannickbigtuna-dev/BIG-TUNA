@@ -1,0 +1,51 @@
+name: Build Weather Mac App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-weather-mac.yml'
+      - 'desktop/big-tuna-weather/**'
+      - 'apps/weather/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/big-tuna-weather/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: desktop/big-tuna-weather
+        run: npm ci
+
+      - name: Package unsigned macOS app
+        working-directory: desktop/big-tuna-weather
+        run: npm run package:mac
+
+      - name: Publish release download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip_path="apps/weather/downloads/big-tuna-weather-mac.zip"
+          if gh release view weather-mac-latest >/dev/null 2>&1; then
+            gh release upload weather-mac-latest "$zip_path" --clobber
+          else
+            gh release create weather-mac-latest "$zip_path" \
+              --title "BIG TUNA Weather macOS app" \
+              --notes "Unsigned macOS build of the BIG TUNA Weather desktop app and menu bar widget."
+          fi

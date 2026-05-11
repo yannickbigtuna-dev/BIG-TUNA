@@ -29,6 +29,17 @@
     right: 28px;
     text-align: right;
     user-select: none;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 8px;
+    padding: 4px 5px;
+    transition: background 0.18s, transform 0.18s;
+  }
+  #temp-widget:hover,
+  #temp-widget:focus-visible {
+    background: rgba(88, 166, 255, 0.08);
+    outline: none;
+    transform: translateY(-1px);
   }
   #temp-value {
     font-size: 2.4rem;
@@ -477,10 +488,10 @@
 
 
 <!-- Temperature widget -->
-<div id="temp-widget">
+<a id="temp-widget" href="/weather/" aria-label="Open Weather app">
   <div id="temp-value">—</div>
   <div id="temp-label">feels like</div>
-</div>
+</a>
 
 <div class="logo">BIG TUNA</div>
 <div class="date-display" id="date-display"></div>
@@ -621,6 +632,52 @@
       () => {}
     );
   }
+
+  const HALIFAX_WEATHER = { lat: 44.6488, lon: -63.5752 };
+
+  async function fetchHomepageTemp(lat, lon) {
+    const params = new URLSearchParams({
+      latitude: lat,
+      longitude: lon,
+      current: 'apparent_temperature',
+      temperature_unit: 'celsius',
+    });
+    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!response.ok) throw new Error('Weather request failed');
+    const data = await response.json();
+    const temp = data && data.current && data.current.apparent_temperature;
+    if (!Number.isFinite(temp)) throw new Error('Weather unavailable');
+    document.getElementById('temp-value').textContent = `${Math.round(temp)}\u00b0`;
+  }
+
+  function getBrowserPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation unavailable'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 7000,
+        maximumAge: 600000,
+      });
+    });
+  }
+
+  async function loadHomepageTemp() {
+    try {
+      const pos = await getBrowserPosition();
+      await fetchHomepageTemp(pos.coords.latitude, pos.coords.longitude);
+    } catch {
+      try {
+        await fetchHomepageTemp(HALIFAX_WEATHER.lat, HALIFAX_WEATHER.lon);
+      } catch {
+        document.getElementById('temp-value').textContent = '0\u00b0';
+      }
+    }
+  }
+
+  loadHomepageTemp();
 </script>
 
 <button id="minimal-btn" type="button" aria-label="Enter minimal mode" aria-pressed="false">Min</button>
@@ -633,6 +690,7 @@
   <button id="downloads-btn" type="button" aria-haspopup="true" aria-expanded="false">downloads</button>
   <div id="downloads-list" role="menu" aria-label="Available downloads">
     <a class="download-item" role="menuitem" href="https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip">Lights app</a>
+    <a class="download-item" role="menuitem" href="https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/weather-mac-latest/big-tuna-weather-mac.zip">Weather app</a>
   </div>
 </div>
 

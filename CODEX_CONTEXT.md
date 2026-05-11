@@ -215,7 +215,8 @@ Homepage:
 - File: `apps/index.html`
 - Custom launcher page with clock, weather/temperature widget, and app cards.
 - Has a persisted minimal mode toggled by the bottom-left button; minimal mode hides homepage chrome, app cards, and downloads menu, leaving BIG TUNA, date, clock, lights link, and the exit button.
-- The bottom-right homepage downloads menu lists release-asset downloads, currently only the Lights app zip.
+- The bottom-right homepage downloads menu lists release-asset downloads for the Lights and Weather macOS apps.
+- The top-right homepage weather widget links to `/weather/` and displays Open-Meteo apparent temperature. It tries browser geolocation first and falls back to Halifax coordinates (`44.6488,-63.5752`) when geolocation is denied, unavailable, times out, or the first weather request fails.
 - Adding an app may require updating both homepage cards and `topbar.js`, even though the static server can auto-index folders.
 
 Current app folders:
@@ -227,6 +228,7 @@ Current app folders:
 - `apps/psych-sheet/`
 - `apps/quiz-app/`
 - `apps/terminal/`
+- `apps/weather/`
 - `apps/workout-timer/`
 - `apps/world-map/`
 
@@ -236,6 +238,7 @@ Desktop app source:
 - It defaults to `https://yannickmorgans.ca`, logs in through `/api/auth/login`, stores only the returned session token and username in Electron `userData`, and controls `/api/lights` as username `yannick`.
 - Its macOS status item uses a template bulb icon plus a text fallback (`●` on, `○` off) so it remains visible on light and dark menu bars; clicking it directly toggles the light and does not open a menu.
 - Packaging command: `cd desktop/big-tuna-lights && npm install && npm run package:mac`. This must run on macOS so Electron framework symlinks are preserved. The `.github/workflows/build-lights-mac.yml` workflow builds the unsigned zip and publishes it as the `lights-mac-latest` GitHub Release asset.
+- `desktop/big-tuna-weather/` contains the Electron macOS Weather app. It uses Open-Meteo directly, stores saved locations and the selected location in Electron `userData/weather.json`, includes a normal Dock/window app plus a macOS tray widget title in the compact `condition temperature wind` style, and needs no BIG TUNA auth. Packaging command: `cd desktop/big-tuna-weather && npm install && npm run package:mac`; the `.github/workflows/build-weather-mac.yml` workflow builds the unsigned zip and publishes it as the `weather-mac-latest` GitHub Release asset.
 
 ## Data Storage Map
 
@@ -409,6 +412,15 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Shows a small device-poll indicator based on whether `/api/lights/device` has been called in the last 5 seconds.
 - ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, and keep last known relay state if the website is temporarily unreachable. The device endpoint currently inverts the stored website state before returning `on` to work around reversed relay behavior.
 - The unsigned macOS desktop controller zip is linked from the homepage downloads menu at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip`. The app zip is too large for GitHub's normal per-file repository limit, so it is hosted as a release asset rather than committed under `apps/`.
+
+`weather`:
+
+- Public static app at `/weather/`.
+- Loads `topbar.js` and sets title `Weather`.
+- Uses Open-Meteo forecast and geocoding APIs directly from the browser; no API key or BIG TUNA auth is required.
+- Uses browser geolocation on first load when available, otherwise falls back to Halifax. Saved searched cities and last selected location are stored in `localStorage` under `weather_locations` and `weather_last_location`.
+- The website version renders only the Monterey-style main weather window: translucent panel, saved-location sidebar, current temperature, metric cards, hourly strip, and 7-day forecast rows. The macOS menu bar widget is only in `desktop/big-tuna-weather/`.
+- The homepage downloads menu links the unsigned macOS zip at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/weather-mac-latest/big-tuna-weather-mac.zip`.
 
 ## Coding Standards
 

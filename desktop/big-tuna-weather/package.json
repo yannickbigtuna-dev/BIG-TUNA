@@ -1,0 +1,15 @@
+{
+  "name": "big-tuna-weather",
+  "version": "1.0.0",
+  "description": "BIG TUNA Weather macOS app and menu bar widget",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "package:mac": "node scripts/package-mac.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.0",
+    "electron": "^42.0.1"
+  }
+}
