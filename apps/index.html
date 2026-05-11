@@ -219,19 +219,68 @@
   .card:nth-child(6) { --accent: #c297ff; --accent-soft: rgba(194,151,255,.14); }
   .card:nth-child(7) { --accent: #f2a7d8; --accent-soft: rgba(242,167,216,.14); }
 
-  #dev-btn {
+  #downloads-menu {
     position: fixed;
     bottom: 18px;
     right: 82px;
+    display: grid;
+    justify-items: end;
+  }
+
+  #downloads-btn {
     font-family: monospace;
+    background: transparent;
+    border: 0;
+    padding: 0;
     font-size: 11px;
     color: #2a2a2a;
-    text-decoration: none;
     letter-spacing: 0.05em;
     transition: color 0.2s;
     user-select: none;
+    cursor: pointer;
   }
-  #dev-btn:hover { color: #555; }
+  #downloads-btn:hover,
+  #downloads-btn:focus-visible {
+    color: #555;
+    outline: none;
+  }
+
+  #downloads-list {
+    position: absolute;
+    right: 0;
+    bottom: 22px;
+    min-width: 178px;
+    display: none;
+    padding: 7px;
+    background: rgba(12, 12, 12, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+    text-align: left;
+  }
+
+  #downloads-menu.is-open #downloads-list {
+    display: grid;
+    gap: 4px;
+  }
+
+  .download-item {
+    display: block;
+    padding: 8px 9px;
+    border-radius: 6px;
+    color: #9ba6b3;
+    font-size: 11px;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .download-item:hover,
+  .download-item:focus-visible {
+    color: #f2f6fb;
+    background: rgba(88, 166, 255, 0.12);
+    outline: none;
+  }
 
   #minimal-btn {
     position: fixed;
@@ -268,7 +317,7 @@
   body.minimal-mode [data-auth-widget],
   body.minimal-mode #temp-widget,
   body.minimal-mode .grid,
-  body.minimal-mode #dev-btn {
+  body.minimal-mode #downloads-menu {
     display: none !important;
   }
   body.minimal-mode .logo {
@@ -392,7 +441,7 @@
       line-height: 1.15;
     }
 
-    #dev-btn {
+    #downloads-menu {
       right: 76px;
       bottom: calc(env(safe-area-inset-bottom, 0px) + 21px);
     }
@@ -580,7 +629,12 @@
     <path d="M9 21h6v-1.5H9V21Zm3-20C8.14 1 5 4.08 5 7.86c0 2.24 1.11 4.23 2.82 5.49.72.53 1.18 1.35 1.18 2.24V17h6v-1.41c0-.89.46-1.71 1.18-2.24A6.78 6.78 0 0 0 19 7.86C19 4.08 15.86 1 12 1Zm2.99 10.74A4.75 4.75 0 0 0 13 15.5h-2a4.75 4.75 0 0 0-1.99-3.76A4.77 4.77 0 0 1 7 7.86C7 5.18 9.24 3 12 3s5 2.18 5 4.86c0 1.54-.74 2.99-2.01 3.88Z"/>
   </svg>
 </a>
-<a href="/terminal/" id="dev-btn">&gt;_ dev</a>
+<div id="downloads-menu">
+  <button id="downloads-btn" type="button" aria-haspopup="true" aria-expanded="false">downloads</button>
+  <div id="downloads-list" role="menu" aria-label="Available downloads">
+    <a class="download-item" role="menuitem" href="https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip">Lights app</a>
+  </div>
+</div>
 
 <script src="/auth.js"></script>
 <script>
@@ -588,6 +642,24 @@
   setMinimalMode(document.body.classList.contains('minimal-mode'));
   minimalBtn.addEventListener('click', () => {
     setMinimalMode(!document.body.classList.contains('minimal-mode'));
+  });
+
+  const downloadsMenu = document.getElementById('downloads-menu');
+  const downloadsBtn = document.getElementById('downloads-btn');
+  const setDownloadsOpen = open => {
+    downloadsMenu.classList.toggle('is-open', open);
+    downloadsBtn.setAttribute('aria-expanded', String(open));
+  };
+
+  downloadsBtn.addEventListener('click', event => {
+    event.stopPropagation();
+    setDownloadsOpen(!downloadsMenu.classList.contains('is-open'));
+  });
+  document.addEventListener('click', event => {
+    if (!downloadsMenu.contains(event.target)) setDownloadsOpen(false);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') setDownloadsOpen(false);
   });
 </script>
 </body>

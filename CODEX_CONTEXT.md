@@ -214,7 +214,8 @@ Homepage:
 
 - File: `apps/index.html`
 - Custom launcher page with clock, weather/temperature widget, and app cards.
-- Has a persisted minimal mode toggled by the bottom-left button; minimal mode hides homepage chrome and app cards, leaving BIG TUNA, date, clock, lights link, and the exit button.
+- Has a persisted minimal mode toggled by the bottom-left button; minimal mode hides homepage chrome, app cards, and downloads menu, leaving BIG TUNA, date, clock, lights link, and the exit button.
+- The bottom-right homepage downloads menu lists release-asset downloads, currently only the Lights app zip.
 - Adding an app may require updating both homepage cards and `topbar.js`, even though the static server can auto-index folders.
 
 Current app folders:
@@ -407,7 +408,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Uses `/api/lights/events` SSE for near-instant same-page updates across open browsers, with 1-second `/api/lights` polling only as a fallback.
 - Shows a small device-poll indicator based on whether `/api/lights/device` has been called in the last 5 seconds.
 - ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, and keep last known relay state if the website is temporarily unreachable. The device endpoint currently inverts the stored website state before returning `on` to work around reversed relay behavior.
-- The bottom of the Lights page links to the unsigned macOS desktop controller zip at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip`. The app zip is too large for GitHub's normal per-file repository limit, so it is hosted as a release asset rather than committed under `apps/`.
+- The unsigned macOS desktop controller zip is linked from the homepage downloads menu at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip`. The app zip is too large for GitHub's normal per-file repository limit, so it is hosted as a release asset rather than committed under `apps/`.
 
 ## Coding Standards
 
