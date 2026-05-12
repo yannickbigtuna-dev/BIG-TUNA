@@ -111,6 +111,24 @@ function closeDetail(type, value, element, afterClose) {
   }, DETAIL_ANIMATION_MS);
 }
 
+function closeOtherDetails(type, keepValue) {
+  activeDetails
+    .filter(id => id.startsWith(`${type}:`) && id !== detailId(type, keepValue))
+    .forEach(id => {
+      const value = Number(id.split(':')[1]);
+      const panel = document.querySelector(`[data-detail-id="${id}"]`);
+      const trigger = type === 'hour'
+        ? els.hourly.querySelector(`[data-hour-index="${value}"]`)
+        : els.daily.querySelector(`[data-day-index="${value}"]`);
+      activeDetails = activeDetails.filter(item => item !== id);
+      if (trigger) trigger.classList.remove('is-selected');
+      if (panel) {
+        panel.classList.add('is-closing');
+        window.setTimeout(() => panel.remove(), DETAIL_ANIMATION_MS);
+      }
+    });
+}
+
 function metricKeyForCard(card) {
   return card.dataset.metricKey === 'precip' ? detailMetricKey() : card.dataset.metricKey;
 }
@@ -359,11 +377,15 @@ document.querySelectorAll('.metric').forEach(card => {
       const detail = card.querySelector('.metric-detail');
       closeDetail('metric', key, detail, () => {
         if (detail) detail.remove();
+        card.classList.remove('is-expanded');
       });
-      card.classList.remove('is-selected', 'is-expanded');
+      card.classList.remove('is-selected');
     } else {
       toggleDetail('metric', key);
-      render(currentState);
+      card.classList.add('is-selected', 'is-expanded');
+      if (!card.querySelector('.metric-detail')) {
+        card.insertAdjacentHTML('beforeend', `<div class="metric-detail" data-detail-id="${detailId('metric', key)}">${renderMetricDetail(key)}</div>`);
+      }
     }
   };
   card.addEventListener('click', activate);
@@ -386,8 +408,12 @@ els.hourly.addEventListener('click', event => {
     });
     btn.classList.remove('is-selected');
   } else {
+    closeOtherDetails('hour', index);
     toggleDetail('hour', index);
-    render(currentState);
+    if (!els.hourDetails.querySelector(`[data-detail-id="${detailId('hour', index)}"]`)) {
+      els.hourDetails.insertAdjacentHTML('beforeend', renderHourDetail(index));
+    }
+    btn.classList.add('is-selected');
   }
 });
 
@@ -403,6 +429,7 @@ els.daily.addEventListener('click', event => {
     });
     btn.classList.remove('is-selected');
   } else {
+    closeOtherDetails('day', index);
     toggleDetail('day', index);
     if (entry && !panel) entry.insertAdjacentHTML('beforeend', renderDayDetail(index));
     btn.classList.add('is-selected');

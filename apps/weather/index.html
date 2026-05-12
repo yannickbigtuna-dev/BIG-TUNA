@@ -712,7 +712,7 @@
   }
   .chev {
     position: absolute;
-    top: 50%;
+    top: 86px;
     width: 32px;
     height: 32px;
     display: grid;
@@ -1041,6 +1041,24 @@
       if (typeof afterClose === 'function') afterClose();
     }, DETAIL_ANIMATION_MS);
   }
+  function closeOtherDetails(type, keepValue) {
+    state.activeDetails
+      .filter(id => id.startsWith(`${type}:`) && id !== detailId(type, keepValue))
+      .forEach(id => {
+        const value = Number(id.split(':')[1]);
+        const selector = `[data-detail-id="${id}"]`;
+        const panel = document.querySelector(selector);
+        const trigger = type === 'hour'
+          ? els.hourly.querySelector(`[data-hour-index="${value}"]`)
+          : els.daily.querySelector(`[data-day-index="${value}"]`);
+        state.activeDetails = state.activeDetails.filter(item => item !== id);
+        if (trigger) trigger.classList.remove('is-selected');
+        if (panel) {
+          panel.classList.add('is-closing');
+          window.setTimeout(() => panel.remove(), DETAIL_ANIMATION_MS);
+        }
+      });
+  }
   function pruneOpenDetails(data) {
     if (!data) {
       state.activeDetails = [];
@@ -1195,7 +1213,7 @@
           <span class="range"><span style="left:${left}%;width:${width}%"></span><i style="left:${dot}%"></i></span>
           <span class="high">${fmtTemp(max)}</span>
         </button>
-        ${selected ? `<div class="detail-panel day-detail-panel">${renderDayDetail(index)}</div>` : ''}
+        ${selected ? `<div class="detail-panel day-detail-panel" data-detail-id="${detailId('day', index)}">${renderDayDetail(index)}</div>` : ''}
       </div>`;
     }).join('');
     renderDetail();
@@ -1643,9 +1661,10 @@
         const detail = card.querySelector('.metric-detail');
         closeDetail('metric', key, detail, () => {
           if (detail) detail.remove();
+          card.classList.remove('is-expanded');
           renderDetail();
         });
-        card.classList.remove('is-selected', 'is-expanded');
+        card.classList.remove('is-selected');
       } else {
         toggleDetail('metric', key);
         renderDetail();
@@ -1671,6 +1690,16 @@
       renderDetail();
     }
   });
+  document.querySelector('.chev.left').addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    els.hourly.scrollBy({ left: -Math.max(120, els.hourly.clientWidth * 0.75), behavior: 'smooth' });
+  });
+  document.querySelector('.chev.right').addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    els.hourly.scrollBy({ left: Math.max(120, els.hourly.clientWidth * 0.75), behavior: 'smooth' });
+  });
   els.hourly.addEventListener('click', event => {
     const btn = event.target.closest('.hour');
     if (!btn) return;
@@ -1683,6 +1712,7 @@
       });
       btn.classList.remove('is-selected');
     } else {
+      closeOtherDetails('hour', index);
       toggleDetail('hour', index);
       renderDetail();
     }
@@ -1699,8 +1729,9 @@
       });
       btn.classList.remove('is-selected');
     } else {
+      closeOtherDetails('day', index);
       toggleDetail('day', index);
-      if (entry && !panel) entry.insertAdjacentHTML('beforeend', `<div class="detail-panel day-detail-panel">${renderDayDetail(index)}</div>`);
+      if (entry && !panel) entry.insertAdjacentHTML('beforeend', `<div class="detail-panel day-detail-panel" data-detail-id="${detailId('day', index)}">${renderDayDetail(index)}</div>`);
       btn.classList.add('is-selected');
     }
   });
