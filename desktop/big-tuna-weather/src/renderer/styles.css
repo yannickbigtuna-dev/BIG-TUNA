@@ -306,7 +306,10 @@ html, body {
   margin-top: 4px;
   overflow: hidden;
   transform-origin: top;
-  animation: metricDetailSlideOpen 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: metricDetailSlideOpen 820ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.metric-detail.is-closing {
+  animation: metricDetailSlideClose 820ms cubic-bezier(0.7, 0, 0.84, 0) both;
 }
 .metric-detail > .detail-panel {
   animation: none;
@@ -321,7 +324,11 @@ html, body {
   background: rgba(255,255,255,0.54);
   box-shadow: var(--card-shadow);
   transform-origin: top;
-  animation: detailSlideOpen 540ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: detailSlideOpen 820ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.detail-panel.is-closing {
+  animation: detailSlideClose 820ms cubic-bezier(0.7, 0, 0.84, 0) both;
+  pointer-events: none;
 }
 @keyframes detailSlideOpen {
   from {
@@ -337,12 +344,40 @@ html, body {
     transform: translateY(0);
   }
 }
+@keyframes detailSlideClose {
+  from {
+    max-height: 720px;
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 14px);
+    transform: translateY(0);
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+    clip-path: inset(0 0 100% 0 round 14px);
+    transform: translateY(-8px);
+  }
+}
 @keyframes metricCardOpen {
   from {
     transform: translateY(-3px);
   }
   to {
     transform: translateY(0);
+  }
+}
+@keyframes metricDetailSlideClose {
+  from {
+    max-height: 620px;
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 12px);
+    transform: translateY(0);
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+    clip-path: inset(0 0 100% 0 round 12px);
+    transform: translateY(-6px);
   }
 }
 @keyframes metricDetailSlideOpen {

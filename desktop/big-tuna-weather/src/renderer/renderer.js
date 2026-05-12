@@ -3,6 +3,7 @@ const mode = new URLSearchParams(location.search).get('mode') || 'main';
 document.body.classList.toggle('panel', mode === 'panel');
 let currentState = null;
 let activeDetails = [];
+const DETAIL_ANIMATION_MS = 820;
 
 const els = {
   form: document.getElementById('search-form'),
@@ -100,6 +101,16 @@ function toggleDetail(type, value) {
     : [...activeDetails, id];
 }
 
+function closeDetail(type, value, element, afterClose) {
+  const id = detailId(type, value);
+  if (!activeDetails.includes(id)) return;
+  if (element) element.classList.add('is-closing');
+  window.setTimeout(() => {
+    activeDetails = activeDetails.filter(item => item !== id);
+    if (typeof afterClose === 'function') afterClose();
+  }, DETAIL_ANIMATION_MS);
+}
+
 function metricKeyForCard(card) {
   return card.dataset.metricKey === 'precip' ? detailMetricKey() : card.dataset.metricKey;
 }
@@ -191,7 +202,7 @@ function renderMetricDetail(key) {
 function renderHourDetail(index) {
   const data = currentState.weather;
   const meta = weatherMeta(data.hourly.weather_code[index]);
-  return `<div class="detail-panel"><div class="hour-detail-head"><div><div class="detail-date">${fmtDateTime(data.hourly.time[index])}</div><h3 class="detail-title">${meta[1]}</h3></div><div class="detail-temp">${fmtTemp(data.hourly.temperature_2m[index])}</div><div class="detail-icon">${meta[0]}</div></div>
+  return `<div class="detail-panel" data-detail-id="${detailId('hour', index)}"><div class="hour-detail-head"><div><div class="detail-date">${fmtDateTime(data.hourly.time[index])}</div><h3 class="detail-title">${meta[1]}</h3></div><div class="detail-temp">${fmtTemp(data.hourly.temperature_2m[index])}</div><div class="detail-icon">${meta[0]}</div></div>
     <div class="detail-grid">
       ${detailTile('Feels Like', metricValue('feels', index))}
       ${detailTile('Precipitation', fmtNumber(data.hourly.precipitation?.[index], ' mm/hr', 1))}
@@ -212,7 +223,7 @@ function renderDayDetail(index) {
     const hMeta = weatherMeta(data.hourly.weather_code[item.hourIndex]);
     return `<div class="day-hour"><span>${fmtTime(item.time)}</span><span>${hMeta[0]}</span><span>${fmtTemp(data.hourly.temperature_2m[item.hourIndex])}</span></div>`;
   }).join('');
-  return `<div class="detail-panel day-detail-panel"><div class="day-detail-head"><div><div class="detail-date">${fmtFullDate(day)}</div><h3 class="detail-title">${meta[1]}</h3></div><div class="detail-temp">${fmtTemp(data.daily.temperature_2m_max[index])} / ${fmtTemp(data.daily.temperature_2m_min[index])}</div><div class="detail-icon">${meta[0]}</div></div>
+  return `<div class="detail-panel day-detail-panel" data-detail-id="${detailId('day', index)}"><div class="day-detail-head"><div><div class="detail-date">${fmtFullDate(day)}</div><h3 class="detail-title">${meta[1]}</h3></div><div class="detail-temp">${fmtTemp(data.daily.temperature_2m_max[index])} / ${fmtTemp(data.daily.temperature_2m_min[index])}</div><div class="detail-icon">${meta[0]}</div></div>
     <p class="day-summary">A compact day view with the key forecast details.</p>
     <div class="detail-grid">
       ${detailTile('Feels Like High', fmtTemp(data.daily.apparent_temperature_max?.[index]))}
@@ -309,8 +320,11 @@ function render(state) {
     card.classList.toggle('is-selected', selected);
     card.classList.toggle('is-expanded', selected);
     const existing = card.querySelector('.metric-detail');
-    if (existing) existing.remove();
-    if (selected) card.insertAdjacentHTML('beforeend', `<div class="metric-detail">${renderMetricDetail(key)}</div>`);
+    if (selected) {
+      if (!existing) card.insertAdjacentHTML('beforeend', `<div class="metric-detail" data-detail-id="${detailId('metric', key)}">${renderMetricDetail(key)}</div>`);
+    } else if (existing && !existing.classList.contains('is-closing')) {
+      existing.remove();
+    }
   });
   els.message.textContent = '';
 }
@@ -340,8 +354,17 @@ document.querySelectorAll('.metric').forEach(card => {
   const activate = event => {
     if (event && event.target.closest('.metric-detail')) return;
     if (!currentState) return;
-    toggleDetail('metric', metricKeyForCard(card));
-    render(currentState);
+    const key = metricKeyForCard(card);
+    if (isDetailOpen('metric', key)) {
+      const detail = card.querySelector('.metric-detail');
+      closeDetail('metric', key, detail, () => {
+        if (detail) detail.remove();
+      });
+      card.classList.remove('is-selected', 'is-expanded');
+    } else {
+      toggleDetail('metric', key);
+      render(currentState);
+    }
   };
   card.addEventListener('click', activate);
   card.addEventListener('keydown', event => {
@@ -355,15 +378,35 @@ document.querySelectorAll('.metric').forEach(card => {
 els.hourly.addEventListener('click', event => {
   const btn = event.target.closest('.hour');
   if (!btn || !currentState) return;
-  toggleDetail('hour', Number(btn.dataset.hourIndex));
-  render(currentState);
+  const index = Number(btn.dataset.hourIndex);
+  if (isDetailOpen('hour', index)) {
+    const panel = els.hourDetails.querySelector(`[data-detail-id="${detailId('hour', index)}"]`);
+    closeDetail('hour', index, panel, () => {
+      if (panel) panel.remove();
+    });
+    btn.classList.remove('is-selected');
+  } else {
+    toggleDetail('hour', index);
+    render(currentState);
+  }
 });
 
 els.daily.addEventListener('click', event => {
   const btn = event.target.closest('.day');
   if (!btn || !currentState) return;
-  toggleDetail('day', Number(btn.dataset.dayIndex));
-  render(currentState);
+  const index = Number(btn.dataset.dayIndex);
+  const entry = btn.closest('.day-entry');
+  const panel = entry && entry.querySelector('.day-detail-panel');
+  if (isDetailOpen('day', index)) {
+    closeDetail('day', index, panel, () => {
+      if (panel) panel.remove();
+    });
+    btn.classList.remove('is-selected');
+  } else {
+    toggleDetail('day', index);
+    if (entry && !panel) entry.insertAdjacentHTML('beforeend', renderDayDetail(index));
+    btn.classList.add('is-selected');
+  }
 });
 
 els.hide.addEventListener('click', () => api.hidePanel());
