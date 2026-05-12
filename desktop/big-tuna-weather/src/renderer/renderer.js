@@ -22,6 +22,7 @@ const els = {
   precip: document.getElementById('precip'),
   humidity: document.getElementById('humidity'),
   pressure: document.getElementById('pressure'),
+  metricDetails: document.getElementById('metric-detail-area'),
   hourly: document.getElementById('hourly'),
   hourDetails: document.getElementById('hour-detail-stack'),
   daily: document.getElementById('daily'),
@@ -96,6 +97,12 @@ function isDetailOpen(type, value) {
 
 function toggleDetail(type, value) {
   const id = detailId(type, value);
+  if (type === 'metric') {
+    activeDetails = activeDetails.includes(id)
+      ? activeDetails.filter(item => item !== id)
+      : [...activeDetails.filter(item => !item.startsWith('metric:')), id];
+    return;
+  }
   activeDetails = activeDetails.includes(id)
     ? activeDetails.filter(item => item !== id)
     : [...activeDetails, id];
@@ -336,14 +343,18 @@ function render(state) {
     const key = metricKeyForCard(card);
     const selected = isDetailOpen('metric', key);
     card.classList.toggle('is-selected', selected);
-    card.classList.toggle('is-expanded', selected);
-    const existing = card.querySelector('.metric-detail');
-    if (selected) {
-      if (!existing) card.insertAdjacentHTML('beforeend', `<div class="metric-detail" data-detail-id="${detailId('metric', key)}">${renderMetricDetail(key)}</div>`);
-    } else if (existing && !existing.classList.contains('is-closing')) {
-      existing.remove();
-    }
   });
+  const metricId = activeDetails.find(id => id.startsWith('metric:'));
+  if (metricId) {
+    const key = metricId.split(':')[1];
+    if (els.metricDetails.dataset.detailId !== metricId || !els.metricDetails.innerHTML.trim()) {
+      els.metricDetails.dataset.detailId = metricId;
+      els.metricDetails.innerHTML = renderMetricDetail(key).replace('<div class="detail-panel"', `<div class="detail-panel metric-detail-panel" data-detail-id="${metricId}"`);
+    }
+  } else if (!els.metricDetails.classList.contains('is-closing')) {
+    els.metricDetails.dataset.detailId = '';
+    els.metricDetails.innerHTML = '';
+  }
   els.message.textContent = '';
 }
 
@@ -370,22 +381,18 @@ els.form.addEventListener('submit', async event => {
 
 document.querySelectorAll('.metric').forEach(card => {
   const activate = event => {
-    if (event && event.target.closest('.metric-detail')) return;
     if (!currentState) return;
     const key = metricKeyForCard(card);
     if (isDetailOpen('metric', key)) {
-      const detail = card.querySelector('.metric-detail');
+      const detail = els.metricDetails.querySelector(`[data-detail-id="${detailId('metric', key)}"]`);
       closeDetail('metric', key, detail, () => {
-        if (detail) detail.remove();
-        card.classList.remove('is-expanded');
+        els.metricDetails.dataset.detailId = '';
+        els.metricDetails.innerHTML = '';
       });
       card.classList.remove('is-selected');
     } else {
       toggleDetail('metric', key);
-      card.classList.add('is-selected', 'is-expanded');
-      if (!card.querySelector('.metric-detail')) {
-        card.insertAdjacentHTML('beforeend', `<div class="metric-detail" data-detail-id="${detailId('metric', key)}">${renderMetricDetail(key)}</div>`);
-      }
+      render(currentState);
     }
   };
   card.addEventListener('click', activate);

@@ -864,6 +864,189 @@
     .day-condition { display: none; }
     .day { grid-template-columns: 58px 32px 40px 1fr 38px; }
   }
+  /* Monterey polish refinements */
+  :root {
+    --glass-line: rgba(112, 121, 138, 0.14);
+    --native-shadow: 0 18px 46px rgba(55, 65, 84, 0.14), inset 0 1px 0 rgba(255,255,255,0.82);
+    --soft-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .sidebar {
+    background: linear-gradient(180deg, rgba(244,246,250,0.64), rgba(235,239,246,0.5));
+    backdrop-filter: blur(30px) saturate(1.18);
+    -webkit-backdrop-filter: blur(30px) saturate(1.18);
+  }
+  .search::before {
+    content: "";
+    left: 13px;
+    width: 13px;
+    height: 13px;
+    border: 2px solid rgba(98, 107, 122, 0.7);
+    border-radius: 50%;
+  }
+  .search::after {
+    content: "";
+    position: absolute;
+    left: 25px;
+    top: 25px;
+    width: 7px;
+    height: 2px;
+    border-radius: 999px;
+    background: rgba(98, 107, 122, 0.7);
+    transform: rotate(45deg);
+    pointer-events: none;
+  }
+  #city-input {
+    height: 36px;
+    border-radius: 9px;
+    background: rgba(231, 234, 240, 0.72);
+  }
+  .loc,
+  .metric,
+  .hour,
+  .day {
+    transition: background 160ms var(--soft-ease), box-shadow 160ms var(--soft-ease), transform 160ms var(--soft-ease);
+  }
+  .loc:hover,
+  .metric:hover { background: rgba(255,255,255,0.66); }
+  .loc:active,
+  .metric:active,
+  .hour:active,
+  .day:active { transform: scale(0.985); }
+  .content { padding: 30px 38px 26px; }
+  .hero {
+    min-height: 246px;
+    margin-bottom: 14px;
+    padding: 24px;
+    border: 1px solid var(--glass-line);
+    border-radius: 22px;
+    background:
+      radial-gradient(circle at 80% 18%, rgba(255, 218, 125, 0.42), transparent 24%),
+      linear-gradient(135deg, rgba(255,255,255,0.7), rgba(232,241,252,0.48));
+    box-shadow: var(--native-shadow);
+    backdrop-filter: blur(28px) saturate(1.12);
+    -webkit-backdrop-filter: blur(28px) saturate(1.12);
+  }
+  .place-row { margin-top: 0; }
+  .current-meta {
+    left: auto;
+    right: calc(48% + 34px);
+    top: auto;
+    bottom: 26px;
+    min-width: 104px;
+    padding: 9px 11px;
+    border: 1px solid rgba(98, 107, 122, 0.13);
+    border-radius: 16px;
+    background: rgba(255,255,255,0.46);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
+    font-size: 0.86rem;
+  }
+  .wind-compass {
+    width: min(var(--wind-size, 52px), 58px);
+    height: min(var(--wind-size, 52px), 58px);
+  }
+  .sky-card {
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 20px;
+    opacity: 1;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
+  }
+  .metrics {
+    grid-template-columns: repeat(4, minmax(128px, 1fr));
+    margin-bottom: 12px;
+  }
+  .metric {
+    min-height: 86px;
+    border-radius: 16px;
+    border-color: var(--glass-line);
+    box-shadow: var(--native-shadow);
+  }
+  .metric.is-expanded {
+    grid-column: auto;
+    animation: none;
+  }
+  .metric.is-selected {
+    border-color: rgba(61, 129, 246, 0.34);
+    background: linear-gradient(180deg, rgba(232, 242, 255, 0.86), rgba(255,255,255,0.62));
+    box-shadow: 0 14px 36px rgba(61, 129, 246, 0.14), inset 0 1px 0 rgba(255,255,255,0.82);
+  }
+  .metric-detail-area:empty { display: none; }
+  .metric-detail-panel {
+    margin: -2px 0 18px;
+    padding: 18px 20px 16px;
+  }
+  .detail-panel {
+    border-radius: 18px;
+    border-color: var(--glass-line);
+    background: rgba(255,255,255,0.58);
+    box-shadow: var(--native-shadow);
+    backdrop-filter: blur(24px) saturate(1.12);
+    -webkit-backdrop-filter: blur(24px) saturate(1.12);
+    animation-duration: 420ms;
+    animation-timing-function: var(--soft-ease);
+  }
+  .line-chart {
+    height: 176px;
+    padding: 8px;
+    border: 1px solid rgba(98, 107, 122, 0.1);
+    border-radius: 14px;
+    background: rgba(248, 250, 253, 0.62);
+  }
+  .hourly {
+    grid-auto-columns: minmax(86px, 1fr);
+    gap: 8px;
+    padding: 10px;
+    overflow-x: auto;
+    border-radius: 18px;
+    border-color: var(--glass-line);
+    background: rgba(255,255,255,0.42);
+    box-shadow: var(--native-shadow);
+  }
+  .hour {
+    border: 1px solid rgba(98, 107, 122, 0.08);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.38);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.58);
+  }
+  .hour:hover,
+  .hour.is-selected,
+  .day:hover,
+  .day.is-selected {
+    background: rgba(222, 237, 255, 0.58);
+    box-shadow: inset 0 0 0 1px rgba(61, 129, 246, 0.16);
+  }
+  .daily {
+    border-radius: 18px;
+    border-color: var(--glass-line);
+    background: rgba(255,255,255,0.44);
+    box-shadow: var(--native-shadow);
+  }
+  .day-entry { border-bottom-color: rgba(98, 107, 122, 0.09); }
+  .day {
+    min-height: 47px;
+    border-radius: 12px;
+  }
+  .range {
+    height: 6px;
+    background: rgba(171, 180, 194, 0.28);
+    box-shadow: inset 0 1px 1px rgba(64, 72, 86, 0.06);
+  }
+  .range span {
+    background: linear-gradient(90deg, rgba(123, 180, 255, 0.72), rgba(61, 129, 246, 0.88));
+    box-shadow: 0 1px 4px rgba(61, 129, 246, 0.22);
+  }
+  .range i {
+    width: 9px;
+    height: 9px;
+  }
+  @media (max-width: 960px) {
+    .hero { padding: 18px; grid-template-columns: 1fr; }
+    .sky-card { display: none; }
+    .current-meta { position: static; width: fit-content; margin-top: 16px; flex-direction: row; }
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .metrics { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -896,6 +1079,7 @@
         <div class="metric"><span class="metric-icon">♢</span><span><span class="metric-label">Humidity</span><span class="metric-value" id="humidity">--</span></span></div>
         <div class="metric"><span class="metric-icon">◷</span><span><span class="metric-label">Pressure</span><span class="metric-value" id="pressure">--</span></span></div>
       </section>
+      <section id="metric-detail-area" class="metric-detail-area" aria-live="polite"></section>
       <section class="hour-wrap" aria-label="Hourly forecast">
         <div class="section-title">Hourly Forecast</div>
         <button class="chev left" type="button" aria-label="Previous hours">‹</button>
@@ -948,6 +1132,7 @@
     precip: document.getElementById('precip'),
     humidity: document.getElementById('humidity'),
     pressure: document.getElementById('pressure'),
+    metricDetails: document.getElementById('metric-detail-area'),
     hourly: document.getElementById('hourly'),
     daily: document.getElementById('daily'),
     windDetails: document.getElementById('wind-detail-panel'),
@@ -1028,6 +1213,12 @@
   }
   function toggleDetail(type, value) {
     const id = detailId(type, value);
+    if (type === 'metric' && value !== 'wind') {
+      state.activeDetails = state.activeDetails.includes(id)
+        ? state.activeDetails.filter(item => item !== id)
+        : [...state.activeDetails.filter(item => !item.startsWith('metric:') || item === 'metric:wind'), id];
+      return;
+    }
     state.activeDetails = state.activeDetails.includes(id)
       ? state.activeDetails.filter(item => item !== id)
       : [...state.activeDetails, id];
@@ -1224,16 +1415,20 @@
       const cardKey = keys[index] === 'precip' ? detailMetricKey() : keys[index];
       const selected = isDetailOpen('metric', cardKey);
       card.classList.toggle('is-selected', selected);
-      card.classList.toggle('is-expanded', selected);
       card.setAttribute('role', 'button');
       card.setAttribute('tabindex', '0');
-      const existing = card.querySelector('.metric-detail');
-      if (selected && state.latestWeather) {
-        if (!existing) card.insertAdjacentHTML('beforeend', `<div class="metric-detail" data-detail-id="${detailId('metric', cardKey)}">${renderMetricDetail(cardKey)}</div>`);
-      } else if (existing && !existing.classList.contains('is-closing')) {
-        existing.remove();
-      }
     });
+    const metricId = state.activeDetails.find(id => id.startsWith('metric:') && id !== 'metric:wind');
+    if (metricId && state.latestWeather) {
+      const key = metricId.split(':')[1];
+      if (els.metricDetails.dataset.detailId !== metricId || !els.metricDetails.innerHTML.trim()) {
+        els.metricDetails.dataset.detailId = metricId;
+        els.metricDetails.innerHTML = `<div class="detail-panel metric-detail-panel" data-detail-id="${metricId}">${renderMetricDetail(key)}</div>`;
+      }
+    } else if (!els.metricDetails.classList.contains('is-closing')) {
+      els.metricDetails.dataset.detailId = '';
+      els.metricDetails.innerHTML = '';
+    }
     document.getElementById('wind-meta').classList.toggle('is-selected', isDetailOpen('metric', 'wind'));
   }
   function renderMetricDetail(key) {
@@ -1655,13 +1850,12 @@
   document.querySelectorAll('.metric').forEach((card, index) => {
     const keys = ['feels', 'precip', 'humidity', 'pressure'];
     const activate = event => {
-      if (event && event.target.closest('.metric-detail')) return;
       const key = keys[index] === 'precip' ? detailMetricKey() : keys[index];
       if (isDetailOpen('metric', key)) {
-        const detail = card.querySelector('.metric-detail');
+        const detail = els.metricDetails.querySelector(`[data-detail-id="${detailId('metric', key)}"]`);
         closeDetail('metric', key, detail, () => {
-          if (detail) detail.remove();
-          card.classList.remove('is-expanded');
+          els.metricDetails.dataset.detailId = '';
+          els.metricDetails.innerHTML = '';
           renderDetail();
         });
         card.classList.remove('is-selected');
