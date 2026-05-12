@@ -738,6 +738,14 @@ const COMBO_TERRITORIES = [
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────────────────────────────────────
+function getWorldFeatureId(feature) {
+  if (feature.id !== undefined && feature.id !== null) {
+    return String(feature.id).padStart(3, '0');
+  }
+  if (feature.properties?.name === 'Somaliland') return '706';
+  return '';
+}
+
 const state = {
   view: 'home',
   mode: 'world',        // 'world' | 'usa'
@@ -1088,14 +1096,14 @@ function confirmGuess(id, input) {
   // Flash path on map (plus any territories — world mode only)
   const territoryIds = state.mode === 'world' ? (TERRITORIES[id] || []) : [];
   for (const pid of [id, ...territoryIds]) {
-    const path = document.querySelector(`[data-id="${pid}"]`);
-    if (path) {
+    const paths = document.querySelectorAll(`[data-id="${pid}"]`);
+    paths.forEach(path => {
       path.classList.add('flash');
       setTimeout(() => {
         path.classList.remove('flash');
         path.classList.add('guessed');
       }, 350);
-    }
+    });
   }
 
   // Check combo territories (world mode only)
@@ -1103,14 +1111,14 @@ function confirmGuess(id, input) {
     if (!combo.requires.includes(id)) continue;
     if (combo.requires.every(cid => state.guessed.has(cid))) {
       for (const pid of combo.unlocks) {
-        const path = document.querySelector(`[data-id="${pid}"]`);
-        if (path) {
+        const paths = document.querySelectorAll(`[data-id="${pid}"]`);
+        paths.forEach(path => {
           path.classList.add('flash');
           setTimeout(() => {
             path.classList.remove('flash');
             path.classList.add('guessed');
           }, 350);
-        }
+        });
       }
     }
   }
@@ -1207,7 +1215,7 @@ async function initMapWorld(container) {
 
   state.mapIds.clear();
   countries.features.forEach(f => {
-    const id = String(f.id).padStart(3, '0');
+    const id = getWorldFeatureId(f);
     if (COUNTRIES[id]) state.mapIds.add(id);
   });
   for (const id of bonusIds) {
@@ -1222,7 +1230,7 @@ async function initMapWorld(container) {
     .enter().append('path')
     .attr('class', 'country-path')
     .attr('d', pathGen)
-    .attr('data-id', d => String(d.id).padStart(3, '0'));
+    .attr('data-id', d => getWorldFeatureId(d));
 
   svg.append('path')
     .datum(topojson.mesh(state.worldData, state.worldData.objects.countries, (a, b) => a !== b))
