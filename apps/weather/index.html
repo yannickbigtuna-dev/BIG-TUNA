@@ -264,13 +264,13 @@
   .wind-arrow {
     position: absolute;
     left: 50%;
-    top: 17%;
+    top: 50%;
     width: max(2px, calc(var(--wind-size, 64px) * 0.035));
-    height: 50%;
+    height: 39%;
     border-radius: 999px;
     background: #1c1c1e;
-    transform: translateX(-50%) rotate(var(--wind-rotation, 0deg));
-    transform-origin: 50% 86%;
+    transform: translate(-50%, -100%) rotate(var(--wind-rotation, 0deg));
+    transform-origin: 50% 100%;
     filter: drop-shadow(0 4px 7px rgba(80,91,110,0.16));
     transition: transform 180ms ease;
   }
@@ -351,6 +351,10 @@
     backdrop-filter: blur(22px);
     -webkit-backdrop-filter: blur(22px);
   }
+  .metric.is-expanded {
+    grid-column: span 2;
+    align-items: start;
+  }
   .metric:hover,
   .metric.is-selected {
     border-color: rgba(74, 136, 255, 0.32);
@@ -378,6 +382,11 @@
     font-size: 1.34rem;
     font-weight: 560;
   }
+  .metric-detail {
+    grid-column: 1 / -1;
+    min-width: 0;
+    margin-top: 4px;
+  }
   .detail-panel {
     margin: -4px 0 22px;
     padding: 18px;
@@ -389,7 +398,19 @@
     -webkit-backdrop-filter: blur(24px) saturate(1.08);
     animation: detailIn 180ms ease both;
   }
+  .hour-detail-stack {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .hour-detail-panel {
+    margin: 0;
+  }
   .detail-panel[hidden] { display: none; }
+  .wind-detail-panel:empty { display: none; }
+  .wind-detail-panel {
+    margin: -2px 0 18px;
+  }
   @keyframes detailIn {
     from { opacity: 0; transform: translateY(-5px); }
     to { opacity: 1; transform: translateY(0); }
@@ -644,11 +665,15 @@
     background: rgba(255,255,255,0.48);
     box-shadow: var(--card-shadow);
   }
+  .day-entry {
+    border-bottom: 1px solid rgba(130, 138, 150, 0.15);
+  }
+  .day-entry:last-child { border-bottom: 0; }
   .day {
     appearance: none;
     width: 100%;
     border: 0;
-    border-bottom: 1px solid rgba(130, 138, 150, 0.15);
+    border-bottom: 0;
     background: transparent;
     color: inherit;
     font: inherit;
@@ -666,7 +691,9 @@
     background: rgba(74, 136, 255, 0.08);
     box-shadow: inset 0 0 0 1px rgba(74, 136, 255, 0.24);
   }
-  .day:last-child { border-bottom: 0; }
+  .day-detail-panel {
+    margin: 0 12px 12px;
+  }
   .day-name { font-weight: 700; }
   .day-icon { font-size: 1.55rem; }
   .day-condition, .low {
@@ -747,6 +774,7 @@
       --wind-size: min(var(--wind-size), 34px);
     }
     .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metric.is-expanded { grid-column: 1 / -1; }
     .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .detail-head,
     .hour-detail-head,
@@ -792,17 +820,18 @@
         </div>
         <div class="sky-card" aria-hidden="true"></div>
       </div>
+      <div class="detail-panel wind-detail-panel" id="wind-detail-panel" aria-live="polite"></div>
       <section class="metrics" aria-label="Current conditions">
         <div class="metric"><span class="metric-icon">♨</span><span><span class="metric-label">Feels Like</span><span class="metric-value" id="feels">--°</span></span></div>
         <div class="metric"><span class="metric-icon" id="precip-icon">☂</span><span><span class="metric-label" id="precip-label">Precipitation</span><span class="metric-value" id="precip">--</span></span></div>
         <div class="metric"><span class="metric-icon">♢</span><span><span class="metric-label">Humidity</span><span class="metric-value" id="humidity">--</span></span></div>
         <div class="metric"><span class="metric-icon">◷</span><span><span class="metric-label">Pressure</span><span class="metric-value" id="pressure">--</span></span></div>
       </section>
-      <section class="detail-panel" id="detail-panel" aria-live="polite" hidden></section>
       <section class="hour-wrap" aria-label="Hourly forecast">
         <div class="section-title">Hourly Forecast</div>
         <button class="chev left" type="button" aria-label="Previous hours">‹</button>
         <div class="hourly" id="hourly"></div>
+        <div class="hour-detail-stack" id="hour-detail-stack" aria-live="polite"></div>
         <button class="chev right" type="button" aria-label="Next hours">›</button>
       </section>
       <section aria-label="7-day forecast">
@@ -830,7 +859,7 @@
     source: 'auto',
     activeSource: '',
     latestWeather: null,
-    activeDetail: null,
+    activeDetails: [],
   };
 
   const els = {
@@ -851,7 +880,8 @@
     pressure: document.getElementById('pressure'),
     hourly: document.getElementById('hourly'),
     daily: document.getElementById('daily'),
-    detail: document.getElementById('detail-panel'),
+    windDetails: document.getElementById('wind-detail-panel'),
+    hourDetails: document.getElementById('hour-detail-stack'),
   };
 
   function keyFor(loc) {
@@ -919,6 +949,33 @@
   function detailMetricKey() {
     if (!state.latestWeather) return 'precip';
     return (Number(state.latestWeather.current.precipitation) || 0) > 0 ? 'precip' : 'uv';
+  }
+  function detailId(type, value) {
+    return `${type}:${value}`;
+  }
+  function isDetailOpen(type, value) {
+    return state.activeDetails.includes(detailId(type, value));
+  }
+  function toggleDetail(type, value) {
+    const id = detailId(type, value);
+    state.activeDetails = state.activeDetails.includes(id)
+      ? state.activeDetails.filter(item => item !== id)
+      : [...state.activeDetails, id];
+  }
+  function pruneOpenDetails(data) {
+    if (!data) {
+      state.activeDetails = [];
+      return;
+    }
+    const metricKeys = new Set(['feels', 'precip', 'uv', 'humidity', 'pressure', 'wind']);
+    state.activeDetails = state.activeDetails.filter(id => {
+      const [type, raw] = id.split(':');
+      const value = Number(raw);
+      if (type === 'metric') return metricKeys.has(raw);
+      if (type === 'hour') return Number.isInteger(value) && value >= 0 && value < data.hourly.time.length;
+      if (type === 'day') return Number.isInteger(value) && value >= 0 && value < data.daily.time.length;
+      return false;
+    });
   }
   function metricValue(key, index = null) {
     const data = state.latestWeather;
@@ -1004,6 +1061,7 @@
   }
   function renderWeather(loc, data) {
     state.latestWeather = data;
+    pruneOpenDetails(data);
     const current = data.current;
     const meta = weatherMeta(current.weather_code);
     const hi = data.daily.temperature_2m_max[0];
@@ -1032,7 +1090,7 @@
     els.hourly.innerHTML = data.hourly.time.slice(nowIndex, nowIndex + 10).map((time, offset) => {
       const index = nowIndex + offset;
       const hourMeta = weatherMeta(data.hourly.weather_code[index]);
-      const selected = state.activeDetail && state.activeDetail.type === 'hour' && state.activeDetail.index === index;
+      const selected = isDetailOpen('hour', index);
       return `<button class="hour${selected ? ' is-selected' : ''}" type="button" data-hour-index="${index}"><span class="hour-time">${offset === 0 ? 'Now' : fmtTime(time)}</span><span class="hour-icon">${hourMeta[0]}</span><span class="hour-temp">${fmtTemp(data.hourly.temperature_2m[index])}</span></button>`;
     }).join('');
 
@@ -1046,15 +1104,18 @@
       const left = Math.max(0, ((min - minAll) / span) * 100);
       const width = Math.max(16, ((max - min) / span) * 100);
       const dot = Math.min(96, left + width);
-      const selected = state.activeDetail && state.activeDetail.type === 'day' && state.activeDetail.index === index;
-      return `<button class="day${selected ? ' is-selected' : ''}" type="button" data-day-index="${index}">
-        <span class="day-name">${fmtDay(day, index)}</span>
-        <span class="day-icon">${dayMeta[0]}</span>
-        <span class="day-condition">${dayMeta[1]}</span>
-        <span class="low">${fmtTemp(min)}</span>
-        <span class="range"><span style="left:${left}%;width:${width}%"></span><i style="left:${dot}%"></i></span>
-        <span class="high">${fmtTemp(max)}</span>
-      </button>`;
+      const selected = isDetailOpen('day', index);
+      return `<div class="day-entry">
+        <button class="day${selected ? ' is-selected' : ''}" type="button" data-day-index="${index}">
+          <span class="day-name">${fmtDay(day, index)}</span>
+          <span class="day-icon">${dayMeta[0]}</span>
+          <span class="day-condition">${dayMeta[1]}</span>
+          <span class="low">${fmtTemp(min)}</span>
+          <span class="range"><span style="left:${left}%;width:${width}%"></span><i style="left:${dot}%"></i></span>
+          <span class="high">${fmtTemp(max)}</span>
+        </button>
+        ${selected ? `<div class="detail-panel day-detail-panel">${renderDayDetail(index)}</div>` : ''}
+      </div>`;
     }).join('');
     renderDetail();
   }
@@ -1062,11 +1123,18 @@
     document.querySelectorAll('.metric').forEach((card, index) => {
       const keys = ['feels', 'precip', 'humidity', 'pressure'];
       const cardKey = keys[index] === 'precip' ? detailMetricKey() : keys[index];
-      card.classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'metric' && state.activeDetail.key === cardKey);
+      const selected = isDetailOpen('metric', cardKey);
+      card.classList.toggle('is-selected', selected);
+      card.classList.toggle('is-expanded', selected);
       card.setAttribute('role', 'button');
       card.setAttribute('tabindex', '0');
+      const existing = card.querySelector('.metric-detail');
+      if (existing) existing.remove();
+      if (selected && state.latestWeather) {
+        card.insertAdjacentHTML('beforeend', `<div class="metric-detail">${renderMetricDetail(cardKey)}</div>`);
+      }
     });
-    document.getElementById('wind-meta').classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'metric' && state.activeDetail.key === 'wind');
+    document.getElementById('wind-meta').classList.toggle('is-selected', isDetailOpen('metric', 'wind'));
   }
   function renderMetricDetail(key) {
     const labels = {
@@ -1142,20 +1210,23 @@
   function renderDetail() {
     setMetricSelection();
     document.querySelectorAll('.hour').forEach(btn => {
-      btn.classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'hour' && Number(btn.dataset.hourIndex) === state.activeDetail.index);
+      btn.classList.toggle('is-selected', isDetailOpen('hour', Number(btn.dataset.hourIndex)));
     });
     document.querySelectorAll('.day').forEach(btn => {
-      btn.classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'day' && Number(btn.dataset.dayIndex) === state.activeDetail.index);
+      btn.classList.toggle('is-selected', isDetailOpen('day', Number(btn.dataset.dayIndex)));
     });
-    if (!state.latestWeather || !state.activeDetail) {
-      els.detail.hidden = true;
-      els.detail.innerHTML = '';
+    if (!state.latestWeather) {
+      els.windDetails.innerHTML = '';
+      els.hourDetails.innerHTML = '';
       return;
     }
-    if (state.activeDetail.type === 'metric') els.detail.innerHTML = renderMetricDetail(state.activeDetail.key);
-    if (state.activeDetail.type === 'hour') els.detail.innerHTML = renderHourDetail(state.activeDetail.index);
-    if (state.activeDetail.type === 'day') els.detail.innerHTML = renderDayDetail(state.activeDetail.index);
-    els.detail.hidden = false;
+    els.windDetails.innerHTML = isDetailOpen('metric', 'wind') ? renderMetricDetail('wind') : '';
+    els.hourDetails.innerHTML = state.activeDetails
+      .filter(id => id.startsWith('hour:'))
+      .map(id => Number(id.split(':')[1]))
+      .filter(index => Number.isInteger(index))
+      .map(index => `<div class="detail-panel hour-detail-panel">${renderHourDetail(index)}</div>`)
+      .join('');
   }
   function wmoFromText(text) {
     const value = String(text || '').toLowerCase();
@@ -1470,9 +1541,10 @@
   });
   document.querySelectorAll('.metric').forEach((card, index) => {
     const keys = ['feels', 'precip', 'humidity', 'pressure'];
-    const activate = () => {
+    const activate = event => {
+      if (event && event.target.closest('.metric-detail')) return;
       const key = keys[index] === 'precip' ? detailMetricKey() : keys[index];
-      state.activeDetail = { type: 'metric', key };
+      toggleDetail('metric', key);
       renderDetail();
     };
     card.addEventListener('click', activate);
@@ -1484,25 +1556,26 @@
     });
   });
   document.getElementById('wind-meta').addEventListener('click', () => {
-    state.activeDetail = { type: 'metric', key: 'wind' };
+    toggleDetail('metric', 'wind');
     renderDetail();
   });
   els.hourly.addEventListener('click', event => {
     const btn = event.target.closest('.hour');
     if (!btn) return;
-    state.activeDetail = { type: 'hour', index: Number(btn.dataset.hourIndex) };
+    toggleDetail('hour', Number(btn.dataset.hourIndex));
     renderDetail();
   });
   els.daily.addEventListener('click', event => {
     const btn = event.target.closest('.day');
     if (!btn) return;
-    state.activeDetail = { type: 'day', index: Number(btn.dataset.dayIndex) };
-    renderDetail();
+    toggleDetail('day', Number(btn.dataset.dayIndex));
+    renderWeather(state.selected, state.latestWeather);
   });
-  els.detail.addEventListener('click', event => {
+  document.addEventListener('click', event => {
     if (!event.target.closest('[data-detail-close]')) return;
-    state.activeDetail = null;
-    renderDetail();
+    const day = event.target.closest('.day-entry')?.querySelector('.day');
+    if (day) toggleDetail('day', Number(day.dataset.dayIndex));
+    renderWeather(state.selected, state.latestWeather);
   });
   (async function init() {
     renderLocations();
