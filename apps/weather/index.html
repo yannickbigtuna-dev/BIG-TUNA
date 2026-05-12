@@ -390,13 +390,15 @@
   .detail-panel {
     margin: -4px 0 22px;
     padding: 18px;
+    overflow: hidden;
     border: 1px solid rgba(130, 138, 150, 0.16);
     border-radius: 16px;
     background: rgba(255,255,255,0.54);
     box-shadow: var(--card-shadow);
     backdrop-filter: blur(24px) saturate(1.08);
     -webkit-backdrop-filter: blur(24px) saturate(1.08);
-    animation: detailIn 180ms ease both;
+    transform-origin: top;
+    animation: detailSlideOpen 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
   .hour-detail-stack {
     display: grid;
@@ -411,9 +413,19 @@
   .wind-detail-panel {
     margin: -2px 0 18px;
   }
-  @keyframes detailIn {
-    from { opacity: 0; transform: translateY(-5px); }
-    to { opacity: 1; transform: translateY(0); }
+  @keyframes detailSlideOpen {
+    from {
+      max-height: 0;
+      opacity: 0;
+      clip-path: inset(0 0 100% 0 round 16px);
+      transform: translateY(-8px);
+    }
+    to {
+      max-height: 760px;
+      opacity: 1;
+      clip-path: inset(0 0 0 0 round 16px);
+      transform: translateY(0);
+    }
   }
   .detail-head {
     display: flex;
@@ -476,15 +488,15 @@
     stroke: rgba(255,255,255,0.92);
     stroke-width: 3;
   }
-  .chart-label {
-    fill: #5d6574;
-    font-size: 11px;
-    font-weight: 650;
-  }
   .chart-axis {
     fill: #858c99;
     font-size: 10px;
     font-weight: 600;
+  }
+  .chart-title {
+    fill: #5d6574;
+    font-size: 11px;
+    font-weight: 720;
   }
   .detail-grid {
     display: grid;
@@ -1009,11 +1021,11 @@
       };
     }).filter(point => Number.isFinite(point.value));
   }
-  function lineChart(points, formatter) {
+  function lineChart(points, formatter, yLabel = 'Value') {
     if (!points.length) return '<div class="detail-copy">Detailed timeline data is unavailable for this source.</div>';
     const width = 720;
     const height = 190;
-    const pad = { left: 34, right: 20, top: 28, bottom: 32 };
+    const pad = { left: 56, right: 20, top: 20, bottom: 44 };
     const values = points.map(point => point.value);
     let min = Math.min(...values);
     let max = Math.max(...values);
@@ -1022,12 +1034,14 @@
     const y = value => pad.top + ((max - value) * (height - pad.top - pad.bottom)) / (max - min);
     const coords = points.map((point, index) => `${x(index)},${y(point.value)}`).join(' ');
     const fill = `${pad.left},${height - pad.bottom} ${coords} ${x(points.length - 1)},${height - pad.bottom}`;
-    const rows = [0, 1, 2].map(row => {
-      const yy = pad.top + row * ((height - pad.top - pad.bottom) / 2);
-      return `<line class="chart-grid" x1="${pad.left}" y1="${yy}" x2="${width - pad.right}" y2="${yy}"></line>`;
+    const rows = [0, 1, 2, 3, 4].map(row => {
+      const value = max - row * ((max - min) / 4);
+      const yy = y(value);
+      return `<line class="chart-grid" x1="${pad.left}" y1="${yy}" x2="${width - pad.right}" y2="${yy}"></line><text class="chart-axis" x="${pad.left - 8}" y="${yy + 3}" text-anchor="end">${formatter(value)}</text>`;
     }).join('');
-    const dots = points.map((point, index) => `<circle class="chart-dot" cx="${x(index)}" cy="${y(point.value)}" r="4"></circle><text class="chart-label" x="${x(index)}" y="${y(point.value) - 11}" text-anchor="middle">${formatter(point.value)}</text><text class="chart-axis" x="${x(index)}" y="${height - 10}" text-anchor="middle">${point.time}</text>`).join('');
-    return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Timeline chart"><polygon class="chart-fill" points="${fill}"></polygon>${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
+    const columns = points.map((point, index) => `<line class="chart-grid" x1="${x(index)}" y1="${pad.top}" x2="${x(index)}" y2="${height - pad.bottom}"></line>`).join('');
+    const dots = points.map((point, index) => `<circle class="chart-dot" cx="${x(index)}" cy="${y(point.value)}" r="4"></circle><text class="chart-axis" x="${x(index)}" y="${height - 24}" text-anchor="middle">${point.time}</text>`).join('');
+    return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${yLabel} timeline chart"><text class="chart-title" x="${pad.left}" y="${height - 6}">Time</text><text class="chart-title" x="14" y="${pad.top}" transform="rotate(-90 14 ${pad.top})">${yLabel}</text><polygon class="chart-fill" points="${fill}"></polygon>${columns}${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
   }
   function detailTile(label, value) {
     return `<div class="detail-tile"><span class="tile-label">${label}</span><span class="tile-value">${value}</span></div>`;
@@ -1160,7 +1174,12 @@
       : key === 'precip' ? value => value.toFixed(1)
       : value => `${Math.round(value)}°`;
     const unit = key === 'pressure' ? ' hPa' : key === 'precip' ? ' mm/hr' : '';
-    return `<div class="detail-head"><div><h3 class="detail-title">${title}</h3><p class="detail-copy">${copy}</p></div><div class="detail-current">${metricValue(key)}</div></div>${lineChart(metricSeries(key), value => `${formatter(value)}${unit}`)}`;
+    const yLabel = key === 'humidity' ? 'Humidity'
+      : key === 'pressure' ? 'Pressure'
+      : key === 'uv' ? 'UV Index'
+      : key === 'precip' ? 'Precipitation'
+      : 'Temperature';
+    return `<div class="detail-head"><div><h3 class="detail-title">${title}</h3><p class="detail-copy">${copy}</p></div><div class="detail-current">${metricValue(key)}</div></div>${lineChart(metricSeries(key), value => `${formatter(value)}${unit}`, yLabel)}`;
   }
   function renderHourDetail(index) {
     const data = state.latestWeather;

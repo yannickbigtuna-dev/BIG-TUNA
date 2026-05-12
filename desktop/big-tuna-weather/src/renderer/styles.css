@@ -306,15 +306,27 @@ html, body {
 .detail-panel {
   margin: 0;
   padding: 16px;
+  overflow: hidden;
   border: 1px solid rgba(130,138,150,0.16);
   border-radius: 14px;
   background: rgba(255,255,255,0.54);
   box-shadow: var(--card-shadow);
-  animation: detailIn 180ms ease both;
+  transform-origin: top;
+  animation: detailSlideOpen 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-@keyframes detailIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes detailSlideOpen {
+  from {
+    max-height: 0;
+    opacity: 0;
+    clip-path: inset(0 0 100% 0 round 14px);
+    transform: translateY(-8px);
+  }
+  to {
+    max-height: 720px;
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 14px);
+    transform: translateY(0);
+  }
 }
 .detail-head {
   display: flex;
@@ -345,8 +357,8 @@ html, body {
 .chart-line { fill: none; stroke: #4a88ff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .chart-fill { fill: rgba(74,136,255,0.08); }
 .chart-dot { fill: #4a88ff; stroke: rgba(255,255,255,0.92); stroke-width: 3; }
-.chart-label { fill: #5d6574; font-size: 10px; font-weight: 650; }
 .chart-axis { fill: #858c99; font-size: 9px; font-weight: 600; }
+.chart-title { fill: #5d6574; font-size: 10px; font-weight: 720; }
 .hour-detail-stack {
   display: grid;
   gap: 10px;

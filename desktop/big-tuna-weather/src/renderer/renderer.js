@@ -139,11 +139,11 @@ function metricSeries(key) {
   }).filter(point => Number.isFinite(point.value));
 }
 
-function lineChart(points, formatter) {
+function lineChart(points, formatter, yLabel = 'Value') {
   if (!points.length) return '<div class="detail-copy">Detailed timeline data is unavailable for this source.</div>';
   const width = 640;
   const height = 170;
-  const pad = { left: 32, right: 18, top: 26, bottom: 30 };
+  const pad = { left: 52, right: 18, top: 18, bottom: 42 };
   const values = points.map(point => point.value);
   let min = Math.min(...values);
   let max = Math.max(...values);
@@ -152,12 +152,14 @@ function lineChart(points, formatter) {
   const y = value => pad.top + ((max - value) * (height - pad.top - pad.bottom)) / (max - min);
   const coords = points.map((point, index) => `${x(index)},${y(point.value)}`).join(' ');
   const fill = `${pad.left},${height - pad.bottom} ${coords} ${x(points.length - 1)},${height - pad.bottom}`;
-  const rows = [0, 1, 2].map(row => {
-    const yy = pad.top + row * ((height - pad.top - pad.bottom) / 2);
-    return `<line class="chart-grid" x1="${pad.left}" y1="${yy}" x2="${width - pad.right}" y2="${yy}"></line>`;
+  const rows = [0, 1, 2, 3, 4].map(row => {
+    const value = max - row * ((max - min) / 4);
+    const yy = y(value);
+    return `<line class="chart-grid" x1="${pad.left}" y1="${yy}" x2="${width - pad.right}" y2="${yy}"></line><text class="chart-axis" x="${pad.left - 7}" y="${yy + 3}" text-anchor="end">${formatter(value)}</text>`;
   }).join('');
-  const dots = points.map((point, index) => `<circle class="chart-dot" cx="${x(index)}" cy="${y(point.value)}" r="4"></circle><text class="chart-label" x="${x(index)}" y="${y(point.value) - 10}" text-anchor="middle">${formatter(point.value)}</text><text class="chart-axis" x="${x(index)}" y="${height - 9}" text-anchor="middle">${point.time}</text>`).join('');
-  return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Timeline chart"><polygon class="chart-fill" points="${fill}"></polygon>${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
+  const columns = points.map((point, index) => `<line class="chart-grid" x1="${x(index)}" y1="${pad.top}" x2="${x(index)}" y2="${height - pad.bottom}"></line>`).join('');
+  const dots = points.map((point, index) => `<circle class="chart-dot" cx="${x(index)}" cy="${y(point.value)}" r="4"></circle><text class="chart-axis" x="${x(index)}" y="${height - 23}" text-anchor="middle">${point.time}</text>`).join('');
+  return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${yLabel} timeline chart"><text class="chart-title" x="${pad.left}" y="${height - 6}">Time</text><text class="chart-title" x="13" y="${pad.top}" transform="rotate(-90 13 ${pad.top})">${yLabel}</text><polygon class="chart-fill" points="${fill}"></polygon>${columns}${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
 }
 
 function detailTile(label, value) {
@@ -178,7 +180,12 @@ function renderMetricDetail(key) {
     : key === 'uv' || key === 'precip' ? value => value.toFixed(1)
     : value => `${Math.round(value)}°`;
   const suffix = key === 'precip' ? ' mm/hr' : '';
-  return `<div class="detail-panel"><div class="detail-head"><div><h3 class="detail-title">${title}</h3><p class="detail-copy">${copy}</p></div><div class="detail-current">${metricValue(key)}</div></div>${lineChart(metricSeries(key), value => `${formatter(value)}${suffix}`)}</div>`;
+  const yLabel = key === 'humidity' ? 'Humidity'
+    : key === 'pressure' ? 'Pressure'
+    : key === 'uv' ? 'UV Index'
+    : key === 'precip' ? 'Precipitation'
+    : 'Temperature';
+  return `<div class="detail-panel"><div class="detail-head"><div><h3 class="detail-title">${title}</h3><p class="detail-copy">${copy}</p></div><div class="detail-current">${metricValue(key)}</div></div>${lineChart(metricSeries(key), value => `${formatter(value)}${suffix}`, yLabel)}</div>`;
 }
 
 function renderHourDetail(index) {
