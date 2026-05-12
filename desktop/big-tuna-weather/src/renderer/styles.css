@@ -266,19 +266,6 @@ html, body {
   top: 78px;
   opacity: 0.76;
 }
-.toolbar-more {
-  position: absolute;
-  top: 0;
-  right: 8px;
-  width: 54px;
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid rgba(130,138,150,0.16);
-  background: rgba(255,255,255,0.58);
-  box-shadow: var(--card-shadow);
-  color: #677083;
-  font: 800 1rem/1 inherit;
-}
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -406,7 +393,7 @@ body.panel .window::before {
   border-top: 1px solid rgba(255,255,255,0.74);
   transform: translateX(-50%) rotate(45deg);
 }
-body.panel .sidebar, body.panel .sky-card, body.panel .toolbar-more, body.panel .panel-close {
+body.panel .sidebar, body.panel .sky-card, body.panel .panel-close {
   display: none;
 }
 body.panel .content {

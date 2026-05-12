@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, ipcMain, nativeImage } = require('electron');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
@@ -140,25 +140,6 @@ function updateTray() {
     : 'Weather';
   if (process.platform === 'darwin') tray.setTitle(title);
   tray.setToolTip(current ? `${selectedLocation.name}: ${condition}` : 'BIG TUNA Weather');
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Weather', click: showMainWindow },
-    { label: 'Refresh', click: refreshWeather },
-    {
-      label: 'Menu Bar Style',
-      submenu: ['compact', 'balanced', 'detailed'].map(style => ({
-        label: style[0].toUpperCase() + style.slice(1),
-        type: 'radio',
-        checked: (store.menuBarStyle || 'balanced') === style,
-        click: () => {
-          store.menuBarStyle = style;
-          saveStore();
-          updateTray();
-        },
-      })),
-    },
-    { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
-  ]));
 }
 
 function sendState() {

@@ -170,7 +170,7 @@
     border: 1px solid rgba(130, 138, 150, 0.16);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.74);
   }
-  .add-btn, .more-btn, .chev, .search button {
+  .add-btn, .chev, .search button {
     border: 0;
     background: transparent;
     color: inherit;
@@ -179,7 +179,6 @@
   }
   .search button { display: none; }
   .add-btn { font-size: 1.9rem; line-height: 1; }
-  .more-btn { font-size: 1.4rem; letter-spacing: 0.05em; }
   .content {
     min-width: 0;
     padding: 36px 46px 28px;
@@ -326,78 +325,6 @@
     right: 100px;
     top: 92px;
     opacity: 0.76;
-  }
-  .toolbar-more {
-    position: absolute;
-    top: 0;
-    right: 8px;
-    width: 56px;
-    height: 34px;
-    border-radius: 10px;
-    border: 1px solid rgba(130, 138, 150, 0.16);
-    background: rgba(255,255,255,0.58);
-    box-shadow: var(--card-shadow);
-    color: #677083;
-    font-weight: 800;
-    cursor: pointer;
-  }
-  .source-menu {
-    position: absolute;
-    top: 42px;
-    right: 8px;
-    width: 244px;
-    z-index: 8;
-    padding: 8px;
-    border: 1px solid rgba(130, 138, 150, 0.18);
-    border-radius: 13px;
-    background: rgba(247, 248, 251, 0.9);
-    box-shadow: 0 18px 42px rgba(62, 73, 94, 0.18), inset 0 1px 0 rgba(255,255,255,0.86);
-    backdrop-filter: blur(24px) saturate(1.15);
-    -webkit-backdrop-filter: blur(24px) saturate(1.15);
-  }
-  .source-menu[hidden] { display: none; }
-  .source-title {
-    padding: 6px 8px 7px;
-    color: #737b89;
-    font-size: 0.72rem;
-    font-weight: 760;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .source-option {
-    width: 100%;
-    min-height: 44px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 8px;
-    border: 0;
-    border-radius: 9px;
-    padding: 8px 9px;
-    color: #1f222a;
-    background: transparent;
-    text-align: left;
-    font: inherit;
-    cursor: pointer;
-  }
-  .source-option:hover,
-  .source-option.is-selected {
-    background: rgba(74, 136, 255, 0.12);
-  }
-  .source-name {
-    display: block;
-    font-size: 0.88rem;
-    font-weight: 720;
-  }
-  .source-note {
-    display: block;
-    margin-top: 2px;
-    color: #737b89;
-    font-size: 0.72rem;
-  }
-  .source-check {
-    color: #4a88ff;
-    font-weight: 800;
   }
   .metrics {
     display: grid;
@@ -852,7 +779,7 @@
         <button type="submit" aria-label="Search"></button>
       </form>
       <div class="locations" id="locations"></div>
-      <div class="sidebar-foot"><button class="add-btn" type="button" aria-label="Add location">+</button><button class="more-btn" type="button" aria-label="More">...</button></div>
+      <div class="sidebar-foot"><button class="add-btn" type="button" aria-label="Add location">+</button></div>
     </aside>
     <section class="content">
       <div class="hero">
@@ -864,14 +791,6 @@
           <div class="current-meta" id="wind-meta"><span class="wind-compass"><span class="wind-arrow"></span></span><span>Wind --</span></div>
         </div>
         <div class="sky-card" aria-hidden="true"></div>
-        <button class="toolbar-more" id="source-menu-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Weather data source">•••</button>
-        <div class="source-menu" id="source-menu" hidden>
-          <div class="source-title">Data Source</div>
-          <button class="source-option" type="button" data-source="auto"><span><span class="source-name">Auto Best</span><span class="source-note">NWS in US, Open-Meteo elsewhere</span></span><span class="source-check"></span></button>
-          <button class="source-option" type="button" data-source="open-meteo"><span><span class="source-name">Open-Meteo</span><span class="source-note">Global, full app features</span></span><span class="source-check"></span></button>
-          <button class="source-option" type="button" data-source="met-no"><span><span class="source-name">MET Norway</span><span class="source-note">Global government forecast</span></span><span class="source-check"></span></button>
-          <button class="source-option" type="button" data-source="nws"><span><span class="source-name">NOAA / NWS</span><span class="source-note">Official US locations only</span></span><span class="source-check"></span></button>
-        </div>
       </div>
       <section class="metrics" aria-label="Current conditions">
         <div class="metric"><span class="metric-icon">♨</span><span><span class="metric-label">Feels Like</span><span class="metric-value" id="feels">--°</span></span></div>
@@ -898,7 +817,6 @@
   const HALIFAX = { name: 'Halifax, NS', admin: 'Nova Scotia', country: 'Canada', latitude: 44.6488, longitude: -63.5752, fallback: true };
   const STORAGE_KEY = 'weather_locations';
   const LAST_KEY = 'weather_last_location';
-  const SOURCE_KEY = 'weather_data_source';
   const SOURCES = {
     auto: 'Auto Best',
     'open-meteo': 'Open-Meteo',
@@ -909,7 +827,7 @@
     locations: loadLocations(),
     selected: null,
     weatherByKey: new Map(),
-    source: localStorage.getItem(SOURCE_KEY) || 'auto',
+    source: 'auto',
     activeSource: '',
     latestWeather: null,
     activeDetail: null,
@@ -934,8 +852,6 @@
     hourly: document.getElementById('hourly'),
     daily: document.getElementById('daily'),
     detail: document.getElementById('detail-panel'),
-    sourceBtn: document.getElementById('source-menu-btn'),
-    sourceMenu: document.getElementById('source-menu'),
   };
 
   function keyFor(loc) {
@@ -1240,25 +1156,6 @@
     if (state.activeDetail.type === 'hour') els.detail.innerHTML = renderHourDetail(state.activeDetail.index);
     if (state.activeDetail.type === 'day') els.detail.innerHTML = renderDayDetail(state.activeDetail.index);
     els.detail.hidden = false;
-  }
-  function renderSourceMenu() {
-    els.sourceMenu.querySelectorAll('.source-option').forEach(btn => {
-      const selected = btn.dataset.source === state.source;
-      btn.classList.toggle('is-selected', selected);
-      btn.querySelector('.source-check').textContent = selected ? '✓' : '';
-    });
-  }
-  function setSourceMenuOpen(open) {
-    els.sourceMenu.hidden = !open;
-    els.sourceBtn.setAttribute('aria-expanded', String(open));
-  }
-  function setSource(source) {
-    state.source = SOURCES[source] ? source : 'auto';
-    localStorage.setItem(SOURCE_KEY, state.source);
-    state.weatherByKey.clear();
-    renderSourceMenu();
-    setSourceMenuOpen(false);
-    if (state.selected) selectLocation(state.selected);
   }
   function wmoFromText(text) {
     const value = String(text || '').toLowerCase();
@@ -1607,26 +1504,7 @@
     state.activeDetail = null;
     renderDetail();
   });
-  els.sourceBtn.addEventListener('click', event => {
-    event.stopPropagation();
-    setSourceMenuOpen(els.sourceMenu.hidden);
-  });
-  els.sourceMenu.addEventListener('click', event => {
-    const btn = event.target.closest('.source-option');
-    if (!btn) return;
-    setSource(btn.dataset.source);
-  });
-  document.addEventListener('click', event => {
-    if (!els.sourceMenu.hidden && !els.sourceMenu.contains(event.target) && event.target !== els.sourceBtn) {
-      setSourceMenuOpen(false);
-    }
-  });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') setSourceMenuOpen(false);
-  });
-
   (async function init() {
-    renderSourceMenu();
     renderLocations();
     const last = localStorage.getItem(LAST_KEY);
     const saved = state.locations.find(loc => keyFor(loc) === last);
