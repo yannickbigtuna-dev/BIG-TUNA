@@ -6,6 +6,10 @@ const path = require('path');
 const HALIFAX = { name: 'Halifax, NS', admin: 'Nova Scotia', country: 'Canada', latitude: 44.6488, longitude: -63.5752, fallback: true };
 const MAIN_SIZE = { width: 1180, height: 760 };
 const PANEL_SIZE = { width: 430, height: 610 };
+const SOURCES = {
+  'open-meteo': 'Open-Meteo',
+  nws: 'NOAA / NWS',
+};
 
 let mainWindow = null;
 let panelWindow = null;
@@ -51,7 +55,7 @@ function requestJson(urlString) {
       hostname: url.hostname,
       path: url.pathname + url.search,
       protocol: url.protocol,
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'User-Agent': 'BIG-TUNA Weather (https://yannickmorgans.ca)' },
     }, res => {
       let raw = '';
       res.setEncoding('utf8');
@@ -115,6 +119,88 @@ function displayName(hit) {
   return region ? `${hit.name}, ${region}` : hit.name;
 }
 
+function wmoFromText(text) {
+  const value = String(text || '').toLowerCase();
+  if (value.includes('thunder')) return 95;
+  if (value.includes('snow') || value.includes('sleet')) return 73;
+  if (value.includes('rain') || value.includes('shower') || value.includes('drizzle')) return 61;
+  if (value.includes('fog') || value.includes('haze')) return 45;
+  if (value.includes('cloud') || value.includes('overcast')) return 3;
+  if (value.includes('sun') || value.includes('clear')) return 0;
+  return 2;
+}
+
+function directionDegrees(direction) {
+  const map = { N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5, S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5 };
+  return map[String(direction || '').toUpperCase()] ?? 0;
+}
+
+function emptyDaily() {
+  return {
+    time: [],
+    weather_code: [],
+    temperature_2m_max: [],
+    temperature_2m_min: [],
+    apparent_temperature_max: [],
+    apparent_temperature_min: [],
+    precipitation_sum: [],
+    wind_speed_10m_max: [],
+    relative_humidity_2m_mean: [],
+    pressure_msl_mean: [],
+    uv_index_max: [],
+    sunrise: [],
+    sunset: [],
+  };
+}
+
+function groupDailyFromHourly(hourly) {
+  const daily = emptyDaily();
+  const byDay = new Map();
+  hourly.time.forEach((iso, index) => {
+    const day = iso.slice(0, 10);
+    if (!byDay.has(day)) byDay.set(day, { temps: [], feels: [], humidity: [], pressure: [], precip: [], wind: [], uv: [], codes: [] });
+    byDay.get(day).temps.push(hourly.temperature_2m[index]);
+    byDay.get(day).feels.push(hourly.apparent_temperature?.[index] ?? hourly.temperature_2m[index]);
+    byDay.get(day).humidity.push(hourly.relative_humidity_2m?.[index]);
+    byDay.get(day).pressure.push(hourly.pressure_msl?.[index]);
+    byDay.get(day).precip.push(hourly.precipitation?.[index]);
+    byDay.get(day).wind.push(hourly.wind_speed_10m?.[index]);
+    byDay.get(day).uv.push(hourly.uv_index?.[index]);
+    byDay.get(day).codes.push(hourly.weather_code[index]);
+  });
+  const clean = values => values.map(Number).filter(Number.isFinite);
+  const mean = values => {
+    const valid = clean(values);
+    return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : NaN;
+  };
+  Array.from(byDay.entries()).slice(0, 7).forEach(([day, entry]) => {
+    const temps = clean(entry.temps);
+    const feels = clean(entry.feels);
+    daily.time.push(day);
+    daily.temperature_2m_min.push(temps.length ? Math.min(...temps) : NaN);
+    daily.temperature_2m_max.push(temps.length ? Math.max(...temps) : NaN);
+    daily.weather_code.push(entry.codes[0] ?? 2);
+    daily.apparent_temperature_min.push(feels.length ? Math.min(...feels) : NaN);
+    daily.apparent_temperature_max.push(feels.length ? Math.max(...feels) : NaN);
+    daily.precipitation_sum.push(clean(entry.precip).reduce((sum, value) => sum + value, 0));
+    daily.wind_speed_10m_max.push(clean(entry.wind).length ? Math.max(...clean(entry.wind)) : NaN);
+    daily.relative_humidity_2m_mean.push(mean(entry.humidity));
+    daily.pressure_msl_mean.push(mean(entry.pressure));
+    daily.uv_index_max.push(clean(entry.uv).length ? Math.max(...clean(entry.uv)) : NaN);
+    daily.sunrise.push('');
+    daily.sunset.push('');
+  });
+  return daily;
+}
+
+function enrichDailyFromHourly(data) {
+  const grouped = groupDailyFromHourly(data.hourly);
+  ['relative_humidity_2m_mean', 'pressure_msl_mean'].forEach(key => {
+    if (!data.daily[key]) data.daily[key] = grouped[key];
+  });
+  return data;
+}
+
 function trayImage() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
     <path d="M12 4.2a7.8 7.8 0 1 0 0 15.6 7.8 7.8 0 0 0 0-15.6Zm0 2.1a5.7 5.7 0 1 1 0 11.4 5.7 5.7 0 0 1 0-11.4Z" fill="#000"/>
@@ -156,18 +242,91 @@ function sendState() {
   return data;
 }
 
-async function fetchWeather(loc) {
+async function fetchOpenMeteo(loc) {
   const params = new URLSearchParams({
     latitude: loc.latitude,
     longitude: loc.longitude,
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,uv_index,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
-    hourly: 'temperature_2m,weather_code',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min',
+    hourly: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,precipitation,uv_index,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,wind_speed_10m_max,uv_index_max,sunrise,sunset',
     timezone: 'auto',
     temperature_unit: 'celsius',
     wind_speed_unit: 'kmh',
   });
-  return requestJson(`https://api.open-meteo.com/v1/forecast?${params}`);
+  const data = await requestJson(`https://api.open-meteo.com/v1/forecast?${params}`);
+  data.source = 'open-meteo';
+  data.sourceLabel = SOURCES['open-meteo'];
+  return enrichDailyFromHourly(data);
+}
+
+async function fetchNws(loc) {
+  const point = await requestJson(`https://api.weather.gov/points/${Number(loc.latitude).toFixed(4)},${Number(loc.longitude).toFixed(4)}`);
+  const [hourlyRaw, grid] = await Promise.all([
+    requestJson(point.properties.forecastHourly),
+    requestJson(point.properties.forecastGridData),
+  ]);
+  const periods = hourlyRaw.properties.periods.slice(0, 72);
+  if (!periods.length) throw new Error('NWS forecast unavailable');
+  const gridProps = grid.properties || {};
+  const valueAt = (name, index, fallback = NaN) => {
+    const values = gridProps[name] && gridProps[name].values;
+    return values && values[index] && Number.isFinite(values[index].value) ? values[index].value : fallback;
+  };
+  const toC = f => (f - 32) * 5 / 9;
+  const hourly = {
+    time: [],
+    temperature_2m: [],
+    apparent_temperature: [],
+    relative_humidity_2m: [],
+    precipitation_probability: [],
+    precipitation: [],
+    uv_index: [],
+    pressure_msl: [],
+    weather_code: [],
+    wind_speed_10m: [],
+    wind_direction_10m: [],
+  };
+  periods.forEach((period, index) => {
+    const temp = period.temperatureUnit === 'F' ? toC(period.temperature) : period.temperature;
+    hourly.time.push(period.startTime);
+    hourly.temperature_2m.push(temp);
+    hourly.apparent_temperature.push(valueAt('apparentTemperature', index, temp));
+    hourly.relative_humidity_2m.push(valueAt('relativeHumidity', index, NaN));
+    hourly.precipitation_probability.push(valueAt('probabilityOfPrecipitation', index, NaN));
+    hourly.precipitation.push(valueAt('quantitativePrecipitation', index, 0));
+    hourly.uv_index.push(NaN);
+    hourly.pressure_msl.push(valueAt('pressure', index, 1013));
+    hourly.weather_code.push(wmoFromText(period.shortForecast));
+    hourly.wind_speed_10m.push(parseFloat(period.windSpeed) * 1.60934 || valueAt('windSpeed', index, 0));
+    hourly.wind_direction_10m.push(directionDegrees(period.windDirection) || valueAt('windDirection', index, 0));
+  });
+  const first = periods[0];
+  const temp = first.temperatureUnit === 'F' ? toC(first.temperature) : first.temperature;
+  return {
+    source: 'nws',
+    sourceLabel: SOURCES.nws,
+    current: {
+      temperature_2m: temp,
+      apparent_temperature: valueAt('apparentTemperature', 0, temp),
+      relative_humidity_2m: valueAt('relativeHumidity', 0, NaN),
+      precipitation: valueAt('quantitativePrecipitation', 0, 0),
+      uv_index: NaN,
+      pressure_msl: 1013,
+      weather_code: wmoFromText(first.shortForecast),
+      wind_speed_10m: parseFloat(first.windSpeed) * 1.60934 || valueAt('windSpeed', 0, 0),
+      wind_direction_10m: directionDegrees(first.windDirection) || valueAt('windDirection', 0, 0),
+    },
+    hourly,
+    daily: groupDailyFromHourly(hourly),
+  };
+}
+
+async function fetchWeather(loc) {
+  try {
+    return await fetchNws(loc);
+  } catch {
+    return fetchOpenMeteo(loc);
+  }
 }
 
 async function refreshWeather() {

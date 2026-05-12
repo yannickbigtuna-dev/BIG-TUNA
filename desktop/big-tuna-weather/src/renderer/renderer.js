@@ -268,7 +268,7 @@ function render(state) {
   }
   els.humidity.textContent = `${Math.round(current.relative_humidity_2m)}%`;
   els.pressure.textContent = `${Math.round(current.pressure_msl)} hPa`;
-  els.updated.textContent = 'Updated now';
+  els.updated.textContent = data.sourceLabel ? `Source: ${data.sourceLabel}` : 'Updated now';
 
   const nowIndex = Math.max(0, data.hourly.time.findIndex(t => new Date(t) >= new Date()));
   els.hourly.innerHTML = data.hourly.time.slice(nowIndex, nowIndex + (mode === 'panel' ? 6 : 9)).map((time, offset) => {
