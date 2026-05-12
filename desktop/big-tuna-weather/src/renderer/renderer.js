@@ -159,7 +159,7 @@ function lineChart(points, formatter, yLabel = 'Value') {
   }).join('');
   const columns = points.map((point, index) => `<line class="chart-grid" x1="${x(index)}" y1="${pad.top}" x2="${x(index)}" y2="${height - pad.bottom}"></line>`).join('');
   const dots = points.map((point, index) => `<circle class="chart-dot" cx="${x(index)}" cy="${y(point.value)}" r="4"></circle><text class="chart-axis" x="${x(index)}" y="${height - 23}" text-anchor="middle">${point.time}</text>`).join('');
-  return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${yLabel} timeline chart"><text class="chart-title" x="${pad.left}" y="${height - 6}">Time</text><text class="chart-title" x="13" y="${pad.top}" transform="rotate(-90 13 ${pad.top})">${yLabel}</text><polygon class="chart-fill" points="${fill}"></polygon>${columns}${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
+  return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${yLabel} timeline chart"><polygon class="chart-fill" points="${fill}"></polygon>${columns}${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
 }
 
 function detailTile(label, value) {

@@ -358,7 +358,6 @@ html, body {
 .chart-fill { fill: rgba(74,136,255,0.08); }
 .chart-dot { fill: #4a88ff; stroke: rgba(255,255,255,0.92); stroke-width: 3; }
 .chart-axis { fill: #858c99; font-size: 9px; font-weight: 600; }
-.chart-title { fill: #5d6574; font-size: 10px; font-weight: 720; }
 .hour-detail-stack {
   display: grid;
   gap: 10px;

@@ -493,11 +493,6 @@
     font-size: 10px;
     font-weight: 600;
   }
-  .chart-title {
-    fill: #5d6574;
-    font-size: 11px;
-    font-weight: 720;
-  }
   .detail-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1041,7 +1036,7 @@
     }).join('');
     const columns = points.map((point, index) => `<line class="chart-grid" x1="${x(index)}" y1="${pad.top}" x2="${x(index)}" y2="${height - pad.bottom}"></line>`).join('');
     const dots = points.map((point, index) => `<circle class="chart-dot" cx="${x(index)}" cy="${y(point.value)}" r="4"></circle><text class="chart-axis" x="${x(index)}" y="${height - 24}" text-anchor="middle">${point.time}</text>`).join('');
-    return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${yLabel} timeline chart"><text class="chart-title" x="${pad.left}" y="${height - 6}">Time</text><text class="chart-title" x="14" y="${pad.top}" transform="rotate(-90 14 ${pad.top})">${yLabel}</text><polygon class="chart-fill" points="${fill}"></polygon>${columns}${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
+    return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${yLabel} timeline chart"><polygon class="chart-fill" points="${fill}"></polygon>${columns}${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
   }
   function detailTile(label, value) {
     return `<div class="detail-tile"><span class="tile-label">${label}</span><span class="tile-value">${value}</span></div>`;
