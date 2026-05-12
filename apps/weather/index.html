@@ -240,6 +240,7 @@
     letter-spacing: -0.02em;
     text-align: center;
     z-index: 2;
+    cursor: pointer;
   }
   .wind-compass {
     width: var(--wind-size, 64px);
@@ -288,6 +289,10 @@
   }
   .current-meta span:last-child {
     white-space: nowrap;
+  }
+  .current-meta.is-selected .wind-compass {
+    border-color: rgba(74, 136, 255, 0.32);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.86), 0 8px 22px rgba(74,136,255,0.13);
   }
   .sky-card {
     position: relative;
@@ -446,6 +451,195 @@
     font-size: 1.34rem;
     font-weight: 560;
   }
+  .detail-panel {
+    margin: -4px 0 22px;
+    padding: 18px;
+    border: 1px solid rgba(130, 138, 150, 0.16);
+    border-radius: 16px;
+    background: rgba(255,255,255,0.54);
+    box-shadow: var(--card-shadow);
+    backdrop-filter: blur(24px) saturate(1.08);
+    -webkit-backdrop-filter: blur(24px) saturate(1.08);
+    animation: detailIn 180ms ease both;
+  }
+  .detail-panel[hidden] { display: none; }
+  @keyframes detailIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .detail-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 14px;
+  }
+  .detail-title {
+    margin: 0;
+    color: #1f222a;
+    font-size: 1rem;
+    font-weight: 720;
+  }
+  .detail-copy {
+    max-width: 520px;
+    margin: 5px 0 0;
+    color: #6d7585;
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+  .detail-current {
+    color: #1f222a;
+    font-size: 1.55rem;
+    font-weight: 640;
+    white-space: nowrap;
+  }
+  .detail-back {
+    border: 1px solid rgba(74, 136, 255, 0.24);
+    border-radius: 999px;
+    padding: 7px 12px;
+    color: #326edc;
+    background: rgba(74, 136, 255, 0.1);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .line-chart {
+    width: 100%;
+    height: 190px;
+    display: block;
+  }
+  .chart-grid {
+    stroke: rgba(130, 138, 150, 0.15);
+    stroke-width: 1;
+  }
+  .chart-line {
+    fill: none;
+    stroke: #4a88ff;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .chart-fill {
+    fill: rgba(74, 136, 255, 0.08);
+  }
+  .chart-dot {
+    fill: #4a88ff;
+    stroke: rgba(255,255,255,0.92);
+    stroke-width: 3;
+  }
+  .chart-label {
+    fill: #5d6574;
+    font-size: 11px;
+    font-weight: 650;
+  }
+  .chart-axis {
+    fill: #858c99;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .detail-tile {
+    min-height: 64px;
+    padding: 11px 12px;
+    border: 1px solid rgba(130, 138, 150, 0.13);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.48);
+  }
+  .tile-label {
+    display: block;
+    color: #737b89;
+    font-size: 0.72rem;
+    font-weight: 680;
+  }
+  .tile-value {
+    display: block;
+    margin-top: 6px;
+    color: #1f222a;
+    font-size: 1rem;
+    font-weight: 650;
+  }
+  .wind-series,
+  .day-hour-strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(74px, 1fr);
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .wind-series::-webkit-scrollbar,
+  .day-hour-strip::-webkit-scrollbar { display: none; }
+  .wind-point,
+  .day-hour {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    padding: 12px 8px;
+    border: 1px solid rgba(130, 138, 150, 0.13);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.43);
+    color: #5d6574;
+    font-size: 0.75rem;
+    font-weight: 650;
+  }
+  .mini-arrow {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid rgba(94, 104, 120, 0.16);
+    background: rgba(255,255,255,0.58);
+  }
+  .mini-arrow::before {
+    content: "";
+    width: 2px;
+    height: 17px;
+    border-radius: 99px;
+    background: #1c1c1e;
+    transform: rotate(var(--wind-rotation, 0deg));
+    transform-origin: 50% 80%;
+    box-shadow: 0 -5px 0 -1px #1c1c1e;
+  }
+  .detail-note {
+    margin: 12px 0 0;
+    color: #4a88ff;
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+  .hour-detail-head,
+  .day-detail-head {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .detail-date {
+    color: #4c5362;
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+  .detail-temp {
+    color: #1f222a;
+    font-size: 2rem;
+    font-weight: 560;
+  }
+  .detail-icon {
+    font-size: 3.2rem;
+    filter: drop-shadow(0 10px 18px rgba(80,91,110,0.14));
+  }
+  .day-summary {
+    margin: 0 0 14px;
+    color: #6d7585;
+    font-size: 0.84rem;
+  }
   .section-title {
     margin: 0 0 10px 12px;
     color: #4c5362;
@@ -469,13 +663,24 @@
   }
   .hourly::-webkit-scrollbar { display: none; }
   .hour {
+    appearance: none;
+    border: 0;
+    border-right: 1px solid rgba(130, 138, 150, 0.16);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
     min-height: 118px;
     display: grid;
     justify-items: center;
     align-content: center;
     gap: 12px;
     padding: 12px 8px;
-    border-right: 1px solid rgba(130, 138, 150, 0.16);
+  }
+  .hour:hover,
+  .hour.is-selected {
+    background: rgba(74, 136, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(74, 136, 255, 0.26);
   }
   .hour:last-child { border-right: 0; }
   .hour-time {
@@ -513,13 +718,26 @@
     box-shadow: var(--card-shadow);
   }
   .day {
+    appearance: none;
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid rgba(130, 138, 150, 0.15);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
     min-height: 43px;
     display: grid;
     grid-template-columns: 86px 46px 1fr 56px minmax(180px, 34%) 56px;
     align-items: center;
     gap: 14px;
     padding: 0 24px;
-    border-bottom: 1px solid rgba(130, 138, 150, 0.15);
+  }
+  .day:hover,
+  .day.is-selected {
+    background: rgba(74, 136, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(74, 136, 255, 0.24);
   }
   .day:last-child { border-bottom: 0; }
   .day-name { font-weight: 700; }
@@ -602,6 +820,12 @@
       --wind-size: min(var(--wind-size), 34px);
     }
     .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .detail-head,
+    .hour-detail-head,
+    .day-detail-head {
+      grid-template-columns: 1fr;
+    }
     .day {
       grid-template-columns: 64px 34px 1fr 42px minmax(88px, 1fr) 42px;
       gap: 8px;
@@ -610,6 +834,7 @@
   }
   @media (max-width: 560px) {
     .metrics { grid-template-columns: 1fr; }
+    .detail-grid { grid-template-columns: 1fr; }
     .temp { font-size: 5.6rem; }
     .condition { font-size: 1.28rem; }
     .day-condition { display: none; }
@@ -654,6 +879,7 @@
         <div class="metric"><span class="metric-icon">♢</span><span><span class="metric-label">Humidity</span><span class="metric-value" id="humidity">--</span></span></div>
         <div class="metric"><span class="metric-icon">◷</span><span><span class="metric-label">Pressure</span><span class="metric-value" id="pressure">--</span></span></div>
       </section>
+      <section class="detail-panel" id="detail-panel" aria-live="polite" hidden></section>
       <section class="hour-wrap" aria-label="Hourly forecast">
         <div class="section-title">Hourly Forecast</div>
         <button class="chev left" type="button" aria-label="Previous hours">‹</button>
@@ -685,6 +911,8 @@
     weatherByKey: new Map(),
     source: localStorage.getItem(SOURCE_KEY) || 'auto',
     activeSource: '',
+    latestWeather: null,
+    activeDetail: null,
   };
 
   const els = {
@@ -705,6 +933,7 @@
     pressure: document.getElementById('pressure'),
     hourly: document.getElementById('hourly'),
     daily: document.getElementById('daily'),
+    detail: document.getElementById('detail-panel'),
     sourceBtn: document.getElementById('source-menu-btn'),
     sourceMenu: document.getElementById('source-menu'),
   };
@@ -759,6 +988,91 @@
     if (index === 0) return 'Today';
     return new Date(`${iso}T12:00:00`).toLocaleDateString([], { weekday: 'short' });
   }
+  function fmtDateTime(iso) {
+    return new Date(iso).toLocaleString([], { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric' });
+  }
+  function fmtFullDate(iso) {
+    return new Date(`${iso}T12:00:00`).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+  function fmtNumber(value, suffix = '', digits = 0) {
+    return Number.isFinite(value) ? `${Number(value).toFixed(digits)}${suffix}` : '--';
+  }
+  function currentHourlyIndex(data) {
+    return Math.max(0, data.hourly.time.findIndex(t => new Date(t) >= new Date()));
+  }
+  function detailMetricKey() {
+    if (!state.latestWeather) return 'precip';
+    return (Number(state.latestWeather.current.precipitation) || 0) > 0 ? 'precip' : 'uv';
+  }
+  function metricValue(key, index = null) {
+    const data = state.latestWeather;
+    if (!data) return '--';
+    if (index === null) index = currentHourlyIndex(data);
+    const hourly = data.hourly;
+    if (key === 'feels') return fmtTemp(hourly.apparent_temperature?.[index] ?? hourly.temperature_2m?.[index]);
+    if (key === 'wind') return `${fmtNumber(hourly.wind_speed_10m?.[index], ' km/h')} · ${heading(hourly.wind_direction_10m?.[index])}`;
+    if (key === 'humidity') return fmtNumber(hourly.relative_humidity_2m?.[index], '%');
+    if (key === 'pressure') return fmtNumber(hourly.pressure_msl?.[index], ' hPa');
+    if (key === 'uv') return fmtNumber(hourly.uv_index?.[index], '', 1);
+    return fmtNumber(hourly.precipitation?.[index], ' mm/hr', 1);
+  }
+  function metricSeries(key) {
+    const data = state.latestWeather;
+    if (!data) return [];
+    const hourly = data.hourly;
+    const start = currentHourlyIndex(data);
+    const source = key === 'feels' ? (hourly.apparent_temperature || hourly.temperature_2m)
+      : key === 'humidity' ? hourly.relative_humidity_2m
+      : key === 'pressure' ? hourly.pressure_msl
+      : key === 'uv' ? hourly.uv_index
+      : key === 'wind' ? hourly.wind_speed_10m
+      : hourly.precipitation;
+    return [0, 3, 6, 9, 12, 15, 18, 21].map(offset => {
+      const index = Math.min(hourly.time.length - 1, start + offset);
+      return {
+        index,
+        time: offset === 0 ? 'Now' : fmtTime(hourly.time[index]),
+        value: Number(source?.[index]),
+      };
+    }).filter(point => Number.isFinite(point.value));
+  }
+  function lineChart(points, formatter) {
+    if (!points.length) return '<div class="detail-copy">Detailed timeline data is unavailable for this source.</div>';
+    const width = 720;
+    const height = 190;
+    const pad = { left: 34, right: 20, top: 28, bottom: 32 };
+    const values = points.map(point => point.value);
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    if (min === max) { min -= 1; max += 1; }
+    const x = index => pad.left + (index * (width - pad.left - pad.right)) / Math.max(1, points.length - 1);
+    const y = value => pad.top + ((max - value) * (height - pad.top - pad.bottom)) / (max - min);
+    const coords = points.map((point, index) => `${x(index)},${y(point.value)}`).join(' ');
+    const fill = `${pad.left},${height - pad.bottom} ${coords} ${x(points.length - 1)},${height - pad.bottom}`;
+    const rows = [0, 1, 2].map(row => {
+      const yy = pad.top + row * ((height - pad.top - pad.bottom) / 2);
+      return `<line class="chart-grid" x1="${pad.left}" y1="${yy}" x2="${width - pad.right}" y2="${yy}"></line>`;
+    }).join('');
+    const dots = points.map((point, index) => `<circle class="chart-dot" cx="${x(index)}" cy="${y(point.value)}" r="4"></circle><text class="chart-label" x="${x(index)}" y="${y(point.value) - 11}" text-anchor="middle">${formatter(point.value)}</text><text class="chart-axis" x="${x(index)}" y="${height - 10}" text-anchor="middle">${point.time}</text>`).join('');
+    return `<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Timeline chart"><polygon class="chart-fill" points="${fill}"></polygon>${rows}<polyline class="chart-line" points="${coords}"></polyline>${dots}</svg>`;
+  }
+  function detailTile(label, value) {
+    return `<div class="detail-tile"><span class="tile-label">${label}</span><span class="tile-value">${value}</span></div>`;
+  }
+  function moonPhase(iso) {
+    const date = new Date(`${iso}T12:00:00Z`);
+    const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14);
+    const days = (date.getTime() - knownNewMoon) / 86400000;
+    const phase = ((days % 29.53058867) + 29.53058867) % 29.53058867;
+    if (phase < 1.85 || phase > 27.68) return 'New Moon';
+    if (phase < 5.54) return 'Waxing Crescent';
+    if (phase < 9.23) return 'First Quarter';
+    if (phase < 12.92) return 'Waxing Gibbous';
+    if (phase < 16.61) return 'Full Moon';
+    if (phase < 20.30) return 'Waning Gibbous';
+    if (phase < 23.99) return 'Last Quarter';
+    return 'Waning Crescent';
+  }
   function renderLocations() {
     const selectedKey = state.selected ? keyFor(state.selected) : '';
     els.locations.innerHTML = state.locations.map(loc => {
@@ -773,6 +1087,7 @@
     }).join('');
   }
   function renderWeather(loc, data) {
+    state.latestWeather = data;
     const current = data.current;
     const meta = weatherMeta(current.weather_code);
     const hi = data.daily.temperature_2m_max[0];
@@ -797,11 +1112,12 @@
     els.humidity.textContent = Number.isFinite(current.relative_humidity_2m) ? `${Math.round(current.relative_humidity_2m)}%` : '--';
     els.pressure.textContent = Number.isFinite(current.pressure_msl) ? `${Math.round(current.pressure_msl)} hPa` : '--';
 
-    const nowIndex = Math.max(0, data.hourly.time.findIndex(t => new Date(t) >= new Date()));
+    const nowIndex = currentHourlyIndex(data);
     els.hourly.innerHTML = data.hourly.time.slice(nowIndex, nowIndex + 10).map((time, offset) => {
       const index = nowIndex + offset;
       const hourMeta = weatherMeta(data.hourly.weather_code[index]);
-      return `<div class="hour"><span class="hour-time">${offset === 0 ? 'Now' : fmtTime(time)}</span><span class="hour-icon">${hourMeta[0]}</span><span class="hour-temp">${fmtTemp(data.hourly.temperature_2m[index])}</span></div>`;
+      const selected = state.activeDetail && state.activeDetail.type === 'hour' && state.activeDetail.index === index;
+      return `<button class="hour${selected ? ' is-selected' : ''}" type="button" data-hour-index="${index}"><span class="hour-time">${offset === 0 ? 'Now' : fmtTime(time)}</span><span class="hour-icon">${hourMeta[0]}</span><span class="hour-temp">${fmtTemp(data.hourly.temperature_2m[index])}</span></button>`;
     }).join('');
 
     const minAll = Math.min(...data.daily.temperature_2m_min);
@@ -814,15 +1130,116 @@
       const left = Math.max(0, ((min - minAll) / span) * 100);
       const width = Math.max(16, ((max - min) / span) * 100);
       const dot = Math.min(96, left + width);
-      return `<div class="day">
+      const selected = state.activeDetail && state.activeDetail.type === 'day' && state.activeDetail.index === index;
+      return `<button class="day${selected ? ' is-selected' : ''}" type="button" data-day-index="${index}">
         <span class="day-name">${fmtDay(day, index)}</span>
         <span class="day-icon">${dayMeta[0]}</span>
         <span class="day-condition">${dayMeta[1]}</span>
         <span class="low">${fmtTemp(min)}</span>
         <span class="range"><span style="left:${left}%;width:${width}%"></span><i style="left:${dot}%"></i></span>
         <span class="high">${fmtTemp(max)}</span>
-      </div>`;
+      </button>`;
     }).join('');
+    renderDetail();
+  }
+  function setMetricSelection(key) {
+    document.querySelectorAll('.metric').forEach((card, index) => {
+      const keys = ['feels', 'precip', 'humidity', 'pressure'];
+      const cardKey = keys[index] === 'precip' ? detailMetricKey() : keys[index];
+      card.classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'metric' && state.activeDetail.key === cardKey);
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+    });
+    document.getElementById('wind-meta').classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'metric' && state.activeDetail.key === 'wind');
+  }
+  function renderMetricDetail(key) {
+    const labels = {
+      feels: ['Feels Like', 'The temperature your body feels based on wind, humidity, and other factors.'],
+      precip: ['Precipitation', 'Precipitation amount expected through the next day.'],
+      uv: ['UV Index', 'Current sunlight intensity and exposure risk through the next day.'],
+      humidity: ['Humidity', 'Humidity levels over the next 24 hours.'],
+      pressure: ['Pressure', 'Barometric pressure over the next 24 hours.'],
+      wind: ['Wind', 'Wind speed and heading over the next 24 hours.'],
+    };
+    const [title, copy] = labels[key] || labels.feels;
+    if (key === 'wind') {
+      const data = state.latestWeather;
+      const start = currentHourlyIndex(data);
+      const points = [0, 3, 6, 9, 12, 15, 18, 21].map(offset => Math.min(data.hourly.time.length - 1, start + offset));
+      const maxGust = Math.max(...points.map(index => Number(data.hourly.wind_speed_10m?.[index]) || 0));
+      const row = points.map(index => `<div class="wind-point"><span class="mini-arrow" style="--wind-rotation:${(((Number(data.hourly.wind_direction_10m?.[index]) || 0) + 180) % 360).toFixed(0)}deg"></span><span>${fmtNumber(data.hourly.wind_speed_10m?.[index], ' km/h')}</span><span>${heading(data.hourly.wind_direction_10m?.[index])}</span><span>${index === start ? 'Now' : fmtTime(data.hourly.time[index])}</span></div>`).join('');
+      return `<div class="detail-head"><div><h3 class="detail-title">${title}</h3><p class="detail-copy">${copy}</p></div><div class="detail-current">${metricValue('wind')}</div></div><div class="wind-series">${row}</div><p class="detail-note">Gusts up to ${Math.round(maxGust)} km/h</p>`;
+    }
+    const formatter = key === 'humidity' ? value => `${Math.round(value)}%`
+      : key === 'pressure' ? value => `${Math.round(value)}`
+      : key === 'uv' ? value => value.toFixed(1)
+      : key === 'precip' ? value => value.toFixed(1)
+      : value => `${Math.round(value)}°`;
+    const unit = key === 'pressure' ? ' hPa' : key === 'precip' ? ' mm/hr' : '';
+    return `<div class="detail-head"><div><h3 class="detail-title">${title}</h3><p class="detail-copy">${copy}</p></div><div class="detail-current">${metricValue(key)}</div></div>${lineChart(metricSeries(key), value => `${formatter(value)}${unit}`)}`;
+  }
+  function renderHourDetail(index) {
+    const data = state.latestWeather;
+    const meta = weatherMeta(data.hourly.weather_code[index]);
+    const sunrise = data.daily.sunrise?.[0] ? fmtTime(data.daily.sunrise[0]) : '--';
+    const sunset = data.daily.sunset?.[0] ? fmtTime(data.daily.sunset[0]) : '--';
+    return `<div class="hour-detail-head"><div><div class="detail-date">${fmtDateTime(data.hourly.time[index])}</div><h3 class="detail-title">${meta[1]}</h3></div><div class="detail-temp">${fmtTemp(data.hourly.temperature_2m[index])}</div><div class="detail-icon">${meta[0]}</div></div>
+      <div class="detail-grid">
+        ${detailTile('Feels Like', metricValue('feels', index))}
+        ${detailTile('Precipitation', fmtNumber(data.hourly.precipitation?.[index], ' mm/hr', 1))}
+        ${detailTile('Precip Chance', fmtNumber(data.hourly.precipitation_probability?.[index], '%'))}
+        ${detailTile('Wind', metricValue('wind', index))}
+        ${detailTile('Humidity', metricValue('humidity', index))}
+        ${detailTile('Pressure', metricValue('pressure', index))}
+        ${detailTile('UV Index', fmtNumber(data.hourly.uv_index?.[index], '', 1))}
+        ${detailTile('Sunrise', sunrise)}
+        ${detailTile('Sunset', sunset)}
+      </div>`;
+  }
+  function renderDayDetail(index) {
+    const data = state.latestWeather;
+    const day = data.daily.time[index];
+    const meta = weatherMeta(data.daily.weather_code[index]);
+    const hours = data.hourly.time.map((time, hourIndex) => ({ time, hourIndex })).filter(item => item.time.slice(0, 10) === day).slice(0, 10);
+    const hourStrip = hours.map(item => {
+      const hMeta = weatherMeta(data.hourly.weather_code[item.hourIndex]);
+      return `<div class="day-hour"><span>${fmtTime(item.time)}</span><span>${hMeta[0]}</span><span>${fmtTemp(data.hourly.temperature_2m[item.hourIndex])}</span></div>`;
+    }).join('');
+    return `<div class="detail-head"><div><button class="detail-back" type="button" data-detail-close>Back to Forecast</button></div></div>
+      <div class="day-detail-head"><div><div class="detail-date">${fmtFullDate(day)}</div><h3 class="detail-title">${meta[1]}</h3></div><div class="detail-temp">${fmtTemp(data.daily.temperature_2m_max[index])} / ${fmtTemp(data.daily.temperature_2m_min[index])}</div><div class="detail-icon">${meta[0]}</div></div>
+      <p class="day-summary">A calm overview of ${meta[1].toLowerCase()} conditions with the day&apos;s key weather details.</p>
+      <div class="detail-grid">
+        ${detailTile('Feels Like High', fmtTemp(data.daily.apparent_temperature_max?.[index]))}
+        ${detailTile('Feels Like Low', fmtTemp(data.daily.apparent_temperature_min?.[index]))}
+        ${detailTile('Precipitation', fmtNumber(data.daily.precipitation_sum?.[index], ' mm', 1))}
+        ${detailTile('Wind', fmtNumber(data.daily.wind_speed_10m_max?.[index], ' km/h'))}
+        ${detailTile('Humidity', fmtNumber(data.daily.relative_humidity_2m_mean?.[index], '%'))}
+        ${detailTile('Pressure', fmtNumber(data.daily.pressure_msl_mean?.[index], ' hPa'))}
+        ${detailTile('UV Index', fmtNumber(data.daily.uv_index_max?.[index], '', 1))}
+        ${detailTile('Sunrise', data.daily.sunrise?.[index] ? fmtTime(data.daily.sunrise[index]) : '--')}
+        ${detailTile('Sunset', data.daily.sunset?.[index] ? fmtTime(data.daily.sunset[index]) : '--')}
+        ${detailTile('Moon', moonPhase(day))}
+      </div>
+      <div class="section-title" style="margin-top:16px">Hourly Forecast</div>
+      <div class="day-hour-strip">${hourStrip || '<span class="detail-copy">Hourly detail is unavailable for this day.</span>'}</div>`;
+  }
+  function renderDetail() {
+    setMetricSelection();
+    document.querySelectorAll('.hour').forEach(btn => {
+      btn.classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'hour' && Number(btn.dataset.hourIndex) === state.activeDetail.index);
+    });
+    document.querySelectorAll('.day').forEach(btn => {
+      btn.classList.toggle('is-selected', state.activeDetail && state.activeDetail.type === 'day' && Number(btn.dataset.dayIndex) === state.activeDetail.index);
+    });
+    if (!state.latestWeather || !state.activeDetail) {
+      els.detail.hidden = true;
+      els.detail.innerHTML = '';
+      return;
+    }
+    if (state.activeDetail.type === 'metric') els.detail.innerHTML = renderMetricDetail(state.activeDetail.key);
+    if (state.activeDetail.type === 'hour') els.detail.innerHTML = renderHourDetail(state.activeDetail.index);
+    if (state.activeDetail.type === 'day') els.detail.innerHTML = renderDayDetail(state.activeDetail.index);
+    els.detail.hidden = false;
   }
   function renderSourceMenu() {
     els.sourceMenu.querySelectorAll('.source-option').forEach(btn => {
@@ -869,32 +1286,74 @@
     return 2;
   }
   function emptyDaily() {
-    return { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [] };
+    return {
+      time: [],
+      weather_code: [],
+      temperature_2m_max: [],
+      temperature_2m_min: [],
+      apparent_temperature_max: [],
+      apparent_temperature_min: [],
+      precipitation_sum: [],
+      wind_speed_10m_max: [],
+      relative_humidity_2m_mean: [],
+      pressure_msl_mean: [],
+      uv_index_max: [],
+      sunrise: [],
+      sunset: [],
+    };
   }
   function groupDailyFromHourly(hourly) {
     const daily = emptyDaily();
     const byDay = new Map();
     hourly.time.forEach((iso, index) => {
       const day = iso.slice(0, 10);
-      if (!byDay.has(day)) byDay.set(day, { temps: [], codes: [] });
+      if (!byDay.has(day)) byDay.set(day, { temps: [], feels: [], humidity: [], pressure: [], precip: [], wind: [], uv: [], codes: [] });
       byDay.get(day).temps.push(hourly.temperature_2m[index]);
+      byDay.get(day).feels.push(hourly.apparent_temperature?.[index] ?? hourly.temperature_2m[index]);
+      byDay.get(day).humidity.push(hourly.relative_humidity_2m?.[index]);
+      byDay.get(day).pressure.push(hourly.pressure_msl?.[index]);
+      byDay.get(day).precip.push(hourly.precipitation?.[index]);
+      byDay.get(day).wind.push(hourly.wind_speed_10m?.[index]);
+      byDay.get(day).uv.push(hourly.uv_index?.[index]);
       byDay.get(day).codes.push(hourly.weather_code[index]);
     });
+    const clean = values => values.map(Number).filter(Number.isFinite);
+    const mean = values => {
+      const valid = clean(values);
+      return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : NaN;
+    };
     Array.from(byDay.entries()).slice(0, 7).forEach(([day, entry]) => {
+      const feels = clean(entry.feels);
       daily.time.push(day);
       daily.temperature_2m_min.push(Math.min(...entry.temps));
       daily.temperature_2m_max.push(Math.max(...entry.temps));
       daily.weather_code.push(entry.codes[0] ?? 2);
+      daily.apparent_temperature_min.push(feels.length ? Math.min(...feels) : NaN);
+      daily.apparent_temperature_max.push(feels.length ? Math.max(...feels) : NaN);
+      daily.precipitation_sum.push(clean(entry.precip).reduce((sum, value) => sum + value, 0));
+      daily.wind_speed_10m_max.push(clean(entry.wind).length ? Math.max(...clean(entry.wind)) : NaN);
+      daily.relative_humidity_2m_mean.push(mean(entry.humidity));
+      daily.pressure_msl_mean.push(mean(entry.pressure));
+      daily.uv_index_max.push(clean(entry.uv).length ? Math.max(...clean(entry.uv)) : NaN);
+      daily.sunrise.push('');
+      daily.sunset.push('');
     });
     return daily;
+  }
+  function enrichDailyFromHourly(data) {
+    const grouped = groupDailyFromHourly(data.hourly);
+    ['relative_humidity_2m_mean', 'pressure_msl_mean'].forEach(key => {
+      if (!data.daily[key]) data.daily[key] = grouped[key];
+    });
+    return data;
   }
   async function fetchOpenMeteo(loc) {
     const params = new URLSearchParams({
       latitude: loc.latitude,
       longitude: loc.longitude,
       current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,uv_index,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
-      hourly: 'temperature_2m,weather_code',
-      daily: 'weather_code,temperature_2m_max,temperature_2m_min',
+      hourly: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,precipitation,uv_index,pressure_msl,weather_code,wind_speed_10m,wind_direction_10m',
+      daily: 'weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,wind_speed_10m_max,uv_index_max,sunrise,sunset',
       timezone: 'auto',
       temperature_unit: 'celsius',
       wind_speed_unit: 'kmh',
@@ -904,7 +1363,7 @@
     const data = await res.json();
     data.source = 'open-meteo';
     data.sourceLabel = SOURCES['open-meteo'];
-    return data;
+    return enrichDailyFromHourly(data);
   }
   async function fetchMetNo(loc) {
     const params = new URLSearchParams({ lat: loc.latitude, lon: loc.longitude });
@@ -912,15 +1371,36 @@
     if (!res.ok) throw new Error('MET Norway unavailable');
     const raw = await res.json();
     const times = raw.properties.timeseries.slice(0, 72);
-    const hourly = { time: [], temperature_2m: [], weather_code: [] };
+    const hourly = {
+      time: [],
+      temperature_2m: [],
+      apparent_temperature: [],
+      relative_humidity_2m: [],
+      precipitation_probability: [],
+      precipitation: [],
+      uv_index: [],
+      pressure_msl: [],
+      weather_code: [],
+      wind_speed_10m: [],
+      wind_direction_10m: [],
+    };
     const first = times[0];
     const currentDetails = first.data.instant.details;
     const currentSummary = (first.data.next_1_hours && first.data.next_1_hours.summary && first.data.next_1_hours.summary.symbol_code) || '';
     times.forEach(item => {
       const details = item.data.instant.details;
+      const next = item.data.next_1_hours;
       hourly.time.push(item.time);
       hourly.temperature_2m.push(details.air_temperature);
-      hourly.weather_code.push(symbolToWmo(item.data.next_1_hours && item.data.next_1_hours.summary && item.data.next_1_hours.summary.symbol_code));
+      hourly.apparent_temperature.push(details.air_temperature);
+      hourly.relative_humidity_2m.push(details.relative_humidity);
+      hourly.precipitation_probability.push(NaN);
+      hourly.precipitation.push((next && next.details && next.details.precipitation_amount) || 0);
+      hourly.uv_index.push(NaN);
+      hourly.pressure_msl.push(details.air_pressure_at_sea_level);
+      hourly.weather_code.push(symbolToWmo(next && next.summary && next.summary.symbol_code));
+      hourly.wind_speed_10m.push(details.wind_speed * 3.6);
+      hourly.wind_direction_10m.push(details.wind_from_direction);
     });
     const data = {
       source: 'met-no',
@@ -959,11 +1439,32 @@
       return values && values[index] && Number.isFinite(values[index].value) ? values[index].value : fallback;
     };
     const toC = f => (f - 32) * 5 / 9;
-    const hourly = { time: [], temperature_2m: [], weather_code: [] };
-    periods.forEach(period => {
+    const hourly = {
+      time: [],
+      temperature_2m: [],
+      apparent_temperature: [],
+      relative_humidity_2m: [],
+      precipitation_probability: [],
+      precipitation: [],
+      uv_index: [],
+      pressure_msl: [],
+      weather_code: [],
+      wind_speed_10m: [],
+      wind_direction_10m: [],
+    };
+    periods.forEach((period, index) => {
+      const temp = period.temperatureUnit === 'F' ? toC(period.temperature) : period.temperature;
       hourly.time.push(period.startTime);
-      hourly.temperature_2m.push(period.temperatureUnit === 'F' ? toC(period.temperature) : period.temperature);
+      hourly.temperature_2m.push(temp);
+      hourly.apparent_temperature.push(valueAt('apparentTemperature', index, temp));
+      hourly.relative_humidity_2m.push(valueAt('relativeHumidity', index, NaN));
+      hourly.precipitation_probability.push(valueAt('probabilityOfPrecipitation', index, NaN));
+      hourly.precipitation.push(valueAt('quantitativePrecipitation', index, 0));
+      hourly.uv_index.push(NaN);
+      hourly.pressure_msl.push(valueAt('pressure', index, 1013));
       hourly.weather_code.push(wmoFromText(period.shortForecast));
+      hourly.wind_speed_10m.push(parseFloat(period.windSpeed) * 1.60934 || valueAt('windSpeed', index, 0));
+      hourly.wind_direction_10m.push(directionDegrees(period.windDirection) || valueAt('windDirection', index, 0));
     });
     const first = periods[0];
     const temp = first.temperatureUnit === 'F' ? toC(first.temperature) : first.temperature;
@@ -1069,6 +1570,42 @@
     } catch (error) {
       setStatus(error.message || 'Search failed', true);
     }
+  });
+  document.querySelectorAll('.metric').forEach((card, index) => {
+    const keys = ['feels', 'precip', 'humidity', 'pressure'];
+    const activate = () => {
+      const key = keys[index] === 'precip' ? detailMetricKey() : keys[index];
+      state.activeDetail = { type: 'metric', key };
+      renderDetail();
+    };
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate();
+      }
+    });
+  });
+  document.getElementById('wind-meta').addEventListener('click', () => {
+    state.activeDetail = { type: 'metric', key: 'wind' };
+    renderDetail();
+  });
+  els.hourly.addEventListener('click', event => {
+    const btn = event.target.closest('.hour');
+    if (!btn) return;
+    state.activeDetail = { type: 'hour', index: Number(btn.dataset.hourIndex) };
+    renderDetail();
+  });
+  els.daily.addEventListener('click', event => {
+    const btn = event.target.closest('.day');
+    if (!btn) return;
+    state.activeDetail = { type: 'day', index: Number(btn.dataset.dayIndex) };
+    renderDetail();
+  });
+  els.detail.addEventListener('click', event => {
+    if (!event.target.closest('[data-detail-close]')) return;
+    state.activeDetail = null;
+    renderDetail();
   });
   els.sourceBtn.addEventListener('click', event => {
     event.stopPropagation();
