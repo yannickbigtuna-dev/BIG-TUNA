@@ -264,6 +264,7 @@
   const accessLabel = document.getElementById('access-label');
   const pollLabel = document.getElementById('poll-label');
   const pollText = document.getElementById('poll-text');
+  const INVERT_WEBSITE_STATE = true;
 
   let currentOn = false;
   let canControl = false;
@@ -279,6 +280,14 @@
 
   function getToken() {
     return localStorage.getItem(TOKEN_KEY) || '';
+  }
+
+  function apiToWebsiteState(on) {
+    return INVERT_WEBSITE_STATE ? on !== true : on === true;
+  }
+
+  function websiteToApiState(on) {
+    return INVERT_WEBSITE_STATE ? on !== true : on === true;
   }
 
   function setVisual(on, updatedAt) {
@@ -309,7 +318,7 @@
       if (!res.ok) throw new Error('load failed');
       const data = await res.json();
       if (!lastUpdatedAt || !data.updatedAt || data.updatedAt >= lastUpdatedAt) {
-        setVisual(data.on, data.updatedAt);
+        setVisual(apiToWebsiteState(data.on), data.updatedAt);
       }
     } catch {
       if (hasLoadedState || pending) return;
@@ -343,7 +352,7 @@
     events.onmessage = event => {
       try {
         const data = JSON.parse(event.data);
-        setVisual(data.on, data.updatedAt);
+        setVisual(apiToWebsiteState(data.on), data.updatedAt);
         updateAccess();
       } catch {}
     };
@@ -368,11 +377,11 @@
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + getToken(),
         },
-        body: JSON.stringify({ on }),
+        body: JSON.stringify({ on: websiteToApiState(on) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'save failed');
-      setVisual(data.on, data.updatedAt);
+      setVisual(apiToWebsiteState(data.on), data.updatedAt);
     } catch {
       setVisual(previous);
       accessLabel.textContent = 'Save failed';

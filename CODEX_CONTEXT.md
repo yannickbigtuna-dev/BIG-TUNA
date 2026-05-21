@@ -407,7 +407,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 
 - Public static app at `/lights/`.
 - Does not load `auth.js`, because the page must remain publicly viewable without showing the login modal.
-- Reads `/api/lights` for state and enables toggling only when localStorage contains username `yannick`; the server enforces the same rule on `POST /api/lights`.
+- Reads `/api/lights` for state, inverts that API value client-side to match the Arduino-driven physical light state, and posts the inverse value back when toggled. The page enables toggling only when localStorage contains username `yannick`; the server enforces the same rule on `POST /api/lights`.
 - Uses `/api/lights/events` SSE for near-instant same-page updates across open browsers, with 1-second `/api/lights` polling only as a fallback.
 - Shows a small device-poll indicator based on whether `/api/lights/device` has been called in the last 5 seconds.
 - ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, and keep last known relay state if the website is temporarily unreachable. The device endpoint currently inverts the stored website state before returning `on` to work around reversed relay behavior.
