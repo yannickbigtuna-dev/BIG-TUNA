@@ -276,7 +276,7 @@ data/shared-lists/{id}.json
   Shared list documents with owner/member metadata and list content.
 
 data/lights/state.json
-  Stored light relay state for the Lights app and ESP8266 polling integration; the public app/API state is inverted at the server API boundary:
+  Desired light relay state for the Lights app and ESP8266 polling integration:
   { on: boolean, updatedAt: ISO string, updatedBy: username or "device" }.
 
 data/lights/device-status.json
@@ -344,7 +344,7 @@ GET  /api/lights/device
 GET/POST /api/lights/device/status
 ```
 
-`GET /api/lights` is public and returns `{ on, updatedAt }`, with `on` inverted from `data/lights/state.json` by the server. `GET /api/lights/events` is a public Server-Sent Events stream that immediately emits the same public state payload whenever it changes. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`; the server stores the inverse of the posted public state. Device routes are public and intended for ESP8266 polling/status. `GET /api/lights/device` records `polledAt`, currently returns the inverted stored `on` value as a hardware-polarity workaround, and includes an additive `pollAfterMs` hint, currently `250`, so ESP firmware can poll aggressively without hardcoding the cadence. `GET /api/lights/device/status` returns `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` for the Lights page device-poll indicator.
+`GET /api/lights` is public and returns `{ on, updatedAt }`. `GET /api/lights/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`. Device routes are public and intended for ESP8266 polling/status. `GET /api/lights/device` records `polledAt`, currently returns the inverted stored `on` value as a hardware-polarity workaround, and includes an additive `pollAfterMs` hint, currently `250`, so ESP firmware can poll aggressively without hardcoding the cadence. `GET /api/lights/device/status` returns `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` for the Lights page device-poll indicator.
 
 External/proxy/parser endpoints:
 
@@ -410,7 +410,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Reads `/api/lights` for state and enables toggling only when localStorage contains username `yannick`; the server enforces the same rule on `POST /api/lights`.
 - Uses `/api/lights/events` SSE for near-instant same-page updates across open browsers, with 1-second `/api/lights` polling only as a fallback.
 - Shows a small device-poll indicator based on whether `/api/lights/device` has been called in the last 5 seconds.
-- ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, and keep last known relay state if the website is temporarily unreachable. The device endpoint currently inverts the stored state before returning `on`; because the public API also inverts stored state, the device endpoint follows the public app state.
+- ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, and keep last known relay state if the website is temporarily unreachable. The device endpoint currently inverts the stored website state before returning `on` to work around reversed relay behavior.
 - The unsigned macOS desktop controller zip is linked from the homepage downloads menu at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip`. The app zip is too large for GitHub's normal per-file repository limit, so it is hosted as a release asset rather than committed under `apps/`.
 
 `weather`:
