@@ -24,6 +24,7 @@ const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
 const LIGHTS_DEVICE_INVERT_OUTPUT = true;
+const LIGHTS_INVERT_PUBLIC_STATE = true;
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
 for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR])
@@ -82,6 +83,17 @@ function readLightsState() {
   } catch {
     return { on: false, updatedAt: new Date(0).toISOString(), updatedBy: 'device' };
   }
+}
+
+function publicLightsState(state) {
+  return {
+    on: LIGHTS_INVERT_PUBLIC_STATE ? !state.on : state.on,
+    updatedAt: state.updatedAt,
+  };
+}
+
+function storedLightsOn(publicOn) {
+  return LIGHTS_INVERT_PUBLIC_STATE ? publicOn !== true : publicOn === true;
 }
 
 function writeLightsState(on, updatedBy) {
@@ -334,8 +346,7 @@ function broadcastSharedList(listId, list) {
 }
 
 function sendLightsSse(res, state) {
-  const { on, updatedAt } = state;
-  res.write(`data: ${JSON.stringify({ on, updatedAt })}\n\n`);
+  res.write(`data: ${JSON.stringify(publicLightsState(state))}\n\n`);
 }
 
 function broadcastLightsState(state) {
@@ -675,12 +686,12 @@ async function handleAPI(req, res, urlPath) {
 
   // GET /api/lights - public desired light state
   if (req.method === 'GET' && urlPath === '/api/lights') {
-    const { on, updatedAt } = readLightsState();
+    const state = publicLightsState(readLightsState());
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
-    return res.end(JSON.stringify({ on, updatedAt }));
+    return res.end(JSON.stringify(state));
   }
 
   // POST /api/lights - only yannick can change the desired light state
@@ -694,8 +705,8 @@ async function handleAPI(req, res, urlPath) {
       return jsonRes(res, 400, { error: 'on must be boolean' });
     }
 
-    const { on, updatedAt } = writeLightsState(body.on, user.username);
-    return jsonRes(res, 200, { on, updatedAt });
+    const state = publicLightsState(writeLightsState(storedLightsOn(body.on), user.username));
+    return jsonRes(res, 200, state);
   }
 
   // GET /api/lights/device - ESP8266 polling endpoint for desired state
