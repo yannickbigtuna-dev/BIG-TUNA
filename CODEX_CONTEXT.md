@@ -355,7 +355,7 @@ Radar:
 GET /api/radar/yhz
 ```
 
-`GET /api/radar/yhz` is public for an ESP8266 Halifax aircraft radar display. It fetches ADSB.lol around YHZ (`44.8808,-63.5086`, upstream `dist/82` nautical miles), filters to `rangeKm <= 150`, computes distance/bearing from YHZ, sorts closest first, returns at most 8 aircraft, caches upstream data in memory for about 12 seconds, and returns HTTP 200 JSON with CORS `Access-Control-Allow-Origin: *`. The response uses schema string `halifax-radar-v1`, `api: "ADSB"`, `message: "data ok"` when online, and `status: "error"`, `message: "api not working"`, and empty `aircraft` when ADSB.lol fails. `planesTracked` counts all filtered aircraft, while `planesToday` comes from `data/radar/yhz-YYYY-MM-DD.json` in Halifax local time.
+`GET /api/radar/yhz` is public for an ESP8266 Halifax aircraft radar display. It fetches ADSB.lol around the configured Halifax center (`44.6392425,-63.5944923`, upstream `dist/28` nautical miles), filters to `rangeKm <= 50`, computes distance/bearing from that center, sorts closest first, returns at most 8 aircraft, caches upstream data in memory for about 12 seconds, and returns HTTP 200 JSON with CORS `Access-Control-Allow-Origin: *`. The response uses schema string `halifax-radar-v1`, `api: "ADSB"`, `message: "data ok"` when online, and `status: "error"`, `message: "api not working"`, and empty `aircraft` when ADSB.lol fails. `planesTracked` counts all filtered aircraft, while `planesToday` comes from `data/radar/yhz-YYYY-MM-DD.json` in Halifax local time.
 
 External/proxy/parser endpoints:
 
