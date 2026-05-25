@@ -17,6 +17,7 @@ const CLIMBV2_DIR  = path.join(DATA, 'climb-tracker');
 const QUIZZES_DIR       = path.join(DATA, 'quizzes');
 const SHARED_LISTS_DIR  = path.join(DATA, 'shared-lists');
 const LIGHTS_DIR        = path.join(DATA, 'lights');
+const RADAR_DIR         = path.join(DATA, 'radar');
 const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
@@ -24,9 +25,13 @@ const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
 const LIGHTS_DEVICE_INVERT_OUTPUT = true;
+const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.8808, lon: -63.5086, radiusKm: 150 });
+const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.8808/lon/-63.5086/dist/82';
+const YHZ_RADAR_CACHE_MS = 12000;
+const YHZ_RADAR_TIMEOUT_MS = 8000;
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
-for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR])
+for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, RADAR_DIR])
   fs.mkdirSync(dir, { recursive: true });
 
 if (!fs.existsSync(USERS_FILE))    fs.writeFileSync(USERS_FILE,    '[]');
@@ -426,6 +431,234 @@ function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// Public YHZ radar feed for small ESP8266 clients.
+let yhzRadarCache = null;
+
+function httpsGetJson(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'BIG-TUNA-YHZ-Radar/1.0',
+      },
+    }, r => {
+      let buf = '';
+      r.on('data', c => {
+        buf += c;
+        if (buf.length > 2_000_000) {
+          req.destroy(new Error('Response too large'));
+        }
+      });
+      r.on('end', () => {
+        if (r.statusCode < 200 || r.statusCode >= 300) {
+          reject(new Error(`HTTP ${r.statusCode}`));
+          return;
+        }
+        try { resolve(JSON.parse(buf)); }
+        catch { reject(new Error('Invalid JSON')); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('Timeout')));
+  });
+}
+
+function getHalifaxParts(now = new Date()) {
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Halifax',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now).reduce((out, part) => {
+    out[part.type] = part.value;
+    return out;
+  }, {});
+
+  const timeParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Halifax',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now).reduce((out, part) => {
+    out[part.type] = part.value;
+    return out;
+  }, {});
+
+  return {
+    dateKey: `${dateParts.year}-${dateParts.month}-${dateParts.day}`,
+    time: `${timeParts.hour === '24' ? '00' : timeParts.hour}:${timeParts.minute}`,
+  };
+}
+
+function degreesToRadians(deg) {
+  return deg * Math.PI / 180;
+}
+
+function normalizeDegrees(deg) {
+  return ((deg % 360) + 360) % 360;
+}
+
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const earthKm = 6371;
+  const dLat = degreesToRadians(lat2 - lat1);
+  const dLon = degreesToRadians(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(degreesToRadians(lat1)) * Math.cos(degreesToRadians(lat2))
+    * Math.sin(dLon / 2) ** 2;
+  return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const p1 = degreesToRadians(lat1);
+  const p2 = degreesToRadians(lat2);
+  const dLon = degreesToRadians(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dLon);
+  return Math.round(normalizeDegrees(Math.atan2(y, x) * 180 / Math.PI));
+}
+
+function numberOrZero(value) {
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function integerOrZero(value) {
+  return Math.round(numberOrZero(value));
+}
+
+function destinationFromAircraft(ac) {
+  for (const key of ['destination', 'dest', 'to', 'airport_destination', 'airportDest']) {
+    if (typeof ac[key] === 'string' && ac[key].trim()) return ac[key].trim().slice(0, 8);
+  }
+  return 'UNK';
+}
+
+function readYhzRadarIds(dateKey) {
+  const file = path.join(RADAR_DIR, `yhz-${dateKey}.json`);
+  try {
+    const ids = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(ids) ? new Set(ids.filter(id => typeof id === 'string')) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function writeYhzRadarIds(dateKey, ids) {
+  atomicWrite(path.join(RADAR_DIR, `yhz-${dateKey}.json`), Array.from(ids).sort());
+}
+
+function emptyYhzRadarPayload(status, now = new Date()) {
+  const halifax = getHalifaxParts(now);
+  return {
+    schema: 1,
+    api: 'ADSB.lol',
+    status,
+    center: YHZ_RADAR_CENTER,
+    serverTime: halifax.time,
+    updatedAt: Math.floor(now.getTime() / 1000),
+    planesTracked: 0,
+    planesToday: 0,
+    closest: { id: 'UNK', callsign: 'UNK', distanceKm: 0, speedKmh: 0, altitudeFt: 0, destination: 'UNK' },
+    fastest: { callsign: 'UNK', speedKmh: 0 },
+    highest: { callsign: 'UNK', altitudeFt: 0 },
+    aircraft: [],
+  };
+}
+
+function withRadarStatusAndTime(payload, status) {
+  return {
+    ...payload,
+    status,
+    serverTime: getHalifaxParts().time,
+  };
+}
+
+function normalizeYhzRadarPayload(upstream, now = new Date()) {
+  const aircraft = Array.isArray(upstream && upstream.ac) ? upstream.ac : [];
+  const normalized = [];
+
+  for (const ac of aircraft) {
+    const lat = Number(ac.lat);
+    const lon = Number(ac.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+    const rangeKm = Math.round(distanceKm(YHZ_RADAR_CENTER.lat, YHZ_RADAR_CENTER.lon, lat, lon));
+    if (rangeKm > YHZ_RADAR_CENTER.radiusKm) continue;
+
+    const id = (typeof ac.hex === 'string' && ac.hex.trim())
+      ? ac.hex.trim().toLowerCase()
+      : (typeof ac.r === 'string' && ac.r.trim() ? ac.r.trim() : 'UNK');
+    const rawCallsign = typeof ac.flight === 'string' && ac.flight.trim()
+      ? ac.flight.trim()
+      : id;
+
+    normalized.push({
+      id,
+      callsign: rawCallsign || 'UNK',
+      lat: Math.round(lat * 10000) / 10000,
+      lon: Math.round(lon * 10000) / 10000,
+      bearingDeg: bearingDeg(YHZ_RADAR_CENTER.lat, YHZ_RADAR_CENTER.lon, lat, lon),
+      rangeKm,
+      speedKmh: Math.round(numberOrZero(ac.gs) * 1.852),
+      altitudeFt: integerOrZero(ac.alt_baro),
+      trackDeg: Math.round(normalizeDegrees(numberOrZero(ac.track))),
+      destination: destinationFromAircraft(ac),
+      seenSec: integerOrZero(ac.seen),
+    });
+  }
+
+  normalized.sort((a, b) => a.rangeKm - b.rangeKm);
+
+  const halifax = getHalifaxParts(now);
+  const todayIds = readYhzRadarIds(halifax.dateKey);
+  for (const ac of normalized) if (ac.id && ac.id !== 'UNK') todayIds.add(ac.id);
+  writeYhzRadarIds(halifax.dateKey, todayIds);
+
+  const closest = normalized[0]
+    ? {
+        id: normalized[0].id,
+        callsign: normalized[0].callsign,
+        distanceKm: normalized[0].rangeKm,
+        speedKmh: normalized[0].speedKmh,
+        altitudeFt: normalized[0].altitudeFt,
+        destination: normalized[0].destination,
+      }
+    : { id: 'UNK', callsign: 'UNK', distanceKm: 0, speedKmh: 0, altitudeFt: 0, destination: 'UNK' };
+  const fastest = normalized.reduce((best, ac) => ac.speedKmh > best.speedKmh ? ac : best, { callsign: 'UNK', speedKmh: 0 });
+  const highest = normalized.reduce((best, ac) => ac.altitudeFt > best.altitudeFt ? ac : best, { callsign: 'UNK', altitudeFt: 0 });
+
+  return {
+    schema: 1,
+    api: 'ADSB.lol',
+    status: 'online',
+    center: YHZ_RADAR_CENTER,
+    serverTime: halifax.time,
+    updatedAt: Math.floor(now.getTime() / 1000),
+    planesTracked: normalized.length,
+    planesToday: todayIds.size,
+    closest,
+    fastest: { callsign: fastest.callsign, speedKmh: fastest.speedKmh },
+    highest: { callsign: highest.callsign, altitudeFt: highest.altitudeFt },
+    aircraft: normalized.slice(0, 8),
+  };
+}
+
+async function getYhzRadarPayload() {
+  const now = Date.now();
+  if (yhzRadarCache && now - yhzRadarCache.fetchedAt <= YHZ_RADAR_CACHE_MS) {
+    return withRadarStatusAndTime(yhzRadarCache.payload, 'online');
+  }
+
+  try {
+    const upstream = await httpsGetJson(YHZ_RADAR_UPSTREAM, YHZ_RADAR_TIMEOUT_MS);
+    const payload = normalizeYhzRadarPayload(upstream, new Date());
+    yhzRadarCache = { fetchedAt: Date.now(), payload };
+    return withRadarStatusAndTime(payload, 'online');
+  } catch (err) {
+    if (yhzRadarCache) return withRadarStatusAndTime(yhzRadarCache.payload, 'stale');
+    return emptyYhzRadarPayload('error');
+  }
+}
+
 // ── Climb Tracker v2 — file-based storage ─────────────────────────────────────
 // Layout:
 //   data/climb-tracker/{userId}/climbs/{id}.txt   — one text file per climb
@@ -649,6 +882,15 @@ function parsePbestPDF(buf) {
 
 // ── API router ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res, urlPath) {
+
+  // GET /api/radar/yhz - public compact aircraft feed for ESP8266 radar display
+  if (req.method === 'GET' && urlPath === '/api/radar/yhz') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    });
+    return res.end(JSON.stringify(await getYhzRadarPayload()));
+  }
 
   // GET /api/lights/events - public live desired light state stream
   if (req.method === 'GET' && urlPath === '/api/lights/events') {

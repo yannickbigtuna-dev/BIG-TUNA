@@ -282,6 +282,9 @@ data/lights/state.json
 data/lights/device-status.json
   ESP8266 polling heartbeat/status written by the device endpoints:
   { on: boolean, receivedAt: ISO string, polledAt: ISO string }.
+
+data/radar/yhz-YYYY-MM-DD.json
+  Daily Halifax local-time set of unique ADSB aircraft IDs seen by the public YHZ radar endpoint, stored as a JSON array.
 ```
 
 Legacy migrations exist in `server.js` for older `data/settings.json` and single-file climbs. Do not remove migration code unless all production data has been verified and backed up.
@@ -345,6 +348,14 @@ GET/POST /api/lights/device/status
 ```
 
 `GET /api/lights` is public and returns `{ on, updatedAt }`. `GET /api/lights/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`. Device routes are public and intended for ESP8266 polling/status. `GET /api/lights/device` records `polledAt`, currently returns the inverted stored `on` value as a hardware-polarity workaround, and includes an additive `pollAfterMs` hint, currently `250`, so ESP firmware can poll aggressively without hardcoding the cadence. `GET /api/lights/device/status` returns `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` for the Lights page device-poll indicator.
+
+Radar:
+
+```text
+GET /api/radar/yhz
+```
+
+`GET /api/radar/yhz` is public for an ESP8266 Halifax aircraft radar display. It fetches ADSB.lol around YHZ (`44.8808,-63.5086`, upstream `dist/82` nautical miles), filters to `rangeKm <= 150`, computes distance/bearing from YHZ, sorts closest first, returns at most 8 aircraft, caches upstream data in memory for about 12 seconds, and returns compact schema-1 JSON with `status` `online`, `stale`, or `error`. `planesTracked` counts all filtered aircraft, while `planesToday` comes from `data/radar/yhz-YYYY-MM-DD.json` in Halifax local time.
 
 External/proxy/parser endpoints:
 
