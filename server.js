@@ -25,8 +25,8 @@ const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
 const LIGHTS_DEVICE_INVERT_OUTPUT = true;
-const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.6392425, lon: -63.5944923, radiusKm: 50 });
-const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.5944923/dist/28';
+const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.6392425, lon: -63.5944923, radiusKm: 100 });
+const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.5944923/dist/55';
 const YHZ_RADAR_CACHE_MS = 12000;
 const YHZ_RADAR_TIMEOUT_MS = 8000;
 
