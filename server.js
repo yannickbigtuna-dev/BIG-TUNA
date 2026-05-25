@@ -423,6 +423,15 @@ function jsonRes(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
+function radarJsonRes(res, data) {
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+  });
+  res.end(JSON.stringify(data));
+}
+
 function hashPassword(password, salt) {
   return crypto.createHash('sha256').update(salt + password).digest('hex');
 }
@@ -549,15 +558,14 @@ function writeYhzRadarIds(dateKey, ids) {
 function emptyYhzRadarPayload(status, now = new Date()) {
   const halifax = getHalifaxParts(now);
   return {
-    schema: 1,
-    api: 'ADSB.lol',
+    schema: 'halifax-radar-v1',
+    api: 'ADSB',
     status,
-    center: YHZ_RADAR_CENTER,
+    message: 'api not working',
     serverTime: halifax.time,
-    updatedAt: Math.floor(now.getTime() / 1000),
     planesTracked: 0,
     planesToday: 0,
-    closest: { id: 'UNK', callsign: 'UNK', distanceKm: 0, speedKmh: 0, altitudeFt: 0, destination: 'UNK' },
+    closest: { callsign: 'UNK', speedKmh: 0, altitudeFt: 0, destination: 'UNK' },
     fastest: { callsign: 'UNK', speedKmh: 0 },
     highest: { callsign: 'UNK', altitudeFt: 0 },
     aircraft: [],
@@ -568,6 +576,7 @@ function withRadarStatusAndTime(payload, status) {
   return {
     ...payload,
     status,
+    message: status === 'online' ? 'data ok' : 'api not working',
     serverTime: getHalifaxParts().time,
   };
 }
@@ -615,30 +624,35 @@ function normalizeYhzRadarPayload(upstream, now = new Date()) {
 
   const closest = normalized[0]
     ? {
-        id: normalized[0].id,
         callsign: normalized[0].callsign,
-        distanceKm: normalized[0].rangeKm,
         speedKmh: normalized[0].speedKmh,
         altitudeFt: normalized[0].altitudeFt,
         destination: normalized[0].destination,
       }
-    : { id: 'UNK', callsign: 'UNK', distanceKm: 0, speedKmh: 0, altitudeFt: 0, destination: 'UNK' };
+    : { callsign: 'UNK', speedKmh: 0, altitudeFt: 0, destination: 'UNK' };
   const fastest = normalized.reduce((best, ac) => ac.speedKmh > best.speedKmh ? ac : best, { callsign: 'UNK', speedKmh: 0 });
   const highest = normalized.reduce((best, ac) => ac.altitudeFt > best.altitudeFt ? ac : best, { callsign: 'UNK', altitudeFt: 0 });
 
   return {
-    schema: 1,
-    api: 'ADSB.lol',
+    schema: 'halifax-radar-v1',
+    api: 'ADSB',
     status: 'online',
-    center: YHZ_RADAR_CENTER,
+    message: 'data ok',
     serverTime: halifax.time,
-    updatedAt: Math.floor(now.getTime() / 1000),
     planesTracked: normalized.length,
     planesToday: todayIds.size,
     closest,
     fastest: { callsign: fastest.callsign, speedKmh: fastest.speedKmh },
     highest: { callsign: highest.callsign, altitudeFt: highest.altitudeFt },
-    aircraft: normalized.slice(0, 8),
+    aircraft: normalized.slice(0, 8).map(ac => ({
+      id: ac.id,
+      callsign: ac.callsign,
+      bearingDeg: ac.bearingDeg,
+      rangeKm: ac.rangeKm,
+      speedKmh: ac.speedKmh,
+      altitudeFt: ac.altitudeFt,
+      destination: ac.destination,
+    })),
   };
 }
 
@@ -654,7 +668,6 @@ async function getYhzRadarPayload() {
     yhzRadarCache = { fetchedAt: Date.now(), payload };
     return withRadarStatusAndTime(payload, 'online');
   } catch (err) {
-    if (yhzRadarCache) return withRadarStatusAndTime(yhzRadarCache.payload, 'stale');
     return emptyYhzRadarPayload('error');
   }
 }
@@ -883,13 +896,19 @@ function parsePbestPDF(buf) {
 // ── API router ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res, urlPath) {
 
+  if (req.method === 'OPTIONS' && urlPath === '/api/radar/yhz') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
+    });
+    return res.end();
+  }
+
   // GET /api/radar/yhz - public compact aircraft feed for ESP8266 radar display
   if (req.method === 'GET' && urlPath === '/api/radar/yhz') {
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-    });
-    return res.end(JSON.stringify(await getYhzRadarPayload()));
+    return radarJsonRes(res, await getYhzRadarPayload());
   }
 
   // GET /api/lights/events - public live desired light state stream

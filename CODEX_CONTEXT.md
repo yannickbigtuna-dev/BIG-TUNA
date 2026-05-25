@@ -112,7 +112,7 @@ One-click live startup:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\SERVER\start-everything.ps1
 ```
 
-`start-everything.ps1` is the canonical local orchestrator. It starts or restarts PM2 apps `apps-server` and `mcp-server`, saves the PM2 process list, starts `cloudflared.exe` with `cloudflared-config.yml` only when the tunnel process is absent, and starts `auto-update.ps1` hidden when the git reloader is absent. `auto-update.ps1` polls `origin/main` every 10 seconds and pulls newer commits.
+`start-everything.ps1` is the canonical local orchestrator. It starts or restarts PM2 apps `apps-server` and `mcp-server`, saves the PM2 process list, starts `cloudflared.exe` with `cloudflared-config.yml` only when the tunnel process is absent, and starts `auto-update.ps1` hidden when the git reloader is absent. `auto-update.ps1` polls `origin/main` every 10 seconds, pulls newer commits, and restarts PM2 app `apps-server` after a successful pull so `server.js` route changes take effect.
 
 There is no build step. Frontend files in `apps/` are served directly. Restart Node after changing `server.js` or `pty-worker.js`.
 
@@ -355,7 +355,7 @@ Radar:
 GET /api/radar/yhz
 ```
 
-`GET /api/radar/yhz` is public for an ESP8266 Halifax aircraft radar display. It fetches ADSB.lol around YHZ (`44.8808,-63.5086`, upstream `dist/82` nautical miles), filters to `rangeKm <= 150`, computes distance/bearing from YHZ, sorts closest first, returns at most 8 aircraft, caches upstream data in memory for about 12 seconds, and returns compact schema-1 JSON with `status` `online`, `stale`, or `error`. `planesTracked` counts all filtered aircraft, while `planesToday` comes from `data/radar/yhz-YYYY-MM-DD.json` in Halifax local time.
+`GET /api/radar/yhz` is public for an ESP8266 Halifax aircraft radar display. It fetches ADSB.lol around YHZ (`44.8808,-63.5086`, upstream `dist/82` nautical miles), filters to `rangeKm <= 150`, computes distance/bearing from YHZ, sorts closest first, returns at most 8 aircraft, caches upstream data in memory for about 12 seconds, and returns HTTP 200 JSON with CORS `Access-Control-Allow-Origin: *`. The response uses schema string `halifax-radar-v1`, `api: "ADSB"`, `message: "data ok"` when online, and `status: "error"`, `message: "api not working"`, and empty `aircraft` when ADSB.lol fails. `planesTracked` counts all filtered aircraft, while `planesToday` comes from `data/radar/yhz-YYYY-MM-DD.json` in Halifax local time.
 
 External/proxy/parser endpoints:
 
