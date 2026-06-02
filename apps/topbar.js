@@ -8,6 +8,7 @@ const Topbar = (() => {
   'use strict';
 
   const APPS = [
+    { name: 'Climb Tracker',    href: '/climb-tracker/',      icon: '\u26f0' },
     { name: 'Workout Timer',    href: '/workout-timer/',     icon: '⏱' },
     { name: 'Quizzes',          href: '/quiz-app/',           icon: '❓' },
     { name: 'Psych Sheet',      href: '/psych-sheet/',        icon: '🏊' },

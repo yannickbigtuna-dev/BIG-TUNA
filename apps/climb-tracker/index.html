@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Climb Tracker - BIG TUNA</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #10130f;
+    --ink: #f6f1e8;
+    --muted: #a8b0a2;
+    --line: rgba(255,255,255,0.12);
+    --panel: rgba(255,255,255,0.07);
+    --panel-strong: rgba(255,255,255,0.11);
+    --accent: #7ddf8a;
+    --accent-ink: #071208;
+    --danger: #ff6b5f;
+    --shadow: 0 18px 50px rgba(0,0,0,0.32);
+  }
+  html, body { min-height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 16% 0%, rgba(125,223,138,0.16), transparent 30%),
+      radial-gradient(circle at 92% 12%, rgba(255,214,107,0.12), transparent 26%),
+      linear-gradient(145deg, #111810, #10130f 46%, #18140f);
+    min-height: 100vh;
+  }
+  button, input, select, textarea { font: inherit; }
+  button { touch-action: manipulation; }
+  .app {
+    width: min(1220px, 100%);
+    margin: 0 auto;
+    padding: 22px clamp(14px, 3vw, 34px) calc(34px + env(safe-area-inset-bottom, 0px));
+  }
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 18px;
+    align-items: end;
+    padding: 20px 0 18px;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(2.15rem, 8vw, 5rem);
+    line-height: 0.92;
+    letter-spacing: 0;
+  }
+  .subtitle {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.98rem;
+  }
+  .session-tile {
+    min-width: min(390px, 100%);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .session-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .session-name {
+    margin-top: 8px;
+    font-size: 1.3rem;
+    font-weight: 850;
+  }
+  .session-meta {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+  .session-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    min-height: 42px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: var(--ink);
+    background: rgba(255,255,255,0.08);
+    font-weight: 800;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); background: rgba(255,255,255,0.13); }
+  .btn.primary {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-color: transparent;
+  }
+  .btn.danger { color: #ffd8d4; border-color: rgba(255,107,95,0.38); }
+  .btn.small { min-height: 34px; padding: 0 11px; font-size: 0.84rem; }
+  .btn:disabled { opacity: 0.48; cursor: not-allowed; transform: none; }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0 18px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .tab {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    min-height: 38px;
+    padding: 0 16px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.05);
+    font-weight: 850;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tab.active {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-color: transparent;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: clamp(16px, 2.4vw, 22px);
+    box-shadow: var(--shadow);
+  }
+  .panel h2 {
+    margin: 0 0 14px;
+    font-size: 1.25rem;
+    letter-spacing: 0;
+  }
+  .field { margin-bottom: 15px; }
+  label {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    min-height: 43px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--ink);
+    background: rgba(0,0,0,0.22);
+    outline: none;
+  }
+  textarea { min-height: 86px; resize: vertical; }
+  input:focus, select:focus, textarea:focus {
+    border-color: rgba(125,223,138,0.55);
+    box-shadow: 0 0 0 3px rgba(125,223,138,0.12);
+  }
+  .grade-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .choice {
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--ink);
+    background: rgba(255,255,255,0.06);
+    font-weight: 850;
+    cursor: pointer;
+  }
+  .choice.active {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-color: transparent;
+  }
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .color-btn {
+    height: 42px;
+    border: 2px solid rgba(255,255,255,0.18);
+    border-radius: 8px;
+    background: var(--swatch);
+    cursor: pointer;
+    position: relative;
+  }
+  .color-btn.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(125,223,138,0.16); }
+  .status-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .tries-row {
+    display: grid;
+    grid-template-columns: 46px 1fr 46px;
+    gap: 8px;
+    align-items: center;
+  }
+  .tries-display {
+    min-height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(0,0,0,0.2);
+    font-size: 1.2rem;
+    font-weight: 900;
+  }
+  .photo-box {
+    min-height: 180px;
+    display: grid;
+    place-items: center;
+    gap: 10px;
+    border: 1px dashed rgba(255,255,255,0.25);
+    border-radius: 8px;
+    padding: 14px;
+    background: rgba(0,0,0,0.18);
+    text-align: center;
+  }
+  .photo-box img {
+    max-width: 100%;
+    max-height: 260px;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+  .photo-box input { width: 100%; max-width: 320px; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .stat {
+    min-height: 82px;
+    padding: 13px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.055);
+  }
+  .stat strong {
+    display: block;
+    font-size: 1.75rem;
+    line-height: 1;
+  }
+  .stat span {
+    display: block;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .filters {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) 130px 130px;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .climb-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+  }
+  .climb-card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.06);
+    min-width: 0;
+  }
+  .thumb {
+    aspect-ratio: 4 / 3;
+    display: grid;
+    place-items: center;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+      var(--route-color, #8d8d8d);
+    color: rgba(255,255,255,0.78);
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    overflow: hidden;
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .climb-body { padding: 12px; }
+  .climb-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .grade {
+    font-size: 1.35rem;
+    font-weight: 950;
+  }
+  .badge {
+    border-radius: 999px;
+    padding: 5px 9px;
+    color: #0d100d;
+    background: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .badge.attempted { color: #ffe7b0; background: rgba(255,194,87,0.15); }
+  .badge.project { color: #d9c7ff; background: rgba(166,133,255,0.16); }
+  .meta {
+    color: var(--muted);
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+  .notes {
+    margin-top: 8px;
+    color: #d8ded4;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  .empty {
+    min-height: 260px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed rgba(255,255,255,0.22);
+    border-radius: 8px;
+    color: var(--muted);
+    text-align: center;
+    padding: 24px;
+  }
+  .hidden { display: none !important; }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%) translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 600;
+    min-width: min(420px, calc(100vw - 32px));
+    padding: 13px 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--ink);
+    background: rgba(18,23,17,0.96);
+    box-shadow: var(--shadow);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    text-align: center;
+    font-weight: 800;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; align-items: stretch; }
+    .layout { grid-template-columns: 1fr; }
+    .filters { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 520px) {
+    .app { padding-left: 12px; padding-right: 12px; }
+    .session-actions, .status-row { grid-template-columns: 1fr; }
+    .grade-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .color-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .climb-list { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="hero">
+    <div>
+      <h1>Climb Tracker</h1>
+      <div class="subtitle">Start a session, capture each climb, and keep every attempt easy to scan later.</div>
+    </div>
+    <section class="session-tile" aria-label="Current session">
+      <div class="session-title">
+        <span>Current Session</span>
+        <span id="sync-state">Loading</span>
+      </div>
+      <div class="session-name" id="session-name">No active session</div>
+      <div class="session-meta" id="session-meta">Start a session before logging climbs.</div>
+      <div class="session-actions">
+        <button class="btn primary" id="start-session">Start Session</button>
+        <button class="btn" id="end-session" disabled>End Session</button>
+      </div>
+    </section>
+  </section>
+
+  <nav class="tabs" aria-label="Climb tracker views">
+    <button class="tab active" data-view="log">Log Climb</button>
+    <button class="tab" data-view="library">All Climbs</button>
+  </nav>
+
+  <section class="layout" id="log-view">
+    <form class="panel" id="climb-form">
+      <h2>New Attempt</h2>
+      <div class="field">
+        <label>Grade</label>
+        <div class="grade-grid" id="grade-grid"></div>
+      </div>
+      <div class="field">
+        <label>Hold Color</label>
+        <div class="color-grid" id="color-grid"></div>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <div class="status-row" id="status-row">
+          <button type="button" class="choice active" data-status="attempted">Attempted</button>
+          <button type="button" class="choice" data-status="sent">Sent</button>
+          <button type="button" class="choice" data-status="flash">Flash</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Tries</label>
+        <div class="tries-row">
+          <button type="button" class="btn" id="tries-minus">-</button>
+          <div class="tries-display" id="tries-display">1</div>
+          <button type="button" class="btn" id="tries-plus">+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Photo</label>
+        <div class="photo-box">
+          <img id="photo-preview" class="hidden" alt="Selected climb photo preview">
+          <div id="photo-placeholder">Take a photo or pick one from your library.</div>
+          <input id="photo-input" type="file" accept="image/*" capture="environment">
+          <button type="button" class="btn small hidden" id="clear-photo">Remove Photo</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <textarea id="notes" placeholder="Beta, angle, crux, or anything to remember."></textarea>
+      </div>
+      <button class="btn primary" type="submit" id="save-climb">Save Climb</button>
+    </form>
+
+    <section class="panel">
+      <h2>Session Feed</h2>
+      <div class="stats" id="stats"></div>
+      <div id="session-feed" class="climb-list"></div>
+    </section>
+  </section>
+
+  <section class="panel hidden" id="library-view">
+    <h2>All Climbs Attempted</h2>
+    <div class="stats" id="library-stats"></div>
+    <div class="filters">
+      <input type="text" id="search" placeholder="Search grade, color, notes">
+      <select id="grade-filter"></select>
+      <select id="status-filter">
+        <option value="">All statuses</option>
+        <option value="attempted">Attempted</option>
+        <option value="sent">Sent</option>
+        <option value="flash">Flash</option>
+        <option value="project">Project</option>
+      </select>
+    </div>
+    <div id="all-climbs" class="climb-list"></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+<script>
+Topbar.setTitle('Climb Tracker');
+
+const GRADES = ['VB','V0','V1','V2','V3','V4','V5','V6','V7','V8','V9','V10','V11','V12'];
+const COLORS = [
+  ['black', '#1b1b1b'],
+  ['white', '#f4f1e8'],
+  ['red', '#e84d43'],
+  ['orange', '#ff9f37'],
+  ['yellow', '#ffd95a'],
+  ['green', '#55c777'],
+  ['blue', '#4b8df7'],
+  ['purple', '#9467ff'],
+  ['pink', '#ff74b8'],
+  ['gray', '#9aa0a6'],
+  ['wood', '#b9834f'],
+  ['mixed', 'linear-gradient(135deg, #e84d43, #ffd95a 35%, #55c777 67%, #4b8df7)'],
+];
+const COLOR_HEX = Object.fromEntries(COLORS.map(([name, value]) => [name, value]));
+const state = {
+  climbs: [],
+  sessions: [],
+  selectedGrade: 'V3',
+  selectedColor: 'blue',
+  selectedStatus: 'attempted',
+  tries: 1,
+  photoData: '',
+  view: 'log',
+};
+const els = {
+  sync: document.getElementById('sync-state'),
+  sessionName: document.getElementById('session-name'),
+  sessionMeta: document.getElementById('session-meta'),
+  startSession: document.getElementById('start-session'),
+  endSession: document.getElementById('end-session'),
+  tabs: Array.from(document.querySelectorAll('.tab')),
+  logView: document.getElementById('log-view'),
+  libraryView: document.getElementById('library-view'),
+  form: document.getElementById('climb-form'),
+  gradeGrid: document.getElementById('grade-grid'),
+  colorGrid: document.getElementById('color-grid'),
+  statusRow: document.getElementById('status-row'),
+  triesDisplay: document.getElementById('tries-display'),
+  triesMinus: document.getElementById('tries-minus'),
+  triesPlus: document.getElementById('tries-plus'),
+  photoInput: document.getElementById('photo-input'),
+  photoPreview: document.getElementById('photo-preview'),
+  photoPlaceholder: document.getElementById('photo-placeholder'),
+  clearPhoto: document.getElementById('clear-photo'),
+  notes: document.getElementById('notes'),
+  stats: document.getElementById('stats'),
+  libraryStats: document.getElementById('library-stats'),
+  sessionFeed: document.getElementById('session-feed'),
+  allClimbs: document.getElementById('all-climbs'),
+  search: document.getElementById('search'),
+  gradeFilter: document.getElementById('grade-filter'),
+  statusFilter: document.getElementById('status-filter'),
+  toast: document.getElementById('toast'),
+};
+
+function esc(value) {
+  return String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+}
+function nowId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+function activeSession() {
+  return state.sessions.find(session => !session.endedAt) || null;
+}
+function fmtDate(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+function minutesBetween(start, end) {
+  const a = Date.parse(start);
+  const b = end ? Date.parse(end) : Date.now();
+  if (!a || !b) return 0;
+  return Math.max(0, Math.round((b - a) / 60000));
+}
+function climbDateSort(a, b) {
+  return (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0);
+}
+function photoUrl(climb) {
+  if (!climb.hasPhoto || !Auth.token) return '';
+  return `/api/climbs2/photo/${encodeURIComponent(climb.id)}?t=${encodeURIComponent(Auth.token)}&v=${encodeURIComponent(climb.date || '')}`;
+}
+function toast(message) {
+  els.toast.textContent = message;
+  els.toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => els.toast.classList.remove('show'), 2200);
+}
+function setSync(text) {
+  els.sync.textContent = text;
+}
+function renderPickers() {
+  els.gradeGrid.innerHTML = GRADES.map(grade => (
+    `<button type="button" class="choice${grade === state.selectedGrade ? ' active' : ''}" data-grade="${grade}">${grade}</button>`
+  )).join('');
+  els.colorGrid.innerHTML = COLORS.map(([name, value]) => (
+    `<button type="button" class="color-btn${name === state.selectedColor ? ' active' : ''}" data-color="${name}" style="--swatch:${value}" aria-label="${name}"></button>`
+  )).join('');
+  els.gradeFilter.innerHTML = '<option value="">All grades</option>' + GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
+}
+function createSession() {
+  return {
+    id: nowId('s'),
+    startedAt: new Date().toISOString(),
+    endedAt: '',
+    name: `Session ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })}`,
+  };
+}
+function renderSession() {
+  const session = activeSession();
+  if (!session) {
+    els.sessionName.textContent = 'No active session';
+    els.sessionMeta.textContent = 'Start a session before logging climbs.';
+    els.startSession.disabled = false;
+    els.endSession.disabled = true;
+    return;
+  }
+  const climbs = state.climbs.filter(c => c.sessionId === session.id);
+  const sent = climbs.filter(c => c.status === 'sent' || c.status === 'flash').length;
+  els.sessionName.textContent = session.name || `Session ${fmtDate(session.startedAt)}`;
+  els.sessionMeta.textContent = `${minutesBetween(session.startedAt)} min active - ${climbs.length} climbs - ${sent} sent`;
+  els.startSession.disabled = true;
+  els.endSession.disabled = false;
+}
+function statsFor(climbs) {
+  const sent = climbs.filter(c => c.status === 'sent' || c.status === 'flash').length;
+  const flashes = climbs.filter(c => c.status === 'flash' || c.flash).length;
+  const best = climbs
+    .map(c => c.grade)
+    .filter(Boolean)
+    .sort((a, b) => GRADES.indexOf(b) - GRADES.indexOf(a))[0] || '-';
+  return [
+    ['Attempts', climbs.length],
+    ['Sent', sent],
+    ['Flashes', flashes],
+    ['Best', best],
+  ];
+}
+function renderStats(target, climbs) {
+  target.innerHTML = statsFor(climbs).map(([label, value]) => (
+    `<div class="stat"><strong>${esc(value)}</strong><span>${esc(label)}</span></div>`
+  )).join('');
+}
+function statusLabel(climb) {
+  if (climb.status === 'flash' || climb.flash) return 'Flash';
+  if (climb.status === 'sent') return 'Sent';
+  if (climb.status === 'project') return 'Project';
+  return 'Attempted';
+}
+function renderClimbCard(climb) {
+  const color = COLOR_HEX[climb.holdsColor] || '#8d8d8d';
+  const img = photoUrl(climb);
+  const badgeClass = climb.status === 'sent' || climb.status === 'flash' ? '' : ` ${esc(climb.status || 'attempted')}`;
+  return `
+    <article class="climb-card" style="--route-color:${color}">
+      <div class="thumb">${img ? `<img src="${img}" alt="${esc(climb.grade)} ${esc(climb.holdsColor)} climb">` : '<span>No Photo</span>'}</div>
+      <div class="climb-body">
+        <div class="climb-top">
+          <div class="grade">${esc(climb.grade || 'Ungraded')}</div>
+          <span class="badge${badgeClass}">${esc(statusLabel(climb))}</span>
+        </div>
+        <div class="meta">${esc(climb.holdsColor || 'unknown')} holds - ${Number(climb.tries) || 1} tries</div>
+        <div class="meta">${esc(fmtDate(climb.date))}</div>
+        ${climb.notes ? `<div class="notes">${esc(climb.notes)}</div>` : ''}
+        <div class="session-actions">
+          <button class="btn small danger" data-delete="${esc(climb.id)}" type="button">Delete</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+function currentSessionClimbs() {
+  const session = activeSession();
+  return session ? state.climbs.filter(c => c.sessionId === session.id).sort(climbDateSort) : [];
+}
+function filteredClimbs() {
+  const q = els.search.value.trim().toLowerCase();
+  const grade = els.gradeFilter.value;
+  const status = els.statusFilter.value;
+  return state.climbs.filter(climb => {
+    const text = [climb.grade, climb.holdsColor, climb.status, climb.notes].join(' ').toLowerCase();
+    const matchesSearch = !q || text.includes(q);
+    const matchesGrade = !grade || climb.grade === grade;
+    const normalizedStatus = climb.status === 'flash' || climb.flash ? 'flash' : climb.status;
+    const matchesStatus = !status || normalizedStatus === status;
+    return matchesSearch && matchesGrade && matchesStatus;
+  }).sort(climbDateSort);
+}
+function renderLists() {
+  const sessionClimbs = currentSessionClimbs();
+  renderStats(els.stats, sessionClimbs);
+  els.sessionFeed.innerHTML = sessionClimbs.length
+    ? sessionClimbs.map(renderClimbCard).join('')
+    : '<div class="empty">No climbs in this session yet. Add your first attempt from the form.</div>';
+  const all = filteredClimbs();
+  renderStats(els.libraryStats, state.climbs);
+  els.allClimbs.innerHTML = all.length
+    ? all.map(renderClimbCard).join('')
+    : '<div class="empty">No climbs match these filters yet.</div>';
+}
+function render() {
+  renderSession();
+  renderLists();
+  els.triesDisplay.textContent = String(state.tries);
+  els.triesMinus.disabled = state.tries <= 1;
+  document.querySelectorAll('[data-status]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === state.selectedStatus);
+  });
+}
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${Auth.token}`,
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+async function loadData() {
+  setSync('Loading');
+  const data = await api('/api/climbs2');
+  state.climbs = Array.isArray(data.climbs) ? data.climbs : [];
+  state.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  setSync('Ready');
+  render();
+}
+async function saveData(payload) {
+  setSync('Saving');
+  await api('/api/climbs2', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  setSync('Saved');
+}
+async function uploadPhoto(id, photoData) {
+  await api(`/api/climbs2/photo/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ photo: photoData }),
+  });
+}
+async function compressPhoto(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read photo'));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Could not load photo'));
+    image.src = dataUrl;
+  });
+  const maxSide = 1400;
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.78);
+}
+async function startSession() {
+  const session = createSession();
+  state.sessions = [session, ...state.sessions];
+  render();
+  await saveData({ sessions: state.sessions });
+  toast('Session started');
+}
+async function endSession() {
+  const session = activeSession();
+  if (!session) return;
+  session.endedAt = new Date().toISOString();
+  render();
+  await saveData({ sessions: state.sessions });
+  toast('Session ended');
+}
+function resetForm() {
+  state.tries = 1;
+  clearPhotoSelection();
+  els.notes.value = '';
+  render();
+}
+function clearPhotoSelection() {
+  state.photoData = '';
+  els.photoInput.value = '';
+  els.photoPreview.removeAttribute('src');
+  els.photoPreview.classList.add('hidden');
+  els.photoPlaceholder.classList.remove('hidden');
+  els.clearPhoto.classList.add('hidden');
+}
+async function saveClimb(event) {
+  event.preventDefault();
+  const previousSessions = state.sessions.slice();
+  let session = activeSession();
+  if (!session) {
+    session = createSession();
+    state.sessions = [session, ...state.sessions];
+  }
+  const climb = {
+    id: nowId('c'),
+    date: new Date().toISOString(),
+    grade: state.selectedGrade,
+    holdsColor: state.selectedColor,
+    status: state.selectedStatus,
+    tries: state.selectedStatus === 'flash' ? 1 : state.tries,
+    rating: 0,
+    flash: state.selectedStatus === 'flash',
+    styles: [],
+    notes: els.notes.value.trim(),
+    sessionId: session.id,
+    hasPhoto: Boolean(state.photoData),
+  };
+  state.climbs = [climb, ...state.climbs];
+  render();
+  try {
+    if (state.photoData) await uploadPhoto(climb.id, state.photoData);
+    await saveData({ climbs: [climb], sessions: state.sessions });
+    resetForm();
+    toast('Climb saved');
+  } catch (error) {
+    state.climbs = state.climbs.filter(c => c.id !== climb.id);
+    state.sessions = previousSessions;
+    render();
+    setSync('Error');
+    toast(error.message || 'Could not save climb');
+  }
+}
+async function deleteClimb(id) {
+  const climb = state.climbs.find(c => c.id === id);
+  if (!climb) return;
+  const ok = confirm(`Delete ${climb.grade || 'this climb'} from your log?`);
+  if (!ok) return;
+  const previous = state.climbs;
+  state.climbs = state.climbs.filter(c => c.id !== id);
+  render();
+  try {
+    await saveData({ deletedClimbIds: [id], sessions: state.sessions });
+    toast('Climb deleted');
+  } catch (error) {
+    state.climbs = previous;
+    render();
+    setSync('Error');
+    toast(error.message || 'Could not delete climb');
+  }
+}
+function bindEvents() {
+  els.gradeGrid.addEventListener('click', event => {
+    const btn = event.target.closest('[data-grade]');
+    if (!btn) return;
+    state.selectedGrade = btn.dataset.grade;
+    renderPickers();
+  });
+  els.colorGrid.addEventListener('click', event => {
+    const btn = event.target.closest('[data-color]');
+    if (!btn) return;
+    state.selectedColor = btn.dataset.color;
+    renderPickers();
+  });
+  els.statusRow.addEventListener('click', event => {
+    const btn = event.target.closest('[data-status]');
+    if (!btn) return;
+    state.selectedStatus = btn.dataset.status;
+    if (state.selectedStatus === 'flash') state.tries = 1;
+    render();
+  });
+  els.triesMinus.addEventListener('click', () => { state.tries = Math.max(1, state.tries - 1); render(); });
+  els.triesPlus.addEventListener('click', () => { state.tries = Math.min(99, state.tries + 1); render(); });
+  els.photoInput.addEventListener('change', async () => {
+    const file = els.photoInput.files && els.photoInput.files[0];
+    if (!file) return;
+    try {
+      setSync('Photo');
+      state.photoData = await compressPhoto(file);
+      els.photoPreview.src = state.photoData;
+      els.photoPreview.classList.remove('hidden');
+      els.photoPlaceholder.classList.add('hidden');
+      els.clearPhoto.classList.remove('hidden');
+      setSync('Ready');
+    } catch (error) {
+      state.photoData = '';
+      setSync('Error');
+      toast(error.message || 'Could not use photo');
+    }
+  });
+  els.clearPhoto.addEventListener('click', () => {
+    clearPhotoSelection();
+    render();
+  });
+  els.form.addEventListener('submit', saveClimb);
+  els.startSession.addEventListener('click', startSession);
+  els.endSession.addEventListener('click', endSession);
+  els.tabs.forEach(tab => tab.addEventListener('click', () => {
+    state.view = tab.dataset.view;
+    els.tabs.forEach(item => item.classList.toggle('active', item === tab));
+    els.logView.classList.toggle('hidden', state.view !== 'log');
+    els.libraryView.classList.toggle('hidden', state.view !== 'library');
+    render();
+  }));
+  [els.search, els.gradeFilter, els.statusFilter].forEach(el => el.addEventListener('input', renderLists));
+  document.addEventListener('click', event => {
+    const btn = event.target.closest('[data-delete]');
+    if (btn) deleteClimb(btn.dataset.delete);
+  });
+}
+
+renderPickers();
+bindEvents();
+Auth.onReady(async () => {
+  try {
+    await loadData();
+  } catch (error) {
+    setSync('Error');
+    toast(error.message || 'Could not load climbs');
+  }
+});
+</script>
+</body>
+</html>

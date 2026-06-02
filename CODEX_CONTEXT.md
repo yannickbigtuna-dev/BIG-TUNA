@@ -223,6 +223,7 @@ Homepage:
 Current app folders:
 
 - `apps/capitals-quiz/`
+- `apps/climb-tracker/`
 - `apps/list-maker/`
 - `apps/lights/`
 - `apps/pace-calculator/`
@@ -397,6 +398,13 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 `workout-timer`:
 
 - Uses `Auth.saveSettings('workout-timer', ...)` and `Auth.loadSettings('workout-timer')`.
+
+`climb-tracker`:
+
+- Authenticated static app at `/climb-tracker/`.
+- Uses `/api/climbs2` for sessions and climb metadata, and `/api/climbs2/photo/:id` for per-climb JPEG photos.
+- Client compresses selected camera/library images to JPEG data URLs before upload.
+- Active sessions are represented by entries in the existing `sessions` array with empty `endedAt`; climb records link to sessions through `sessionId`.
 
 `capitals-quiz` and `world-map`:
 
