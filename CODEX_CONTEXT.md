@@ -35,6 +35,7 @@ Do not force push or rewrite history. If `git pull` produces a merge conflict, s
 +-- apps/                     # Static browser apps plus shared client scripts
 +-- data/                     # Live file-based app data; treat as production state
 +-- mcp-server/               # Separate MCP HTTP server, ES modules, port 3001
++-- ios/                      # Native Apple platform source checked into the repo
 +-- cloudflared-config.yml    # Cloudflare Tunnel ingress config
 +-- *.bat, *.ps1              # Windows setup/start/helper scripts
 ```
@@ -241,6 +242,14 @@ Desktop app source:
 - Its macOS status item uses a template bulb icon plus a text fallback (`●` on, `○` off) so it remains visible on light and dark menu bars; clicking it directly toggles the light and does not open a menu.
 - Packaging command: `cd desktop/big-tuna-lights && npm install && npm run package:mac`. This must run on macOS so Electron framework symlinks are preserved. The `.github/workflows/build-lights-mac.yml` workflow builds the unsigned zip and publishes it as the `lights-mac-latest` GitHub Release asset.
 - `desktop/big-tuna-weather/` contains the Electron macOS Weather app. It uses NOAA/NWS first for U.S. coordinates and falls back to Open-Meteo when NOAA is unavailable or the location is outside NWS coverage. It stores saved locations and the selected location in Electron `userData/weather.json`, includes a normal Dock/window app plus a macOS tray widget title in the compact `condition temperature wind` style, and needs no BIG TUNA auth. Clicking the tray/menu-bar item opens the weather panel directly instead of an options menu. Packaging command: `cd desktop/big-tuna-weather && npm install && npm run package:mac`; the `.github/workflows/build-weather-mac.yml` workflow builds the unsigned zip and publishes it as the `weather-mac-latest` GitHub Release asset.
+
+iOS app source:
+
+- `ios/big-tuna-lights-widget/` contains an XcodeGen-based SwiftUI iPhone app plus WidgetKit extension for the Lights API.
+- Generate the project with `cd ios/big-tuna-lights-widget && xcodegen generate`, then open `BigTunaLights.xcodeproj` in Xcode 15+.
+- Deployment target is iOS 17 because the widget uses an interactive App Intent button.
+- Both the app and widget use App Group `group.ca.yannickmorgans.bigtuna.lights` for shared session token and last-known light state.
+- The widget should always display current light status from the public `GET /api/lights` endpoint when online, fall back to the cached last-known state when offline, and only enable toggling when the shared signed-in user is `yannick`.
 
 ## Data Storage Map
 

@@ -1,0 +1,45 @@
+name: BigTunaLights
+options:
+  minimumXcodeGenVersion: 2.40.0
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    IPHONEOS_DEPLOYMENT_TARGET: 17.0
+    MARKETING_VERSION: 1.0
+    CURRENT_PROJECT_VERSION: 1
+    CODE_SIGN_STYLE: Automatic
+targets:
+  BigTunaLights:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: BigTunaLights
+      - path: Shared
+    entitlements:
+      path: BigTunaLights/BigTunaLights.entitlements
+    dependencies:
+      - target: BigTunaLightsWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights
+        PRODUCT_NAME: BIG TUNA Lights
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: BIG TUNA Lights
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  BigTunaLightsWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: BigTunaLightsWidget
+      - path: Shared
+    entitlements:
+      path: BigTunaLightsWidget/BigTunaLightsWidget.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights.widget
+        PRODUCT_NAME: BIG TUNA Lights Widget
+        INFOPLIST_FILE: BigTunaLightsWidget/Info.plist
+        SKIP_INSTALL: YES
