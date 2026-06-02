@@ -1737,6 +1737,12 @@ const server = http.createServer(async (req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
   if (!urlPath.startsWith('/')) urlPath = '/' + urlPath;
 
+  if (urlPath === '/favicon.ico') {
+    res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' });
+    res.end();
+    return;
+  }
+
   if (urlPath.startsWith('/api/')) {
     await handleAPI(req, res, urlPath);
     console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);

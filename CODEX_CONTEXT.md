@@ -143,6 +143,7 @@ Static serving:
 - Static root is `apps/`.
 - `/` serves `apps/index.html`.
 - `/topbar.js` and `/auth.js` are served from `apps/topbar.js` and `apps/auth.js`.
+- `/favicon.ico` returns HTTP 204 with a short cache lifetime so browser default favicon probes do not create noisy 404s.
 - App URLs are folder-based, for example `/list-maker/` maps to `apps/list-maker/index.html`.
 - HTML and JS responses are sent with `Cache-Control: no-cache`.
 - Directories without an `index.html` get a generated auto-index page.
