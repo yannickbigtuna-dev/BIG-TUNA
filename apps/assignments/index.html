@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Assignment Coach</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #0e1013;
+    --panel: #15191f;
+    --panel-2: #1d232b;
+    --line: #2b333d;
+    --text: #f4f7fb;
+    --muted: #8f9ba8;
+    --accent: #4fb3a3;
+    --warn: #ffbc5c;
+    --bad: #ff7d7d;
+    --good: #79d69f;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main {
+    width: min(1120px, 100%);
+    margin: 0 auto;
+    padding: 22px 16px 44px;
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.35rem;
+    letter-spacing: 0;
+  }
+  .muted { color: var(--muted); }
+  button, .button {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 10px 13px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  button:hover, .button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #061512; border-color: var(--accent); }
+  button:disabled { opacity: .55; cursor: default; }
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .metric, .panel, .assignment {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+  }
+  .metric {
+    padding: 13px;
+    min-height: 76px;
+  }
+  .metric .label {
+    color: var(--muted);
+    font-size: .74rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .metric .value {
+    margin-top: 7px;
+    font-size: 1.25rem;
+    font-weight: 800;
+  }
+  .panel {
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  .assignment-list {
+    display: grid;
+    gap: 10px;
+  }
+  .assignment {
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+  }
+  .assignment h2 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+    letter-spacing: 0;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--muted);
+    font-size: .86rem;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.06);
+    color: var(--muted);
+    font-size: .78rem;
+    font-weight: 700;
+  }
+  .pill.coached, .pill.reviewed { color: var(--good); }
+  .pill.needs-info { color: var(--warn); }
+  .pill.suppressed { color: var(--muted); }
+  .pill.completed { color: var(--accent); }
+  .error { color: var(--bad); }
+  .action-card {
+    width: min(680px, 100%);
+    margin: 44px auto;
+    padding: 18px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 160px;
+    resize: vertical;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    background: #0b0d10;
+    color: var(--text);
+    font: inherit;
+    line-height: 1.4;
+  }
+  .runs {
+    display: grid;
+    gap: 7px;
+    color: var(--muted);
+    font-size: .86rem;
+  }
+  @media (max-width: 760px) {
+    .toolbar, .assignment { grid-template-columns: 1fr; display: grid; }
+    .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+<script>
+  Topbar.setTitle('Assignment Coach');
+</script>
+
+<main>
+  <section id="link-action" class="panel action-card" hidden></section>
+
+  <section id="dashboard">
+    <div class="toolbar">
+      <div>
+        <h1>Assignment Coach</h1>
+        <div class="muted">Brightspace checks, coaching emails, and due-date triage.</div>
+      </div>
+      <button id="check-now" class="primary">Check Now</button>
+    </div>
+
+    <div class="status-grid" id="metrics"></div>
+
+    <section class="panel">
+      <strong>Configuration</strong>
+      <div id="config" class="meta" style="margin-top:10px"></div>
+    </section>
+
+    <section class="assignment-list" id="assignments"></section>
+
+    <section class="panel" style="margin-top:16px">
+      <strong>Recent Runs</strong>
+      <div class="runs" id="runs" style="margin-top:10px"></div>
+    </section>
+  </section>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const pendingAction = {
+    id: params.get('assignment') || '',
+    action: params.get('action') || '',
+    expires: params.get('expires') || '',
+    sig: params.get('sig') || '',
+  };
+
+  const actionEl = document.getElementById('link-action');
+  const dashboardEl = document.getElementById('dashboard');
+  const checkBtn = document.getElementById('check-now');
+
+  function escapeHtml(text) {
+    return String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  async function api(path, options = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    if (Auth.token) headers.Authorization = `Bearer ${Auth.token}`;
+    const res = await fetch(path, { ...options, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  }
+
+  async function submitLinkAction(instructions = '') {
+    return api('/api/assignments/action', {
+      method: 'POST',
+      body: JSON.stringify({ ...pendingAction, instructions }),
+    });
+  }
+
+  function renderActionLanding() {
+    if (!pendingAction.id || !pendingAction.action) return false;
+    dashboardEl.hidden = true;
+    actionEl.hidden = false;
+
+    if (pendingAction.action === 'no') {
+      actionEl.innerHTML = `
+        <h1>Revise Coaching</h1>
+        <p class="muted">Add the instructions you want used for another coaching pass.</p>
+        <textarea id="revision-text" placeholder="Add constraints, style preferences, rubric notes, or what was missing."></textarea>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="primary" id="send-revision">Send Revision</button>
+          <a class="button" href="/assignments/">Dashboard</a>
+        </div>
+        <p id="action-result" class="muted"></p>
+      `;
+      document.getElementById('send-revision').addEventListener('click', async () => {
+        const btn = document.getElementById('send-revision');
+        const result = document.getElementById('action-result');
+        btn.disabled = true;
+        result.textContent = 'Sending revision request...';
+        try {
+          await submitLinkAction(document.getElementById('revision-text').value);
+          result.textContent = 'Revision request sent. A new coaching email will arrive when it is ready.';
+        } catch (err) {
+          result.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+          btn.disabled = false;
+        }
+      });
+      return true;
+    }
+
+    const label = pendingAction.action === 'never' ? 'Never Try Again' : 'Mark Reviewed';
+    actionEl.innerHTML = `
+      <h1>${escapeHtml(label)}</h1>
+      <p class="muted">Applying this signed email action.</p>
+      <p id="action-result">Working...</p>
+    `;
+    submitLinkAction()
+      .then(() => {
+        document.getElementById('action-result').textContent = 'Done. The assignment tracker has been updated.';
+      })
+      .catch(err => {
+        document.getElementById('action-result').innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+      });
+    return true;
+  }
+
+  function dueLabel(value) {
+    if (!value) return 'No due date';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Unknown due date';
+    return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  function render(data) {
+    const counts = data.assignments.reduce((acc, a) => {
+      acc.total++;
+      acc[a.status] = (acc[a.status] || 0) + 1;
+      return acc;
+    }, { total: 0 });
+    document.getElementById('metrics').innerHTML = [
+      ['Total', counts.total || 0],
+      ['Coached', counts.coached || 0],
+      ['Needs Info', counts['needs-info'] || 0],
+      ['Completed', counts.completed || 0],
+    ].map(([label, value]) => `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`).join('');
+
+    const cfg = data.configured;
+    document.getElementById('config').innerHTML = [
+      `Workflow ${cfg.enabled ? 'enabled' : 'disabled'}`,
+      `Brightspace ${cfg.brightspace ? 'configured' : 'missing'}`,
+      `Email ${cfg.email ? 'configured' : 'missing'}`,
+      `OpenAI ${cfg.openai ? cfg.model : 'missing'}`,
+      `${cfg.dueWindowDays} day window`,
+    ].map(text => `<span class="pill">${escapeHtml(text)}</span>`).join('');
+
+    document.getElementById('assignments').innerHTML = data.assignments.length ? data.assignments.map(a => `
+      <article class="assignment">
+        <div>
+          <h2>${escapeHtml(a.title)}</h2>
+          <div class="meta">
+            <span>${escapeHtml(a.course || 'Brightspace')}</span>
+            <span>Due ${escapeHtml(dueLabel(a.dueAt))}</span>
+            <span>${a.submitted ? 'Submitted' : 'No submission detected'}</span>
+            ${a.sourceUrl ? `<a href="${escapeHtml(a.sourceUrl)}" target="_blank" rel="noreferrer" class="muted">Open</a>` : ''}
+          </div>
+        </div>
+        <div><span class="pill ${escapeHtml(a.status)}">${escapeHtml(a.status)}</span></div>
+      </article>
+    `).join('') : '<section class="panel muted">No assignments tracked yet.</section>';
+
+    document.getElementById('runs').innerHTML = data.runs.length ? data.runs.map(run => `
+      <div>${escapeHtml(run.startedAt)} · found ${run.found || 0} · emailed ${run.emailed || 0}${run.errors?.length ? ` · ${escapeHtml(run.errors.join('; '))}` : ''}</div>
+    `).join('') : '<div>No runs yet.</div>';
+  }
+
+  async function load() {
+    try {
+      const data = await api('/api/assignments');
+      render(data);
+    } catch (err) {
+      document.getElementById('assignments').innerHTML = `<section class="panel error">${escapeHtml(err.message)}</section>`;
+    }
+  }
+
+  checkBtn.addEventListener('click', async () => {
+    checkBtn.disabled = true;
+    checkBtn.textContent = 'Checking...';
+    try {
+      await api('/api/assignments/check-now', { method: 'POST', body: '{}' });
+      await load();
+    } catch (err) {
+      document.getElementById('assignments').insertAdjacentHTML('afterbegin', `<section class="panel error">${escapeHtml(err.message)}</section>`);
+    } finally {
+      checkBtn.disabled = false;
+      checkBtn.textContent = 'Check Now';
+    }
+  });
+
+  if (!renderActionLanding()) {
+    Auth.onReady(() => load());
+  }
+</script>
+</body>
+</html>

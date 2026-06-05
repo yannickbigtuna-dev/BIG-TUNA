@@ -18,6 +18,7 @@ const QUIZZES_DIR       = path.join(DATA, 'quizzes');
 const SHARED_LISTS_DIR  = path.join(DATA, 'shared-lists');
 const LIGHTS_DIR        = path.join(DATA, 'lights');
 const RADAR_DIR         = path.join(DATA, 'radar');
+const ASSIGNMENTS_DIR   = path.join(DATA, 'assignments');
 const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
@@ -29,9 +30,10 @@ const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.6392425, lon: -63.
 const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.5944923/dist/55';
 const YHZ_RADAR_CACHE_MS = 12000;
 const YHZ_RADAR_TIMEOUT_MS = 8000;
+const assignmentCoach = require('./lib/assignment-coach');
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
-for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, RADAR_DIR])
+for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, RADAR_DIR, ASSIGNMENTS_DIR])
   fs.mkdirSync(dir, { recursive: true });
 
 if (!fs.existsSync(USERS_FILE))    fs.writeFileSync(USERS_FILE,    '[]');
@@ -1061,6 +1063,37 @@ async function handleAPI(req, res, urlPath) {
     return jsonRes(res, 200, { username: user.username, id: user.id });
   }
 
+  // GET /api/assignments - admin-only Brightspace assignment coach dashboard data
+  if (req.method === 'GET' && urlPath === '/api/assignments') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (!assignmentCoach.isAdmin(user)) return jsonRes(res, 403, { error: 'Forbidden' });
+    return jsonRes(res, 200, assignmentCoach.listAssignments());
+  }
+
+  // POST /api/assignments/check-now - admin-only manual Brightspace check
+  if (req.method === 'POST' && urlPath === '/api/assignments/check-now') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (!assignmentCoach.isAdmin(user)) return jsonRes(res, 403, { error: 'Forbidden' });
+    const result = await assignmentCoach.runCheck({ manual: true });
+    return jsonRes(res, result.ok ? 200 : 500, result);
+  }
+
+  // POST /api/assignments/action - signed email-link action endpoint
+  if (req.method === 'POST' && urlPath === '/api/assignments/action') {
+    const body = await parseBody(req);
+    const id = typeof body.id === 'string' ? body.id : '';
+    const action = typeof body.action === 'string' ? body.action : '';
+    const expires = typeof body.expires === 'string' || typeof body.expires === 'number' ? body.expires : '';
+    const sig = typeof body.sig === 'string' ? body.sig : '';
+    if (!assignmentCoach.verifyAction({ id, action, expires, sig })) {
+      return jsonRes(res, 403, { error: 'Invalid or expired action link' });
+    }
+    const result = await assignmentCoach.handleAction({ id, action, instructions: body.instructions });
+    return jsonRes(res, result.ok ? 200 : (result.status || 400), result);
+  }
+
   // GET /api/settings/:appId
   if (req.method === 'GET' && urlPath.startsWith('/api/settings/')) {
     const user  = getSessionUser(getToken(req));
@@ -1866,6 +1899,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n Server running at http://localhost:${PORT}`);
   console.log(` Apps folder: C:\\SERVER\\apps\\`);
   console.log(` Data folder: C:\\SERVER\\data\\\n`);
+  assignmentCoach.startScheduler();
 });
 
 server.on('error', err => {

@@ -51,8 +51,9 @@ Main server:
 - File: `server.js`
 - Port: `3000`
 - Module system: CommonJS
-- Dependencies used directly: Node stdlib, `ws`, `node-pty` through `pty-worker.js`, Puppeteer packages for PDF/parsing-related features.
-- Responsibilities: static file serving from `apps/`, all `/api/*` routes, auth/session management, local file persistence, shared-list Server-Sent Events, web terminal WebSocket upgrades.
+- Dependencies used directly: Node stdlib, `ws`, `node-pty` through `pty-worker.js`, Puppeteer packages for PDF/parsing-related features and Brightspace browser automation.
+- Responsibilities: static file serving from `apps/`, all `/api/*` routes, auth/session management, local file persistence, shared-list Server-Sent Events, web terminal WebSocket upgrades, and the assignment coach scheduler.
+- The assignment coach workflow is loaded from `lib/assignment-coach.js`. It uses Puppeteer, OpenAI Responses API, Resend email, signed action links, and file-backed state under `data/assignments/`.
 
 MCP server:
 
@@ -132,6 +133,7 @@ Current `npm test` is a placeholder that exits with failure, so do not treat it 
 - `data/quizzes/`
 - `data/shared-lists/`
 - `data/lights/`
+- `data/assignments/`
 
 It creates `data/users.json` and `data/sessions.json` if missing.
 
@@ -223,6 +225,7 @@ Homepage:
 
 Current app folders:
 
+- `apps/assignments/`
 - `apps/capitals-quiz/`
 - `apps/climb-tracker/`
 - `apps/list-maker/`
@@ -234,6 +237,39 @@ Current app folders:
 - `apps/weather/`
 - `apps/workout-timer/`
 - `apps/world-map/`
+
+## Assignment Coach
+
+The `/assignments/` app is an admin-only Brightspace assignment coach. It checks Brightspace, tracks assignments due soon with no detected submission, emails coaching notes or missing-info alerts, and handles signed YES/NO/NEVER action links. It must remain an academic-support workflow: summaries, deliverables, outlines, work plans, questions, and quality checklists only. Do not change it into a final-answer generator or automatic coursework submission workflow.
+
+Routes:
+
+```text
+GET  /api/assignments
+POST /api/assignments/check-now
+POST /api/assignments/action
+```
+
+Configuration is environment-based and must not be committed:
+
+```text
+ASSIGNMENTS_ENABLED=1
+ASSIGNMENTS_ADMIN_USER=yannick
+PUBLIC_BASE_URL=https://yannickmorgans.ca
+BRIGHTSPACE_URL=...
+BRIGHTSPACE_ASSIGNMENTS_URL=...
+BRIGHTSPACE_USERNAME=...
+BRIGHTSPACE_PASSWORD=...
+BRIGHTSPACE_USER_DATA_DIR=...
+BRIGHTSPACE_ASSIGNMENT_SELECTOR=...
+ASSIGNMENTS_DUE_WINDOW_DAYS=7
+ASSIGNMENTS_ACTION_SECRET=...
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.2
+RESEND_API_KEY=...
+ASSIGNMENTS_FROM_EMAIL=...
+ASSIGNMENTS_TO_EMAIL=...
+```
 
 Desktop app source:
 
@@ -297,6 +333,9 @@ data/lights/device-status.json
 
 data/radar/yhz-YYYY-MM-DD.json
   Daily Halifax local-time set of unique ADSB aircraft IDs seen by the public YHZ radar endpoint, stored as a JSON array.
+
+data/assignments/state.json
+  Assignment coach state: tracked Brightspace assignments, attempts, statuses, and recent run summaries. Browser profile data may also live under `data/assignments/browser-profile/` when configured.
 ```
 
 Legacy migrations exist in `server.js` for older `data/settings.json` and single-file climbs. Do not remove migration code unless all production data has been verified and backed up.
@@ -310,6 +349,14 @@ Authenticated settings and generic data:
 ```text
 GET/POST /api/settings/:appId
 GET/POST /api/data/:appId
+```
+
+Assignment coach:
+
+```text
+GET  /api/assignments
+POST /api/assignments/check-now
+POST /api/assignments/action
 ```
 
 Climbs v1:
