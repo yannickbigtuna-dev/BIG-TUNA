@@ -1,4 +1,7 @@
 const { execFile } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { app, dialog } = require('electron');
 
 const APP_NAME = 'BIG TUNA Codex';
@@ -10,6 +13,8 @@ function escapeAppleScriptString(value) {
 function buildLauncherScript() {
   return [
     'set -u',
+    'SCRIPT_PATH="$0"',
+    'trap \'rm -f "$SCRIPT_PATH"\' EXIT',
     'REPO_PATH="$HOME/BIG-TUNA"',
     'REPO_URL="https://github.com/yannickbigtuna-dev/BIG-TUNA.git"',
     '',
@@ -71,16 +76,17 @@ function buildLauncherScript() {
   ].join('\n');
 }
 
-function buildTerminalCommand() {
-  const encoded = Buffer.from(buildLauncherScript(), 'utf8').toString('base64');
-  return `printf %s '${encoded}' | base64 -D | /bin/bash`;
+function createLauncherScriptFile() {
+  const scriptPath = path.join(os.tmpdir(), `big-tuna-codex-${Date.now()}.sh`);
+  fs.writeFileSync(scriptPath, buildLauncherScript(), { encoding: 'utf8', mode: 0o700 });
+  return scriptPath;
 }
 
-function openTerminal() {
+function openTerminal(scriptPath) {
   const scriptLines = [
     'tell application "Terminal"',
     'activate',
-    `do script ${escapeAppleScriptString(buildTerminalCommand())}`,
+    `do script ${escapeAppleScriptString(`/bin/bash ${JSON.stringify(scriptPath)}`)}`,
     'end tell',
   ];
 
@@ -102,7 +108,8 @@ async function main() {
   if (app.dock) app.dock.hide();
 
   try {
-    await openTerminal();
+    const scriptPath = createLauncherScriptFile();
+    await openTerminal(scriptPath);
   } catch (error) {
     dialog.showErrorBox(
       APP_NAME,
