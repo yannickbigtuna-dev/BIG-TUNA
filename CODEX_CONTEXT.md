@@ -217,7 +217,7 @@ Homepage:
 - File: `apps/index.html`
 - Custom launcher page with clock, weather/temperature widget, and app cards.
 - Has a persisted minimal mode toggled by the bottom-left button; minimal mode hides homepage chrome, app cards, and downloads menu, leaving BIG TUNA, date, clock, lights link, and the exit button.
-- The bottom-right homepage downloads menu lists release-asset downloads for the Lights and Weather macOS apps.
+- The bottom-right homepage downloads menu lists release-asset downloads for the Lights app, Weather app, and the BIG TUNA Codex macOS launcher.
 - The top-right homepage weather widget links to `/weather/` and displays Open-Meteo apparent temperature. It tries browser geolocation first and falls back to Halifax coordinates (`44.6488,-63.5752`) when geolocation is denied, unavailable, times out, or the first weather request fails.
 - Adding an app may require updating both homepage cards and `topbar.js`, even though the static server can auto-index folders.
 
@@ -242,6 +242,7 @@ Desktop app source:
 - Its macOS status item uses a template bulb icon plus a text fallback (`●` on, `○` off) so it remains visible on light and dark menu bars; clicking it directly toggles the light and does not open a menu.
 - Packaging command: `cd desktop/big-tuna-lights && npm install && npm run package:mac`. This must run on macOS so Electron framework symlinks are preserved. The `.github/workflows/build-lights-mac.yml` workflow builds the unsigned zip and publishes it as the `lights-mac-latest` GitHub Release asset.
 - `desktop/big-tuna-weather/` contains the Electron macOS Weather app. It uses NOAA/NWS first for U.S. coordinates and falls back to Open-Meteo when NOAA is unavailable or the location is outside NWS coverage. It stores saved locations and the selected location in Electron `userData/weather.json`, includes a normal Dock/window app plus a macOS tray widget title in the compact `condition temperature wind` style, and needs no BIG TUNA auth. Clicking the tray/menu-bar item opens the weather panel directly instead of an options menu. Packaging command: `cd desktop/big-tuna-weather && npm install && npm run package:mac`; the `.github/workflows/build-weather-mac.yml` workflow builds the unsigned zip and publishes it as the `weather-mac-latest` GitHub Release asset.
+- `desktop/big-tuna-codex/` contains an Electron macOS launcher that opens Terminal.app, ensures `~/BIG-TUNA` exists by cloning or pulling `https://github.com/yannickbigtuna-dev/BIG-TUNA`, and then starts `codex --cd ~/BIG-TUNA --sandbox danger-full-access --ask-for-approval never`. It requires local `git`, Terminal.app, and the Codex CLI already installed on the Mac. Packaging command: `cd desktop/big-tuna-codex && npm install && npm run package:mac`; the `.github/workflows/build-codex-mac.yml` workflow builds the unsigned universal Monterey-compatible zip and publishes it as the `codex-mac-latest` GitHub Release asset.
 
 iOS app source:
 
@@ -431,6 +432,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 
 - Requires auth and connects to `/terminal/ws`.
 - Server additionally restricts access to username `yannick`.
+- The homepage downloads menu links the unsigned macOS launcher zip at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/codex-mac-latest/big-tuna-codex-mac.zip`. The app only launches Terminal.app and keeps the real Codex session in a standard terminal window against `~/BIG-TUNA`.
 
 `lights`:
 

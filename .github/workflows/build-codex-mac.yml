@@ -1,0 +1,51 @@
+name: Build Codex Mac App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-codex-mac.yml'
+      - 'desktop/big-tuna-codex/**'
+      - 'apps/index.html'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/big-tuna-codex/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: desktop/big-tuna-codex
+        run: npm ci
+
+      - name: Package unsigned macOS app
+        working-directory: desktop/big-tuna-codex
+        run: npm run package:mac
+
+      - name: Publish release download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip_path="apps/terminal/downloads/big-tuna-codex-mac.zip"
+          if gh release view codex-mac-latest >/dev/null 2>&1; then
+            gh release upload codex-mac-latest "$zip_path" --clobber
+          else
+            gh release create codex-mac-latest "$zip_path" \
+              --title "BIG TUNA Codex macOS app" \
+              --notes "Unsigned macOS launcher for BIG TUNA Codex in YOLO mode."
+          fi
