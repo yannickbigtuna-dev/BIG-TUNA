@@ -299,6 +299,7 @@
     document.getElementById('config').innerHTML = [
       `Workflow ${cfg.enabled ? 'enabled' : 'disabled'}`,
       `Brightspace ${cfg.brightspace ? 'configured' : 'missing'}`,
+      `${cfg.configuredCourses || 0} configured course URL${cfg.configuredCourses === 1 ? '' : 's'}`,
       `Email ${cfg.email ? 'configured' : 'missing'}`,
       `OpenAI ${cfg.openai ? cfg.model : 'missing'}`,
       `${cfg.dueWindowDays} day window`,
@@ -319,9 +320,15 @@
       </article>
     `).join('') : '<section class="panel muted">No assignments tracked yet.</section>';
 
-    document.getElementById('runs').innerHTML = data.runs.length ? data.runs.map(run => `
-      <div>${escapeHtml(run.startedAt)} · found ${run.found || 0} · emailed ${run.emailed || 0}${run.errors?.length ? ` · ${escapeHtml(run.errors.join('; '))}` : ''}</div>
-    `).join('') : '<div>No runs yet.</div>';
+    document.getElementById('runs').innerHTML = data.runs.length ? data.runs.map(run => {
+      const courses = (run.courses || []).map(course =>
+        `${escapeHtml(course.title)}: ${escapeHtml(course.status)} (${course.assignments || 0} assignments)` +
+        (course.errors?.length ? ` <span class="error">${escapeHtml(course.errors.join('; '))}</span>` : '')
+      ).join('<br>');
+      return `<div>${escapeHtml(run.startedAt)} · found ${run.found || 0} · emailed ${run.emailed || 0}` +
+        `${run.errors?.length ? ` · <span class="error">${escapeHtml(run.errors.join('; '))}</span>` : ''}` +
+        `${courses ? `<div style="margin:5px 0 5px 12px">${courses}</div>` : ''}</div>`;
+    }).join('') : '<div>No runs yet.</div>';
   }
 
   async function load() {
