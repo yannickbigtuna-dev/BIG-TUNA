@@ -48,6 +48,13 @@ test('recognizes an expired saved Brightspace session', () => {
   }), '');
 });
 
+test('replaces legacy clickable-node failures with saved-session instructions', () => {
+  assert.match(
+    _test.browserErrorMessage(new Error('Node is either not clickable or not an Element')),
+    /automated clicking is disabled/i
+  );
+});
+
 test('scrapes assignments rendered inside Brightspace-style shadow DOM', async t => {
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html');
