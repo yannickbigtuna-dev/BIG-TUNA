@@ -13,6 +13,7 @@ const Topbar = (() => {
     { name: 'Quizzes',          href: '/quiz-app/',           icon: '❓' },
     { name: 'Psych Sheet',      href: '/psych-sheet/',        icon: '🏊' },
     { name: 'Lists',            href: '/list-maker/',         icon: '📋' },
+    { name: 'Eco AI',           href: '/eco-ai/',             icon: '🌱' },
     { name: 'Assignments',      href: '/assignments/',        icon: '✓' },
     { name: 'World Map',        href: '/world-map/',          icon: '🌍' },
     { name: 'Pace Calculator',  href: '/pace-calculator/',    icon: '🏃' },

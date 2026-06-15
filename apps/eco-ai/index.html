@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Eco AI - BIG TUNA</title>
+  <style>
+    :root {
+      --bg: #08111c;
+      --panel: #0f1b2a;
+      --panel-2: #132338;
+      --panel-3: #182c46;
+      --line: rgba(197, 223, 255, 0.12);
+      --text: #eef5ff;
+      --muted: #8ba2bf;
+      --accent: #73e0b0;
+      --accent-2: #53b8ff;
+      --danger: #ff8f87;
+      --shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(83, 184, 255, 0.18), transparent 28%),
+        radial-gradient(circle at right 20%, rgba(115, 224, 176, 0.13), transparent 24%),
+        linear-gradient(180deg, #07111b, #0a1320 38%, #09101a);
+      color: var(--text);
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    #app-shell {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 18px;
+      padding: 18px;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(15, 27, 42, 0.96), rgba(10, 20, 32, 0.98));
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      min-height: 0;
+    }
+
+    #sidebar {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-head,
+    .chat-head {
+      padding: 18px 18px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .title-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 1.2rem; }
+
+    .ghost-btn,
+    .action-btn,
+    .icon-btn,
+    .send-btn,
+    .danger-btn {
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .action-btn,
+    .danger-btn,
+    .send-btn,
+    .ghost-btn {
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 14px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      transition: transform 0.16s ease, opacity 0.16s ease, background 0.16s ease;
+    }
+
+    .action-btn {
+      color: #062036;
+      background: linear-gradient(135deg, var(--accent), #b8f7da);
+    }
+
+    .danger-btn {
+      color: #fff;
+      background: rgba(255, 143, 135, 0.12);
+      border: 1px solid rgba(255, 143, 135, 0.18);
+    }
+
+    .ghost-btn {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .send-btn {
+      color: #08111c;
+      background: linear-gradient(135deg, var(--accent-2), #91e1ff);
+      padding: 0 18px;
+    }
+
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.05);
+    }
+
+    .action-btn:hover,
+    .ghost-btn:hover,
+    .send-btn:hover,
+    .danger-btn:hover,
+    .icon-btn:hover {
+      transform: translateY(-1px);
+      opacity: 0.96;
+    }
+
+    #chat-list {
+      flex: 1;
+      overflow: auto;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .chat-item {
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      padding: 12px 14px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .chat-item.active {
+      background: rgba(83, 184, 255, 0.12);
+      border-color: rgba(83, 184, 255, 0.22);
+    }
+
+    .chat-item-title {
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 5px;
+    }
+
+    .chat-item-meta {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    #chat-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #status-strip {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    #status-strip.online {
+      color: #dff7ec;
+      background: rgba(115, 224, 176, 0.08);
+    }
+
+    #chat-toolbar {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.4fr) auto auto;
+      gap: 10px;
+      padding: 14px 18px 0;
+      align-items: end;
+    }
+
+    label.toolbar-label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    select,
+    textarea,
+    input[type="text"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      font: inherit;
+    }
+
+    select { min-height: 44px; padding: 0 12px; }
+
+    #messages {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .empty-state {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty-card {
+      max-width: 720px;
+      padding: 28px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .feature-card {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      text-align: left;
+    }
+
+    .msg {
+      display: grid;
+      gap: 8px;
+    }
+
+    .msg-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.77rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .bubble {
+      padding: 16px 18px;
+      border-radius: 18px;
+      line-height: 1.58;
+      word-break: break-word;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .msg.user .bubble {
+      background: rgba(83, 184, 255, 0.12);
+    }
+
+    .msg.assistant .bubble {
+      background: rgba(255,255,255,0.045);
+    }
+
+    .msg-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .mini-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.78rem;
+    }
+
+    .attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .attachment-pill {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(115,224,176,0.1);
+      color: #d8f7e8;
+      font-size: 0.8rem;
+    }
+
+    pre, code {
+      font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      padding: 14px;
+      border-radius: 14px;
+      overflow: auto;
+      background: rgba(0, 0, 0, 0.34);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    code.inline {
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.08);
+    }
+
+    #composer {
+      border-top: 1px solid var(--line);
+      padding: 14px 18px 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    #composer-box {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    #prompt {
+      min-height: 110px;
+      resize: vertical;
+      padding: 14px 16px;
+      line-height: 1.45;
+    }
+
+    #draft-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .draft-file {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      font-size: 0.82rem;
+    }
+
+    .draft-file button {
+      border: 0;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    #composer-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    #composer-tip {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 980px) {
+      #app-shell {
+        grid-template-columns: 1fr;
+      }
+
+      #sidebar {
+        max-height: 320px;
+      }
+
+      #chat-toolbar {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      #app-shell {
+        padding: 12px;
+        gap: 12px;
+      }
+
+      #chat-toolbar,
+      #composer-box {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar-head,
+      .chat-head,
+      #messages,
+      #composer {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <script src="/topbar.js"></script>
+  <script src="/auth.js"></script>
+
+  <div id="app-shell">
+    <aside id="sidebar" class="panel">
+      <div class="sidebar-head">
+        <div class="eyebrow">Local AI Workspace</div>
+        <div class="title-row">
+          <h1>Eco AI</h1>
+          <button id="new-chat-btn" class="action-btn" type="button">New Chat</button>
+        </div>
+      </div>
+      <div id="chat-list"></div>
+    </aside>
+
+    <main id="chat-panel" class="panel">
+      <div class="chat-head">
+        <div class="eyebrow">Ollama On This Machine</div>
+        <div class="title-row">
+          <h1 id="active-title">Eco AI</h1>
+          <div style="display:flex; gap:10px;">
+            <button id="rename-chat-btn" class="ghost-btn" type="button">Rename</button>
+            <button id="delete-chat-btn" class="danger-btn" type="button">Delete</button>
+          </div>
+        </div>
+        <div id="status-strip">Checking local Ollama status...</div>
+      </div>
+
+      <div id="chat-toolbar">
+        <div>
+          <label class="toolbar-label" for="model-select">Model</label>
+          <select id="model-select"></select>
+        </div>
+        <div>
+          <label class="toolbar-label" for="skill-select">Skill</label>
+          <select id="skill-select"></select>
+        </div>
+        <div>
+          <label class="toolbar-label">Chat Controls</label>
+          <div style="display:flex; gap:10px;">
+            <button id="regenerate-btn" class="ghost-btn" type="button">Regenerate</button>
+            <button id="attach-btn" class="ghost-btn" type="button">Attach Files</button>
+          </div>
+        </div>
+        <button id="stop-btn" class="danger-btn" type="button">Stop</button>
+        <input id="file-input" type="file" multiple hidden>
+      </div>
+
+      <section id="messages"></section>
+
+      <div id="composer">
+        <div id="draft-files"></div>
+        <div id="composer-box">
+          <textarea id="prompt" placeholder="Ask Eco AI anything local-first. Attach text or code files for context."></textarea>
+          <button id="send-btn" class="send-btn" type="button">Send</button>
+        </div>
+        <div id="composer-actions">
+          <button id="clear-draft-btn" class="ghost-btn" type="button">Clear Draft</button>
+        </div>
+        <div id="composer-tip">Files stay local to this website server workflow. This app only sends prompts to the Ollama instance on the same machine.</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    Topbar.setTitle('Eco AI');
+
+    const APP_ID = 'eco-ai';
+    const SKILLS = [
+      { id: 'general', label: 'General' },
+      { id: 'coding', label: 'Coding' },
+      { id: 'writing', label: 'Writing' },
+      { id: 'study', label: 'Study' },
+      { id: 'summarize', label: 'Summarize' },
+      { id: 'file-analyst', label: 'File Analyst' },
+    ];
+    const FILE_CHAR_LIMIT = 80000;
+    const FILE_TOTAL_LIMIT = 240000;
+
+    const state = {
+      chats: [],
+      activeChatId: '',
+      draftFiles: [],
+      status: { available: false, models: [], recommendedModel: '', setupMessage: '', error: '' },
+      settings: { preferredModel: '', defaultSkill: 'general' },
+      saveTimer: null,
+      generating: false,
+      activeAbort: null,
+    };
+
+    function uid() {
+      return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    }
+
+    function nowIso() {
+      return new Date().toISOString();
+    }
+
+    function activeChat() {
+      return state.chats.find(chat => chat.id === state.activeChatId) || null;
+    }
+
+    function newChat(seed = {}) {
+      return {
+        id: uid(),
+        title: seed.title || 'New Chat',
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        model: seed.model || state.settings.preferredModel || '',
+        skill: seed.skill || state.settings.defaultSkill || 'general',
+        messages: Array.isArray(seed.messages) ? seed.messages : [],
+      };
+    }
+
+    function ensureActiveChat() {
+      if (!state.chats.length) {
+        const chat = newChat();
+        state.chats = [chat];
+        state.activeChatId = chat.id;
+      }
+      if (!activeChat()) state.activeChatId = state.chats[0].id;
+    }
+
+    function scheduleSave() {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = setTimeout(saveAll, 300);
+    }
+
+    async function api(path, options = {}) {
+      const headers = { ...(options.headers || {}), Authorization: 'Bearer ' + Auth.token };
+      if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      const res = await fetch(path, { ...options, headers });
+      return res;
+    }
+
+    async function saveAll() {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = null;
+      await Promise.all([
+        Auth.saveSettings(APP_ID, state.settings),
+        api('/api/data/' + APP_ID, {
+          method: 'POST',
+          body: JSON.stringify({
+            chats: state.chats,
+            activeChatId: state.activeChatId,
+          }),
+        }),
+      ]).catch(() => {});
+    }
+
+    function summarizeTitle(text) {
+      const flat = (text || '').replace(/\s+/g, ' ').trim();
+      if (!flat) return 'New Chat';
+      return flat.slice(0, 48);
+    }
+
+    function formatTime(iso) {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    function esc(text) {
+      return text.replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+    }
+
+    function renderMarkdown(text) {
+      const blocks = [];
+      let html = String(text || '').replace(/```([\s\S]*?)```/g, (_, code) => {
+        blocks.push(code);
+        return `@@CODE_BLOCK_${blocks.length - 1}@@`;
+      });
+      html = esc(html);
+      html = html.replace(/@@CODE_BLOCK_(\d+)@@/g, (_, index) => {
+        const code = blocks[Number(index)] || '';
+        return `<pre><code>${esc(code.trim())}</code></pre>`;
+      });
+      html = html.replace(/`([^`\n]+)`/g, '<code class="inline">$1</code>');
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\n/g, '<br>');
+      return html;
+    }
+
+    function renderStatus() {
+      const strip = document.getElementById('status-strip');
+      const status = state.status;
+      strip.className = status.available ? 'online' : '';
+      const modelHint = status.models.length ? `${status.models.length} model${status.models.length === 1 ? '' : 's'} ready` : 'no models detected';
+      strip.textContent = status.available
+        ? `Local Ollama connected. ${modelHint}. All inference stays on this machine.`
+        : (status.setupMessage || status.error || 'Ollama is offline.');
+    }
+
+    function renderSidebar() {
+      ensureActiveChat();
+      const list = document.getElementById('chat-list');
+      list.innerHTML = '';
+      [...state.chats].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')).forEach(chat => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'chat-item' + (chat.id === state.activeChatId ? ' active' : '');
+        button.innerHTML = `
+          <div class="chat-item-title">${esc(chat.title || 'New Chat')}</div>
+          <div class="chat-item-meta">${esc((chat.model || 'Auto model') + ' · ' + formatTime(chat.updatedAt))}</div>
+        `;
+        button.onclick = () => {
+          state.activeChatId = chat.id;
+          syncControlsFromChat();
+          render();
+          scheduleSave();
+        };
+        list.appendChild(button);
+      });
+    }
+
+    function renderDraftFiles() {
+      const wrap = document.getElementById('draft-files');
+      wrap.innerHTML = '';
+      state.draftFiles.forEach(file => {
+        const pill = document.createElement('div');
+        pill.className = 'draft-file';
+        pill.innerHTML = `<span>${esc(file.name)}</span>`;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'x';
+        remove.onclick = () => {
+          state.draftFiles = state.draftFiles.filter(item => item.id !== file.id);
+          renderDraftFiles();
+        };
+        pill.appendChild(remove);
+        wrap.appendChild(pill);
+      });
+    }
+
+    function renderMessages() {
+      const container = document.getElementById('messages');
+      const chat = activeChat();
+      document.getElementById('active-title').textContent = chat ? chat.title : 'Eco AI';
+      container.innerHTML = '';
+
+      if (!chat || !chat.messages.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-card">
+              <div class="eyebrow">Local-First Assistant</div>
+              <h2 style="margin-top:8px; font-size:1.8rem;">Chat, code, summarize, and inspect files with an Ollama model running on this machine.</h2>
+              <p style="margin-top:10px; color:var(--muted); line-height:1.6;">Eco AI supports persistent chats, model switching, prompt skills, streaming responses, and local file context for text and code files.</p>
+              <div class="feature-grid">
+                <div class="feature-card"><strong>Files</strong><br><span style="color:var(--muted);">Attach local text or code files and send them as prompt context.</span></div>
+                <div class="feature-card"><strong>Skills</strong><br><span style="color:var(--muted);">Swap between coding, study, summarize, writing, and file-analysis modes.</span></div>
+                <div class="feature-card"><strong>Local Only</strong><br><span style="color:var(--muted);">Requests go from BIG TUNA to Ollama on the same machine, not to a cloud API.</span></div>
+              </div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      chat.messages.forEach((message, index) => {
+        const row = document.createElement('div');
+        row.className = 'msg ' + message.role;
+        const attachments = Array.isArray(message.attachments) && message.attachments.length
+          ? `<div class="attachments">${message.attachments.map(file => `<span class="attachment-pill">${esc(file.name)}</span>`).join('')}</div>`
+          : '';
+        const actions = message.role === 'assistant'
+          ? `<div class="msg-actions"><button class="mini-btn" data-copy="${index}">Copy</button></div>`
+          : '';
+        row.innerHTML = `
+          <div class="msg-header">
+            <span>${message.role === 'assistant' ? 'Eco AI' : 'You'}</span>
+            <span>${formatTime(message.createdAt)}</span>
+          </div>
+          <div class="bubble">${renderMarkdown(message.content || '')}${attachments}</div>
+          ${actions}
+        `;
+        container.appendChild(row);
+      });
+
+      container.querySelectorAll('[data-copy]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const index = Number(btn.getAttribute('data-copy'));
+          const message = chat.messages[index];
+          if (!message) return;
+          try {
+            await navigator.clipboard.writeText(message.content || '');
+            btn.textContent = 'Copied';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 900);
+          } catch {}
+        });
+      });
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function renderModelSelect() {
+      const select = document.getElementById('model-select');
+      const chat = activeChat();
+      const current = chat?.model || state.settings.preferredModel || state.status.recommendedModel || '';
+      const models = state.status.models || [];
+      const options = [];
+      if (state.status.recommendedModel) {
+        options.push(`<option value="">Auto (${esc(state.status.recommendedModel)})</option>`);
+      } else {
+        options.push('<option value="">Auto</option>');
+      }
+      models.forEach(model => {
+        options.push(`<option value="${esc(model.name)}">${esc(model.name)}</option>`);
+      });
+      if (!models.length) {
+        options.push('<option value="" disabled>No local models</option>');
+      }
+      select.innerHTML = options.join('');
+      select.value = current && models.some(model => model.name === current) ? current : '';
+    }
+
+    function renderSkillSelect() {
+      const select = document.getElementById('skill-select');
+      select.innerHTML = SKILLS.map(skill => `<option value="${skill.id}">${skill.label}</option>`).join('');
+      select.value = activeChat()?.skill || state.settings.defaultSkill || 'general';
+    }
+
+    function syncControlsFromChat() {
+      renderModelSelect();
+      renderSkillSelect();
+    }
+
+    function render() {
+      renderStatus();
+      renderSidebar();
+      renderMessages();
+      renderDraftFiles();
+      syncControlsFromChat();
+      document.getElementById('stop-btn').disabled = !state.generating;
+    }
+
+    function updateActiveChat(mutator) {
+      const chat = activeChat();
+      if (!chat) return null;
+      mutator(chat);
+      chat.updatedAt = nowIso();
+      return chat;
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await api('/api/eco-ai/status');
+        const data = await res.json();
+        state.status = data;
+        if (!state.settings.preferredModel && data.recommendedModel) {
+          state.settings.preferredModel = data.recommendedModel;
+        }
+        const chat = activeChat();
+        if (chat && !chat.model && state.settings.preferredModel) chat.model = state.settings.preferredModel;
+        render();
+      } catch (error) {
+        state.status = { available: false, models: [], recommendedModel: '', setupMessage: 'Could not reach the BIG TUNA server for Eco AI status.', error: String(error || '') };
+        renderStatus();
+      }
+    }
+
+    function currentPayloadMessages(chat) {
+      return chat.messages.map(message => ({
+        role: message.role,
+        content: message.content,
+        attachments: Array.isArray(message.attachments) ? message.attachments.map(file => ({
+          name: file.name,
+          type: file.type || '',
+          text: file.text || '',
+        })) : [],
+      }));
+    }
+
+    async function sendChatRequest(chat) {
+      state.generating = true;
+      render();
+      const assistant = { id: uid(), role: 'assistant', content: '', attachments: [], createdAt: nowIso() };
+      chat.messages.push(assistant);
+      renderMessages();
+
+      const controller = new AbortController();
+      state.activeAbort = controller;
+
+      try {
+        const res = await api('/api/eco-ai/chat', {
+          method: 'POST',
+          body: JSON.stringify({
+            model: chat.model || state.settings.preferredModel || '',
+            skill: chat.skill || 'general',
+            messages: currentPayloadMessages(chat).slice(0, -1),
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Eco AI request failed');
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let newline = buffer.indexOf('\n');
+          while (newline >= 0) {
+            const line = buffer.slice(0, newline).trim();
+            buffer = buffer.slice(newline + 1);
+            newline = buffer.indexOf('\n');
+            if (!line) continue;
+
+            let event;
+            try { event = JSON.parse(line); } catch { continue; }
+            if (event.type === 'meta' && event.model) {
+              chat.model = event.model;
+              state.settings.preferredModel = event.model;
+              renderSidebar();
+              renderModelSelect();
+            } else if (event.type === 'delta') {
+              assistant.content += event.content || '';
+              renderMessages();
+            } else if (event.type === 'error') {
+              throw new Error(event.error || 'Streaming failed');
+            }
+          }
+        }
+
+        if (!assistant.content.trim()) {
+          assistant.content = 'No response content was returned by the local model.';
+        }
+      } catch (error) {
+        assistant.content = controller.signal.aborted
+          ? (assistant.content || '[Generation stopped]')
+          : `Eco AI error: ${error.message || error}`;
+      } finally {
+        chat.updatedAt = nowIso();
+        state.generating = false;
+        state.activeAbort = null;
+        if (!chat.title || chat.title === 'New Chat') {
+          const firstUser = chat.messages.find(message => message.role === 'user');
+          if (firstUser) chat.title = summarizeTitle(firstUser.content);
+        }
+        render();
+        scheduleSave();
+      }
+    }
+
+    async function handleSend() {
+      if (state.generating) return;
+      const promptEl = document.getElementById('prompt');
+      const content = promptEl.value.trim();
+      if (!content && !state.draftFiles.length) return;
+      const chat = activeChat();
+      if (!chat) return;
+
+      chat.model = document.getElementById('model-select').value || chat.model || state.settings.preferredModel || '';
+      chat.skill = document.getElementById('skill-select').value || 'general';
+      state.settings.defaultSkill = chat.skill;
+      if (chat.model) state.settings.preferredModel = chat.model;
+
+      chat.messages.push({
+        id: uid(),
+        role: 'user',
+        content,
+        attachments: state.draftFiles.map(file => ({
+          name: file.name,
+          type: file.type,
+          text: file.text,
+        })),
+        createdAt: nowIso(),
+      });
+      chat.updatedAt = nowIso();
+
+      if (chat.title === 'New Chat') chat.title = summarizeTitle(content || state.draftFiles[0]?.name || 'New Chat');
+
+      promptEl.value = '';
+      state.draftFiles = [];
+      render();
+      scheduleSave();
+      await sendChatRequest(chat);
+    }
+
+    async function readFileAsText(file) {
+      const text = await file.text();
+      return text.slice(0, FILE_CHAR_LIMIT);
+    }
+
+    async function handleFiles(fileList) {
+      const files = Array.from(fileList || []);
+      if (!files.length) return;
+
+      let total = state.draftFiles.reduce((sum, file) => sum + (file.text || '').length, 0);
+
+      for (const file of files) {
+        const isTextLike = file.type.startsWith('text/')
+          || /\.(txt|md|json|csv|js|ts|tsx|jsx|html|css|xml|yml|yaml|sql|py|java|c|cpp|h|cs|rb|go|rs|sh|ps1)$/i.test(file.name);
+        if (!isTextLike) {
+          alert(`Skipped ${file.name}: only text and code files are supported right now.`);
+          continue;
+        }
+
+        const text = await readFileAsText(file);
+        total += text.length;
+        if (total > FILE_TOTAL_LIMIT) {
+          alert('Attachment limit reached. Keep total attached text under roughly 240k characters.');
+          break;
+        }
+
+        state.draftFiles.push({
+          id: uid(),
+          name: file.name,
+          type: file.type || 'text/plain',
+          text,
+        });
+      }
+
+      renderDraftFiles();
+    }
+
+    function createAndSelectChat() {
+      const chat = newChat({ model: state.settings.preferredModel, skill: state.settings.defaultSkill });
+      state.chats.unshift(chat);
+      state.activeChatId = chat.id;
+      render();
+      scheduleSave();
+      document.getElementById('prompt').focus();
+    }
+
+    function renameActiveChat() {
+      const chat = activeChat();
+      if (!chat) return;
+      const next = prompt('Rename chat', chat.title || '');
+      if (!next) return;
+      chat.title = next.trim().slice(0, 80) || chat.title;
+      chat.updatedAt = nowIso();
+      render();
+      scheduleSave();
+    }
+
+    function deleteActiveChat() {
+      const chat = activeChat();
+      if (!chat) return;
+      if (!confirm(`Delete "${chat.title}"?`)) return;
+      state.chats = state.chats.filter(item => item.id !== chat.id);
+      ensureActiveChat();
+      render();
+      scheduleSave();
+    }
+
+    async function regenerateLast() {
+      if (state.generating) return;
+      const chat = activeChat();
+      if (!chat) return;
+      if (!chat.messages.some(message => message.role === 'user')) return;
+      if (chat.messages[chat.messages.length - 1]?.role === 'assistant') chat.messages.pop();
+      render();
+      scheduleSave();
+      await sendChatRequest(chat);
+    }
+
+    function stopGeneration() {
+      if (state.activeAbort) state.activeAbort.abort();
+    }
+
+    Auth.onReady(async () => {
+      const [savedSettings, savedData] = await Promise.all([
+        Auth.loadSettings(APP_ID).catch(() => null),
+        api('/api/data/' + APP_ID).then(res => res.json()).catch(() => null),
+      ]);
+
+      if (savedSettings && typeof savedSettings === 'object') {
+        state.settings = {
+          preferredModel: typeof savedSettings.preferredModel === 'string' ? savedSettings.preferredModel : '',
+          defaultSkill: typeof savedSettings.defaultSkill === 'string' ? savedSettings.defaultSkill : 'general',
+        };
+      }
+
+      if (savedData && Array.isArray(savedData.chats)) {
+        state.chats = savedData.chats.map(chat => ({
+          ...newChat(),
+          ...chat,
+          messages: Array.isArray(chat.messages) ? chat.messages.map(message => ({
+            id: message.id || uid(),
+            role: message.role === 'assistant' ? 'assistant' : 'user',
+            content: typeof message.content === 'string' ? message.content : '',
+            attachments: Array.isArray(message.attachments) ? message.attachments.map(file => ({
+              name: file.name || 'file',
+              type: file.type || '',
+              text: file.text || '',
+            })) : [],
+            createdAt: message.createdAt || nowIso(),
+          })) : [],
+        }));
+        state.activeChatId = typeof savedData.activeChatId === 'string' ? savedData.activeChatId : '';
+      }
+
+      ensureActiveChat();
+      render();
+      refreshStatus();
+
+      document.getElementById('new-chat-btn').onclick = createAndSelectChat;
+      document.getElementById('rename-chat-btn').onclick = renameActiveChat;
+      document.getElementById('delete-chat-btn').onclick = deleteActiveChat;
+      document.getElementById('regenerate-btn').onclick = regenerateLast;
+      document.getElementById('send-btn').onclick = handleSend;
+      document.getElementById('clear-draft-btn').onclick = () => {
+        document.getElementById('prompt').value = '';
+        state.draftFiles = [];
+        renderDraftFiles();
+      };
+      document.getElementById('stop-btn').onclick = stopGeneration;
+      document.getElementById('attach-btn').onclick = () => document.getElementById('file-input').click();
+      document.getElementById('file-input').addEventListener('change', async event => {
+        await handleFiles(event.target.files);
+        event.target.value = '';
+      });
+      document.getElementById('model-select').addEventListener('change', event => {
+        updateActiveChat(chat => { chat.model = event.target.value; });
+        state.settings.preferredModel = event.target.value;
+        renderSidebar();
+        scheduleSave();
+      });
+      document.getElementById('skill-select').addEventListener('change', event => {
+        updateActiveChat(chat => { chat.skill = event.target.value; });
+        state.settings.defaultSkill = event.target.value;
+        scheduleSave();
+      });
+      document.getElementById('prompt').addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          handleSend();
+        }
+      });
+
+      Auth.beforeLogout(saveAll);
+    });
+  </script>
+</body>
+</html>

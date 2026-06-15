@@ -234,6 +234,7 @@ Current app folders:
 - `apps/assignments/`
 - `apps/capitals-quiz/`
 - `apps/climb-tracker/`
+- `apps/eco-ai/`
 - `apps/list-maker/`
 - `apps/lights/`
 - `apps/pace-calculator/`
@@ -444,6 +445,15 @@ Terminal:
 WebSocket /terminal/ws?t=<token>&cols=<n>&rows=<n>
 ```
 
+Eco AI:
+
+```text
+GET  /api/eco-ai/status
+POST /api/eco-ai/chat
+```
+
+`eco-ai` is an authenticated local-first chat app at `/eco-ai/`. It proxies chat requests from the BIG TUNA Node server to a local Ollama HTTP server on the same machine, using `OLLAMA_BASE_URL` when set or `http://127.0.0.1:11434` by default. `GET /api/eco-ai/status` reports Ollama availability, installed models, a recommended installed model, and file/message limits for the UI. `POST /api/eco-ai/chat` streams newline-delimited JSON events back to the browser while forwarding the conversation to Ollama `/api/chat`. The app persists per-user chats in `data/appdata/eco-ai/{userId}.json` and settings in `data/settings/{userId}/eco-ai.json`. File attachments are browser-read text/code snippets included in prompt context; binary and vision features are intentionally not supported yet.
+
 Only username `yannick` is allowed to open terminal WebSocket sessions. The server caps terminal sessions at 5. Each session forks `pty-worker.js`, so a PTY crash should not crash the main server.
 
 ## App Notes
@@ -494,6 +504,16 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Requires auth and connects to `/terminal/ws`.
 - Server additionally restricts access to username `yannick`.
 - The homepage downloads menu links the unsigned macOS launcher zip at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/codex-mac-latest/big-tuna-codex-mac.zip`. The app only launches Terminal.app and keeps the real Codex session in a standard terminal window against `~/BIG-TUNA`.
+
+`eco-ai`:
+
+- Authenticated static app at `/eco-ai/`.
+- Uses `topbar.js` and `auth.js`.
+- Uses `/api/eco-ai/status` to detect whether local Ollama is reachable and which models are installed.
+- Uses `/api/eco-ai/chat` for streaming local chat completions proxied to Ollama.
+- Persists conversation history in `/api/data/eco-ai` and user preferences in `Auth.saveSettings('eco-ai', ...)`.
+- Supports multiple saved chats, model switching, skill presets (`general`, `coding`, `writing`, `study`, `summarize`, `file-analyst`), and browser-read text/code file attachments that are appended to prompt context.
+- The intended deployment is a local Ollama install on the website host machine. If Ollama is missing or offline, the UI should show a setup/offline message rather than failing silently.
 
 `lights`:
 

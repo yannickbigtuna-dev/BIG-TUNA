@@ -26,6 +26,18 @@ const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
 const LIGHTS_DEVICE_INVERT_OUTPUT = true;
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+const ECO_AI_STATUS_TIMEOUT_MS = 4000;
+const ECO_AI_CHAT_TIMEOUT_MS = 10 * 60 * 1000;
+const ECO_AI_MAX_MESSAGES = 24;
+const ECO_AI_MAX_MESSAGE_CHARS = 16_000;
+const ECO_AI_MAX_FILE_COUNT = 6;
+const ECO_AI_MAX_FILE_CHARS = 80_000;
+const ECO_AI_MAX_TOTAL_FILE_CHARS = 240_000;
+const ECO_AI_DEFAULT_OPTIONS = Object.freeze({
+  temperature: 0.5,
+  num_ctx: 8192,
+});
 const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.6392425, lon: -63.5944923, radiusKm: 100 });
 const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.5944923/dist/55';
 const YHZ_RADAR_CACHE_MS = 12000;
@@ -436,6 +448,187 @@ function radarJsonRes(res, data) {
 
 function hashPassword(password, salt) {
   return crypto.createHash('sha256').update(salt + password).digest('hex');
+}
+
+const ECO_AI_SKILLS = Object.freeze({
+  general: 'You are Eco AI, a local-first assistant running on BIG TUNA through Ollama. Be direct, accurate, and honest about uncertainty.',
+  coding: 'You are Eco AI in coding mode. Prioritize correct code, concrete debugging, minimal diffs, and explicit tradeoffs.',
+  writing: 'You are Eco AI in writing mode. Improve clarity, tone, and structure while preserving the user intent.',
+  study: 'You are Eco AI in study mode. Teach clearly, break concepts into steps, and prefer guidance over giving away answers.',
+  summarize: 'You are Eco AI in summarize mode. Extract the essential points, structure them cleanly, and avoid filler.',
+  'file-analyst': 'You are Eco AI in file analyst mode. Read the provided file context carefully, cite which file section you are using, and identify ambiguities explicitly.',
+});
+
+function withTimeout(ms, signal) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('Request timed out')), ms);
+
+  if (signal) {
+    if (signal.aborted) controller.abort(signal.reason);
+    else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+function ecoAiFriendlyError(error) {
+  if (!error) return 'Unknown Ollama error';
+  if (error.name === 'AbortError') return 'Request aborted';
+  if (typeof error.message === 'string' && error.message) return error.message;
+  return String(error);
+}
+
+async function ollamaFetchJson(pathname, body, opts = {}) {
+  const upstream = new URL(pathname, OLLAMA_BASE_URL);
+  const timeout = withTimeout(opts.timeoutMs || ECO_AI_STATUS_TIMEOUT_MS, opts.signal);
+  try {
+    const response = await fetch(upstream, {
+      method: body ? 'POST' : 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: timeout.signal,
+    });
+
+    const text = await response.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch {}
+
+    return { ok: response.ok, status: response.status, data, text };
+  } finally {
+    timeout.clear();
+  }
+}
+
+function summarizeOllamaModels(payload) {
+  const rawModels = Array.isArray(payload?.models) ? payload.models : [];
+  return rawModels
+    .map(model => ({
+      name: typeof model?.name === 'string' ? model.name : '',
+      size: Number.isFinite(model?.size) ? model.size : 0,
+      modifiedAt: typeof model?.modified_at === 'string' ? model.modified_at : '',
+      digest: typeof model?.digest === 'string' ? model.digest : '',
+      family: typeof model?.details?.family === 'string' ? model.details.family : '',
+      parameterSize: typeof model?.details?.parameter_size === 'string' ? model.details.parameter_size : '',
+      quantizationLevel: typeof model?.details?.quantization_level === 'string' ? model.details.quantization_level : '',
+    }))
+    .filter(model => model.name);
+}
+
+function pickEcoAiRecommendedModel(models) {
+  if (!Array.isArray(models) || !models.length) return null;
+  const preferences = [
+    /qwen.*coder.*(7b|8b)/i,
+    /qwen.*(7b|8b)/i,
+    /llama.*(7b|8b)/i,
+    /gemma.*(7b|8b|9b)/i,
+    /phi.*(3|4)/i,
+  ];
+
+  for (const pattern of preferences) {
+    const match = models.find(model => pattern.test(model.name));
+    if (match) return match.name;
+  }
+  return models[0].name;
+}
+
+async function getEcoAiStatus(signal) {
+  try {
+    const result = await ollamaFetchJson('/api/tags', null, {
+      timeoutMs: ECO_AI_STATUS_TIMEOUT_MS,
+      signal,
+    });
+    const models = summarizeOllamaModels(result.data);
+    return {
+      ok: result.ok,
+      available: result.ok,
+      status: result.status,
+      models,
+      recommendedModel: pickEcoAiRecommendedModel(models),
+      setupMessage: result.ok
+        ? (models.length ? '' : 'Ollama is running but no models are installed yet.')
+        : (result.data?.error || result.text || 'Ollama returned an error.'),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      available: false,
+      status: 0,
+      models: [],
+      recommendedModel: null,
+      setupMessage: `Ollama is not reachable at ${OLLAMA_BASE_URL}. Start Ollama on the website machine and install a local model.`,
+      error: ecoAiFriendlyError(error),
+    };
+  }
+}
+
+function sanitizeEcoAiFiles(files) {
+  if (!Array.isArray(files)) return [];
+  const cleaned = [];
+  let totalChars = 0;
+
+  for (const file of files.slice(0, ECO_AI_MAX_FILE_COUNT)) {
+    const name = typeof file?.name === 'string' ? file.name.trim().slice(0, 200) : '';
+    const type = typeof file?.type === 'string' ? file.type.trim().slice(0, 120) : '';
+    const text = typeof file?.text === 'string' ? file.text : '';
+    if (!name || !text) continue;
+
+    const clipped = text.slice(0, ECO_AI_MAX_FILE_CHARS);
+    totalChars += clipped.length;
+    if (totalChars > ECO_AI_MAX_TOTAL_FILE_CHARS) break;
+
+    cleaned.push({
+      name,
+      type,
+      text: clipped,
+    });
+  }
+
+  return cleaned;
+}
+
+function sanitizeEcoAiMessages(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .slice(-ECO_AI_MAX_MESSAGES)
+    .map(message => {
+      const role = message?.role === 'assistant' ? 'assistant' : 'user';
+      const content = typeof message?.content === 'string'
+        ? message.content.slice(0, ECO_AI_MAX_MESSAGE_CHARS)
+        : '';
+      const attachments = sanitizeEcoAiFiles(message?.attachments);
+      return { role, content, attachments };
+    })
+    .filter(message => message.content || message.attachments.length);
+}
+
+function ecoAiFilesToPrompt(files) {
+  if (!files.length) return '';
+  return '\n\nAttached file context:\n' + files.map(file => [
+    `--- FILE: ${file.name}${file.type ? ` (${file.type})` : ''} ---`,
+    file.text,
+    `--- END FILE: ${file.name} ---`,
+  ].join('\n')).join('\n\n');
+}
+
+function buildEcoAiOllamaMessages(messages, skillId) {
+  const skillPrompt = ECO_AI_SKILLS[skillId] || ECO_AI_SKILLS.general;
+  const systemPrompt = [
+    skillPrompt,
+    'You run locally through Ollama. Never claim to have used a cloud model or external tools unless the user explicitly provided that output.',
+    'If attached files are present, use them as first-class context and say when the answer depends on them.',
+  ].join(' ');
+
+  const out = [{ role: 'system', content: systemPrompt }];
+  for (const message of messages) {
+    out.push({
+      role: message.role,
+      content: message.content + ecoAiFilesToPrompt(message.attachments),
+    });
+  }
+  return out;
 }
 
 function generateToken() {
@@ -1061,6 +1254,183 @@ async function handleAPI(req, res, urlPath) {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
     return jsonRes(res, 200, { username: user.username, id: user.id });
+  }
+
+  // GET /api/eco-ai/status - authenticated Ollama availability and model list
+  if (req.method === 'GET' && urlPath === '/api/eco-ai/status') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+
+    const status = await getEcoAiStatus();
+    return jsonRes(res, 200, {
+      available: status.available,
+      models: status.models,
+      recommendedModel: status.recommendedModel,
+      setupMessage: status.setupMessage || '',
+      error: status.error || '',
+      ollamaBaseUrl: OLLAMA_BASE_URL,
+      skills: Object.keys(ECO_AI_SKILLS),
+      limits: {
+        maxMessages: ECO_AI_MAX_MESSAGES,
+        maxFileCount: ECO_AI_MAX_FILE_COUNT,
+        maxFileChars: ECO_AI_MAX_FILE_CHARS,
+        maxTotalFileChars: ECO_AI_MAX_TOTAL_FILE_CHARS,
+      },
+      suggestions: [
+        'Prefer quantized 7B-class instruct or coder models on a 6 GB GPU.',
+        'If you install multiple models, Eco AI will let you switch between them per chat.',
+      ],
+    });
+  }
+
+  // POST /api/eco-ai/chat - authenticated streaming Ollama chat proxy
+  if (req.method === 'POST' && urlPath === '/api/eco-ai/chat') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+
+    const body = await parseBody(req);
+    const messages = sanitizeEcoAiMessages(body?.messages);
+    const skill = typeof body?.skill === 'string' ? body.skill : 'general';
+
+    if (!messages.length) {
+      return jsonRes(res, 400, { error: 'At least one message is required' });
+    }
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== 'user') {
+      return jsonRes(res, 400, { error: 'Last message must be from the user' });
+    }
+
+    const status = await getEcoAiStatus();
+    if (!status.available) {
+      return jsonRes(res, 503, {
+        error: status.setupMessage || 'Ollama is unavailable',
+        details: status.error || '',
+      });
+    }
+
+    const requestedModel = typeof body?.model === 'string' ? body.model.trim() : '';
+    const modelNames = new Set(status.models.map(model => model.name));
+    const model = requestedModel && modelNames.has(requestedModel)
+      ? requestedModel
+      : (status.recommendedModel || status.models[0]?.name || '');
+
+    if (!model) {
+      return jsonRes(res, 503, { error: 'No local Ollama models are installed yet' });
+    }
+
+    const upstreamController = new AbortController();
+    req.on('close', () => upstreamController.abort(new Error('Client disconnected')));
+
+    const timeout = withTimeout(ECO_AI_CHAT_TIMEOUT_MS, upstreamController.signal);
+    let upstream;
+    try {
+      upstream = await fetch(new URL('/api/chat', OLLAMA_BASE_URL), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          stream: true,
+          messages: buildEcoAiOllamaMessages(messages, skill),
+          options: ECO_AI_DEFAULT_OPTIONS,
+        }),
+        signal: timeout.signal,
+      });
+    } catch (error) {
+      timeout.clear();
+      return jsonRes(res, 503, {
+        error: 'Could not connect to Ollama',
+        details: ecoAiFriendlyError(error),
+      });
+    }
+
+    if (!upstream.ok || !upstream.body) {
+      timeout.clear();
+      const text = await upstream.text().catch(() => '');
+      return jsonRes(res, 502, {
+        error: 'Ollama chat request failed',
+        details: text || `HTTP ${upstream.status}`,
+      });
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write(JSON.stringify({ type: 'meta', model }) + '\n');
+
+    const reader = upstream.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex = buffer.indexOf('\n');
+        while (newlineIndex >= 0) {
+          const rawLine = buffer.slice(0, newlineIndex).trim();
+          buffer = buffer.slice(newlineIndex + 1);
+          newlineIndex = buffer.indexOf('\n');
+          if (!rawLine) continue;
+
+          let line;
+          try { line = JSON.parse(rawLine); } catch { continue; }
+
+          const delta = typeof line?.message?.content === 'string' ? line.message.content : '';
+          if (delta) res.write(JSON.stringify({ type: 'delta', content: delta }) + '\n');
+
+          if (line?.done) {
+            res.write(JSON.stringify({
+              type: 'done',
+              doneReason: line.done_reason || '',
+              totalDuration: line.total_duration || 0,
+              evalCount: line.eval_count || 0,
+            }) + '\n');
+            res.end();
+            timeout.clear();
+            return;
+          }
+        }
+      }
+
+      const finalChunk = buffer.trim();
+      if (finalChunk) {
+        try {
+          const line = JSON.parse(finalChunk);
+          const delta = typeof line?.message?.content === 'string' ? line.message.content : '';
+          if (delta) res.write(JSON.stringify({ type: 'delta', content: delta }) + '\n');
+          if (line?.done) {
+            res.write(JSON.stringify({
+              type: 'done',
+              doneReason: line.done_reason || '',
+              totalDuration: line.total_duration || 0,
+              evalCount: line.eval_count || 0,
+            }) + '\n');
+          }
+        } catch {}
+      }
+
+      if (!res.writableEnded) {
+        res.write(JSON.stringify({ type: 'done', doneReason: 'stream-end' }) + '\n');
+        res.end();
+      }
+    } catch (error) {
+      if (!res.writableEnded) {
+        res.write(JSON.stringify({
+          type: 'error',
+          error: ecoAiFriendlyError(error),
+        }) + '\n');
+        res.end();
+      }
+    } finally {
+      timeout.clear();
+      try { reader.releaseLock(); } catch {}
+    }
+    return;
   }
 
   // GET /api/assignments - admin-only Brightspace assignment coach dashboard data
