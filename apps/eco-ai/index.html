@@ -6,298 +6,492 @@
   <title>Eco AI - BIG TUNA</title>
   <style>
     :root {
-      --bg: #08111c;
-      --panel: #0f1b2a;
-      --panel-2: #132338;
-      --panel-3: #182c46;
-      --line: rgba(197, 223, 255, 0.12);
-      --text: #eef5ff;
-      --muted: #8ba2bf;
-      --accent: #73e0b0;
-      --accent-2: #53b8ff;
-      --danger: #ff8f87;
-      --shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
+      --bg: #212121;
+      --surface: #171717;
+      --surface-2: #2a2a2a;
+      --surface-3: #343541;
+      --surface-4: #40414f;
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #ececec;
+      --muted: #a9a9b3;
+      --muted-2: #8e8ea0;
+      --accent: #19c37d;
+      --accent-2: #10a37f;
+      --danger: #ef6b63;
+      --bubble-user: #2f2f33;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+      --content-width: 48rem;
+      --sidebar-width: 260px;
     }
 
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
-      background:
-        radial-gradient(circle at top left, rgba(83, 184, 255, 0.18), transparent 28%),
-        radial-gradient(circle at right 20%, rgba(115, 224, 176, 0.13), transparent 24%),
-        linear-gradient(180deg, #07111b, #0a1320 38%, #09101a);
+      background: var(--bg);
       color: var(--text);
-      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
     }
 
     #app-shell {
       flex: 1;
       min-height: 0;
-      display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
-      gap: 18px;
-      padding: 18px;
+      display: flex;
+      overflow: hidden;
+      background: var(--bg);
     }
 
-    .panel {
-      background: linear-gradient(180deg, rgba(15, 27, 42, 0.96), rgba(10, 20, 32, 0.98));
-      border: 1px solid var(--line);
-      border-radius: 22px;
-      box-shadow: var(--shadow);
-      min-height: 0;
+    #drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.52);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 310;
+    }
+
+    body.drawer-open #drawer-backdrop {
+      opacity: 1;
+      pointer-events: auto;
     }
 
     #sidebar {
+      width: var(--sidebar-width);
+      flex: 0 0 var(--sidebar-width);
+      background: #171717;
+      border-right: 1px solid var(--line);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      min-height: 0;
+      position: relative;
+      z-index: 320;
     }
 
-    .sidebar-head,
-    .chat-head {
-      padding: 18px 18px 12px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .eyebrow {
-      color: var(--muted);
-      font-size: 0.72rem;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-
-    .title-row {
-      margin-top: 8px;
+    .sidebar-inner {
+      flex: 1;
+      min-height: 0;
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
+      padding: 12px;
+      gap: 12px;
+    }
+
+    .sidebar-top {
+      display: grid;
       gap: 10px;
     }
 
-    h1, h2, h3, p { margin: 0; }
-    h1 { font-size: 1.2rem; }
-
-    .ghost-btn,
-    .action-btn,
-    .icon-btn,
-    .send-btn,
-    .danger-btn {
-      border: 0;
-      cursor: pointer;
-      font: inherit;
+    .sidebar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: space-between;
     }
 
-    .action-btn,
-    .danger-btn,
-    .send-btn,
-    .ghost-btn {
-      min-height: 42px;
-      padding: 0 14px;
-      border-radius: 14px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      transition: transform 0.16s ease, opacity 0.16s ease, background 0.16s ease;
-    }
-
-    .action-btn {
-      color: #062036;
-      background: linear-gradient(135deg, var(--accent), #b8f7da);
-    }
-
-    .danger-btn {
-      color: #fff;
-      background: rgba(255, 143, 135, 0.12);
-      border: 1px solid rgba(255, 143, 135, 0.18);
-    }
-
-    .ghost-btn {
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    .send-btn {
-      color: #08111c;
-      background: linear-gradient(135deg, var(--accent-2), #91e1ff);
-      padding: 0 18px;
-    }
-
-    .icon-btn {
-      width: 36px;
-      height: 36px;
-      border-radius: 12px;
+    .brand {
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
       color: var(--muted);
-      background: rgba(255,255,255,0.05);
+      font-weight: 700;
     }
 
-    .action-btn:hover,
+    .sidebar-btn,
+    .mini-btn,
+    .pill-btn,
+    .send-btn,
+    .danger-btn,
+    .ghost-btn,
+    .icon-btn {
+      border: 0;
+      color: var(--text);
+      background: none;
+    }
+
+    .sidebar-btn {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: #2a2a2a;
+      color: #f5f5f5;
+      font-weight: 600;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .sidebar-btn:hover,
     .ghost-btn:hover,
+    .mini-btn:hover,
+    .pill-btn:hover,
+    .icon-btn:hover,
     .send-btn:hover,
-    .danger-btn:hover,
-    .icon-btn:hover {
-      transform: translateY(-1px);
-      opacity: 0.96;
+    .danger-btn:hover {
+      filter: brightness(1.08);
+    }
+
+    .sidebar-search-note {
+      color: var(--muted-2);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      padding: 0 2px;
     }
 
     #chat-list {
       flex: 1;
+      min-height: 0;
       overflow: auto;
-      padding: 12px;
       display: grid;
-      gap: 10px;
+      gap: 4px;
+      padding-right: 2px;
     }
 
     .chat-item {
+      width: 100%;
       text-align: left;
-      border: 1px solid transparent;
-      border-radius: 16px;
-      background: rgba(255,255,255,0.04);
-      padding: 12px 14px;
+      border: 0;
+      background: transparent;
       color: var(--text);
-      cursor: pointer;
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .chat-item:hover {
+      background: rgba(255, 255, 255, 0.06);
     }
 
     .chat-item.active {
-      background: rgba(83, 184, 255, 0.12);
-      border-color: rgba(83, 184, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
     }
 
     .chat-item-title {
-      font-weight: 700;
-      line-height: 1.3;
-      margin-bottom: 5px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .chat-item-meta {
-      color: var(--muted);
-      font-size: 0.8rem;
+      font-size: 0.74rem;
+      color: var(--muted-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    #chat-panel {
+    #main-shell {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
+      background: var(--bg);
     }
 
-    #status-strip {
-      margin-top: 12px;
-      padding: 12px 14px;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.04);
-      color: var(--muted);
-      font-size: 0.9rem;
-      line-height: 1.45;
+    #main-header {
+      height: 56px;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      position: relative;
+      padding: 0 18px;
+      background: rgba(33, 33, 33, 0.96);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
     }
 
-    #status-strip.online {
-      color: #dff7ec;
-      background: rgba(115, 224, 176, 0.08);
-    }
-
-    #chat-toolbar {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.4fr) auto auto;
-      gap: 10px;
-      padding: 14px 18px 0;
-      align-items: end;
-    }
-
-    label.toolbar-label {
-      display: block;
-      color: var(--muted);
-      font-size: 0.72rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-
-    select,
-    textarea,
-    input[type="text"] {
+    .header-inner {
       width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: rgba(255,255,255,0.05);
-      color: var(--text);
-      font: inherit;
+      max-width: calc(var(--content-width) + 180px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
     }
 
-    select { min-height: 44px; padding: 0 12px; }
+    .header-left,
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
 
-    #messages {
+    .header-center {
+      min-width: 0;
+      flex: 1;
+      text-align: center;
+    }
+
+    .header-title {
+      font-size: 0.97rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .header-subtitle {
+      margin-top: 2px;
+      color: var(--muted-2);
+      font-size: 0.73rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      flex-shrink: 0;
+    }
+
+    .ghost-btn,
+    .danger-btn {
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 10px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--text);
+    }
+
+    .danger-btn {
+      color: #ffd7d4;
+      background: rgba(239, 107, 99, 0.08);
+      border-color: rgba(239, 107, 99, 0.18);
+    }
+
+    #status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.76rem;
+      max-width: 320px;
+    }
+
+    #status-badge.online {
+      color: #d3f7e7;
+      background: rgba(25, 195, 125, 0.1);
+      border-color: rgba(25, 195, 125, 0.2);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+      opacity: 0.9;
+    }
+
+    #messages-wrap {
       flex: 1;
       min-height: 0;
       overflow: auto;
-      padding: 18px;
+    }
+
+    #messages {
+      width: 100%;
+      max-width: var(--content-width);
+      margin: 0 auto;
+      padding: 18px 20px 28px;
       display: grid;
-      gap: 16px;
+      gap: 26px;
       align-content: start;
     }
 
     .empty-state {
-      min-height: 100%;
+      min-height: calc(100dvh - 220px);
       display: grid;
       place-items: center;
-      padding: 20px;
       text-align: center;
-      color: var(--muted);
+      padding: 18px 0 0;
     }
 
     .empty-card {
-      max-width: 720px;
-      padding: 28px;
-      border-radius: 22px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
-    }
-
-    .feature-grid {
+      width: 100%;
+      max-width: 44rem;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 18px;
+      gap: 18px;
+      justify-items: center;
     }
 
-    .feature-card {
-      padding: 14px;
-      border-radius: 16px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.06);
+    .empty-title {
+      font-size: clamp(1.8rem, 4vw, 2.25rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .empty-copy {
+      max-width: 38rem;
+      color: var(--muted);
+      font-size: 0.98rem;
+      line-height: 1.6;
+    }
+
+    .suggestion-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .suggestion-btn {
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: #2a2a2a;
+      color: var(--text);
+      border-radius: 18px;
       text-align: left;
+      padding: 16px 18px;
+      min-height: 92px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .suggestion-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .suggestion-copy {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
     }
 
     .msg {
+      width: 100%;
+      display: grid;
+      gap: 10px;
+    }
+
+    .msg.user .msg-body {
+      justify-content: end;
+    }
+
+    .msg-head {
+      color: var(--muted-2);
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .msg-body {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      flex: 0 0 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: white;
+      background: #10a37f;
+      margin-top: 2px;
+    }
+
+    .msg.user .avatar {
+      order: 2;
+      background: #4b5563;
+    }
+
+    .bubble-wrap {
+      min-width: 0;
+      max-width: min(100%, 42rem);
       display: grid;
       gap: 8px;
     }
 
-    .msg-header {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      color: var(--muted);
-      font-size: 0.77rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+    .msg.user .bubble-wrap {
+      justify-items: end;
     }
 
     .bubble {
-      padding: 16px 18px;
-      border-radius: 18px;
-      line-height: 1.58;
+      width: fit-content;
+      max-width: 100%;
+      padding: 14px 16px;
+      border-radius: 20px;
+      font-size: 0.97rem;
+      line-height: 1.65;
+      color: var(--text);
       word-break: break-word;
-      border: 1px solid rgba(255,255,255,0.06);
-    }
-
-    .msg.user .bubble {
-      background: rgba(83, 184, 255, 0.12);
+      white-space: normal;
     }
 
     .msg.assistant .bubble {
-      background: rgba(255,255,255,0.045);
+      width: 100%;
+      padding: 0;
+      background: transparent;
+    }
+
+    .msg.user .bubble {
+      background: var(--bubble-user);
+    }
+
+    .attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .attachment-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font-size: 0.79rem;
+      border: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .msg-actions {
@@ -305,144 +499,276 @@
       gap: 8px;
     }
 
-    .mini-btn {
-      border: 0;
+    .mini-btn,
+    .pill-btn {
+      min-height: 32px;
+      padding: 0 11px;
       border-radius: 999px;
-      padding: 6px 10px;
-      background: rgba(255,255,255,0.05);
-      color: var(--muted);
-      cursor: pointer;
-      font: inherit;
       font-size: 0.78rem;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
     }
 
-    .attachments {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .attachment-pill {
-      padding: 7px 10px;
-      border-radius: 999px;
-      background: rgba(115,224,176,0.1);
-      color: #d8f7e8;
-      font-size: 0.8rem;
-    }
-
-    pre, code {
+    pre,
+    code {
       font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
     }
 
     pre {
-      margin: 12px 0 0;
-      padding: 14px;
+      margin: 14px 0 0;
+      padding: 14px 16px;
       border-radius: 14px;
       overflow: auto;
-      background: rgba(0, 0, 0, 0.34);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: #111214;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.87rem;
     }
 
     code.inline {
       padding: 2px 6px;
       border-radius: 8px;
-      background: rgba(255,255,255,0.08);
+      background: rgba(255, 255, 255, 0.06);
     }
 
-    #composer {
-      border-top: 1px solid var(--line);
-      padding: 14px 18px 18px;
-      display: grid;
-      gap: 12px;
+    #composer-shell {
+      flex: 0 0 auto;
+      padding: 0 18px calc(18px + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(180deg, rgba(33, 33, 33, 0), rgba(33, 33, 33, 0.94) 18%, rgba(33, 33, 33, 1));
     }
 
-    #composer-box {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-      align-items: end;
-    }
-
-    #prompt {
-      min-height: 110px;
-      resize: vertical;
-      padding: 14px 16px;
-      line-height: 1.45;
+    #composer-width {
+      width: 100%;
+      max-width: calc(var(--content-width) + 60px);
+      margin: 0 auto;
     }
 
     #draft-files {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+      margin-bottom: 10px;
+      padding: 0 6px;
     }
 
     .draft-file {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 7px 10px;
+      padding: 8px 12px;
       border-radius: 999px;
-      background: rgba(255,255,255,0.05);
+      background: #2a2a2a;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.8rem;
       color: var(--text);
-      font-size: 0.82rem;
     }
 
     .draft-file button {
       border: 0;
-      background: none;
+      background: transparent;
       color: var(--muted);
       cursor: pointer;
       font-size: 0.9rem;
+      padding: 0;
     }
 
-    #composer-actions {
+    #composer-card {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #2f2f2f;
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      padding: 12px 14px 12px;
+    }
+
+    #composer-controls {
       display: flex;
-      gap: 10px;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
       flex-wrap: wrap;
     }
 
-    #composer-tip {
-      color: var(--muted);
-      font-size: 0.82rem;
-      line-height: 1.4;
+    .select-wrap {
+      position: relative;
+      min-width: 0;
     }
 
-    @media (max-width: 980px) {
-      #app-shell {
-        grid-template-columns: 1fr;
+    .select-wrap select {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: #40414f;
+      color: var(--text);
+      border-radius: 999px;
+      min-height: 34px;
+      padding: 0 34px 0 12px;
+      font-size: 0.78rem;
+    }
+
+    .select-wrap::after {
+      content: "▾";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 0.78rem;
+      pointer-events: none;
+    }
+
+    #composer-input-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    #prompt {
+      flex: 1;
+      min-height: 24px;
+      max-height: 220px;
+      resize: none;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      padding: 6px 2px 8px;
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
+    #prompt::placeholder {
+      color: var(--muted-2);
+    }
+
+    .send-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: white;
+      color: #171717;
+      font-weight: 700;
+    }
+
+    #composer-footer {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted-2);
+      font-size: 0.76rem;
+      padding: 0 4px;
+    }
+
+    #composer-tip {
+      line-height: 1.45;
+    }
+
+    #footer-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .desktop-only {
+      display: inline-flex;
+    }
+
+    .mobile-only {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      #status-badge {
+        max-width: 220px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .desktop-only {
+        display: none;
+      }
+
+      .mobile-only {
+        display: inline-flex;
       }
 
       #sidebar {
-        max-height: 320px;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: min(86vw, 320px);
+        transform: translateX(-100%);
+        transition: transform 0.22s ease;
+        box-shadow: 20px 0 40px rgba(0, 0, 0, 0.35);
       }
 
-      #chat-toolbar {
-        grid-template-columns: 1fr 1fr;
+      body.drawer-open #sidebar {
+        transform: translateX(0);
       }
 
-      .feature-grid {
+      #main-header {
+        padding: 0 12px;
+      }
+
+      .header-inner {
+        max-width: none;
+      }
+
+      .header-center {
+        text-align: left;
+      }
+
+      .header-title {
+        font-size: 0.92rem;
+      }
+
+      #status-badge {
+        display: none;
+      }
+
+      #messages {
+        padding: 16px 14px 24px;
+      }
+
+      .empty-state {
+        min-height: calc(100dvh - 240px);
+      }
+
+      .suggestion-grid {
         grid-template-columns: 1fr;
       }
-    }
 
-    @media (max-width: 640px) {
-      #app-shell {
+      #composer-shell {
+        padding: 0 10px calc(10px + env(safe-area-inset-bottom, 0px));
+      }
+
+      #composer-card {
+        border-radius: 22px;
         padding: 12px;
-        gap: 12px;
       }
 
-      #chat-toolbar,
-      #composer-box {
-        grid-template-columns: 1fr;
+      #composer-controls {
+        gap: 6px;
       }
 
-      .sidebar-head,
-      .chat-head,
-      #messages,
-      #composer {
-        padding-left: 14px;
-        padding-right: 14px;
+      .pill-btn,
+      .mini-btn {
+        min-height: 30px;
+        font-size: 0.76rem;
+      }
+
+      #composer-footer {
+        display: grid;
+        gap: 8px;
       }
     }
   </style>
@@ -451,64 +777,81 @@
   <script src="/topbar.js"></script>
   <script src="/auth.js"></script>
 
+  <div id="drawer-backdrop"></div>
+
   <div id="app-shell">
-    <aside id="sidebar" class="panel">
-      <div class="sidebar-head">
-        <div class="eyebrow">Local AI Workspace</div>
-        <div class="title-row">
-          <h1>Eco AI</h1>
-          <button id="new-chat-btn" class="action-btn" type="button">New Chat</button>
+    <aside id="sidebar" aria-label="Chats">
+      <div class="sidebar-inner">
+        <div class="sidebar-top">
+          <div class="sidebar-row">
+            <div class="brand">Eco AI</div>
+            <button id="close-drawer-btn" class="icon-btn mobile-only" type="button" aria-label="Close chats">✕</button>
+          </div>
+          <button id="new-chat-btn" class="sidebar-btn" type="button">＋ New chat</button>
+          <div class="sidebar-search-note">Local-first chats, files, and models. History stays in your BIG TUNA account.</div>
         </div>
+        <div id="chat-list"></div>
       </div>
-      <div id="chat-list"></div>
     </aside>
 
-    <main id="chat-panel" class="panel">
-      <div class="chat-head">
-        <div class="eyebrow">Ollama On This Machine</div>
-        <div class="title-row">
-          <h1 id="active-title">Eco AI</h1>
-          <div style="display:flex; gap:10px;">
-            <button id="rename-chat-btn" class="ghost-btn" type="button">Rename</button>
-            <button id="delete-chat-btn" class="danger-btn" type="button">Delete</button>
+    <main id="main-shell">
+      <header id="main-header">
+        <div class="header-inner">
+          <div class="header-left">
+            <button id="open-drawer-btn" class="icon-btn mobile-only" type="button" aria-label="Open chats">☰</button>
+            <div id="status-badge"><span class="status-dot"></span><span id="status-strip">Checking local Ollama status...</span></div>
+          </div>
+
+          <div class="header-center">
+            <div id="active-title" class="header-title">Eco AI</div>
+            <div id="header-subtitle" class="header-subtitle">Local Ollama chat on this machine</div>
+          </div>
+
+          <div class="header-right">
+            <button id="rename-chat-btn" class="ghost-btn desktop-only" type="button">Rename</button>
+            <button id="delete-chat-btn" class="danger-btn desktop-only" type="button">Delete</button>
           </div>
         </div>
-        <div id="status-strip">Checking local Ollama status...</div>
-      </div>
+      </header>
 
-      <div id="chat-toolbar">
-        <div>
-          <label class="toolbar-label" for="model-select">Model</label>
-          <select id="model-select"></select>
-        </div>
-        <div>
-          <label class="toolbar-label" for="skill-select">Skill</label>
-          <select id="skill-select"></select>
-        </div>
-        <div>
-          <label class="toolbar-label">Chat Controls</label>
-          <div style="display:flex; gap:10px;">
-            <button id="regenerate-btn" class="ghost-btn" type="button">Regenerate</button>
-            <button id="attach-btn" class="ghost-btn" type="button">Attach Files</button>
+      <section id="messages-wrap">
+        <div id="messages"></div>
+      </section>
+
+      <footer id="composer-shell">
+        <div id="composer-width">
+          <div id="draft-files"></div>
+
+          <div id="composer-card">
+            <div id="composer-controls">
+              <button id="attach-btn" class="pill-btn" type="button">Attach</button>
+              <button id="regenerate-btn" class="pill-btn" type="button">Regenerate</button>
+              <button id="stop-btn" class="pill-btn" type="button">Stop</button>
+              <button id="rename-chat-mobile-btn" class="pill-btn mobile-only" type="button">Rename</button>
+              <button id="delete-chat-mobile-btn" class="pill-btn mobile-only" type="button">Delete</button>
+              <div class="select-wrap">
+                <select id="model-select" aria-label="Model"></select>
+              </div>
+              <div class="select-wrap">
+                <select id="skill-select" aria-label="Skill"></select>
+              </div>
+              <input id="file-input" type="file" multiple hidden>
+            </div>
+
+            <div id="composer-input-row">
+              <textarea id="prompt" rows="1" placeholder="Message Eco AI"></textarea>
+              <button id="send-btn" class="send-btn" type="button" aria-label="Send">↑</button>
+            </div>
+
+            <div id="composer-footer">
+              <div id="composer-tip">Local text and code files only. Prompts stay on BIG TUNA and go to Ollama on this machine.</div>
+              <div id="footer-actions">
+                <button id="clear-draft-btn" class="mini-btn" type="button">Clear draft</button>
+              </div>
+            </div>
           </div>
         </div>
-        <button id="stop-btn" class="danger-btn" type="button">Stop</button>
-        <input id="file-input" type="file" multiple hidden>
-      </div>
-
-      <section id="messages"></section>
-
-      <div id="composer">
-        <div id="draft-files"></div>
-        <div id="composer-box">
-          <textarea id="prompt" placeholder="Ask Eco AI anything local-first. Attach text or code files for context."></textarea>
-          <button id="send-btn" class="send-btn" type="button">Send</button>
-        </div>
-        <div id="composer-actions">
-          <button id="clear-draft-btn" class="ghost-btn" type="button">Clear Draft</button>
-        </div>
-        <div id="composer-tip">Files stay local to this website server workflow. This app only sends prompts to the Ollama instance on the same machine.</div>
-      </div>
+      </footer>
     </main>
   </div>
 
@@ -526,6 +869,28 @@
     ];
     const FILE_CHAR_LIMIT = 80000;
     const FILE_TOTAL_LIMIT = 240000;
+    const SUGGESTIONS = [
+      {
+        title: 'Review a local code file',
+        copy: 'Attach a file and ask for a bug review, refactor, or explanation.',
+        prompt: 'Review the attached file and point out the biggest correctness or maintainability issues.',
+      },
+      {
+        title: 'Summarize notes or documents',
+        copy: 'Drop in markdown, text, or CSV files and get a clean summary.',
+        prompt: 'Summarize the attached material and give me the most important takeaways.',
+      },
+      {
+        title: 'Use a study mode response',
+        copy: 'Get step-by-step explanations instead of short answers.',
+        prompt: 'Teach me this topic step by step and include a simple example.',
+      },
+      {
+        title: 'Draft or rewrite something',
+        copy: 'Use the writing skill to tighten wording while preserving meaning.',
+        prompt: 'Rewrite this so it sounds clearer and more concise without losing the original intent.',
+      },
+    ];
 
     const state = {
       chats: [],
@@ -579,8 +944,7 @@
     async function api(path, options = {}) {
       const headers = { ...(options.headers || {}), Authorization: 'Bearer ' + Auth.token };
       if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-      const res = await fetch(path, { ...options, headers });
-      return res;
+      return fetch(path, { ...options, headers });
     }
 
     async function saveAll() {
@@ -599,7 +963,7 @@
     }
 
     function summarizeTitle(text) {
-      const flat = (text || '').replace(/\s+/g, ' ').trim();
+      const flat = String(text || '').replace(/\s+/g, ' ').trim();
       if (!flat) return 'New Chat';
       return flat.slice(0, 48);
     }
@@ -611,7 +975,7 @@
     }
 
     function esc(text) {
-      return text.replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+      return String(text).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
     }
 
     function renderMarkdown(text) {
@@ -631,14 +995,31 @@
       return html;
     }
 
+    function updatePromptHeight() {
+      const prompt = document.getElementById('prompt');
+      prompt.style.height = 'auto';
+      prompt.style.height = Math.min(prompt.scrollHeight, 220) + 'px';
+    }
+
+    function openDrawer() {
+      document.body.classList.add('drawer-open');
+    }
+
+    function closeDrawer() {
+      document.body.classList.remove('drawer-open');
+    }
+
     function renderStatus() {
+      const badge = document.getElementById('status-badge');
       const strip = document.getElementById('status-strip');
       const status = state.status;
-      strip.className = status.available ? 'online' : '';
-      const modelHint = status.models.length ? `${status.models.length} model${status.models.length === 1 ? '' : 's'} ready` : 'no models detected';
+      badge.classList.toggle('online', !!status.available);
       strip.textContent = status.available
-        ? `Local Ollama connected. ${modelHint}. All inference stays on this machine.`
-        : (status.setupMessage || status.error || 'Ollama is offline.');
+        ? `Ollama online · ${status.models.length || 0} model${status.models.length === 1 ? '' : 's'}`
+        : (status.setupMessage || status.error || 'Ollama offline');
+      document.getElementById('header-subtitle').textContent = status.available
+        ? 'Local Ollama chat on this machine'
+        : 'Waiting for local Ollama';
     }
 
     function renderSidebar() {
@@ -658,6 +1039,7 @@
           syncControlsFromChat();
           render();
           scheduleSave();
+          closeDrawer();
         };
         list.appendChild(button);
       });
@@ -672,7 +1054,7 @@
         pill.innerHTML = `<span>${esc(file.name)}</span>`;
         const remove = document.createElement('button');
         remove.type = 'button';
-        remove.textContent = 'x';
+        remove.textContent = '×';
         remove.onclick = () => {
           state.draftFiles = state.draftFiles.filter(item => item.id !== file.id);
           renderDraftFiles();
@@ -680,6 +1062,19 @@
         pill.appendChild(remove);
         wrap.appendChild(pill);
       });
+    }
+
+    function suggestionGridHtml() {
+      return `
+        <div class="suggestion-grid">
+          ${SUGGESTIONS.map((item, index) => `
+            <button class="suggestion-btn" type="button" data-suggestion="${index}">
+              <span class="suggestion-title">${esc(item.title)}</span>
+              <span class="suggestion-copy">${esc(item.copy)}</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
     }
 
     function renderMessages() {
@@ -692,17 +1087,23 @@
         container.innerHTML = `
           <div class="empty-state">
             <div class="empty-card">
-              <div class="eyebrow">Local-First Assistant</div>
-              <h2 style="margin-top:8px; font-size:1.8rem;">Chat, code, summarize, and inspect files with an Ollama model running on this machine.</h2>
-              <p style="margin-top:10px; color:var(--muted); line-height:1.6;">Eco AI supports persistent chats, model switching, prompt skills, streaming responses, and local file context for text and code files.</p>
-              <div class="feature-grid">
-                <div class="feature-card"><strong>Files</strong><br><span style="color:var(--muted);">Attach local text or code files and send them as prompt context.</span></div>
-                <div class="feature-card"><strong>Skills</strong><br><span style="color:var(--muted);">Swap between coding, study, summarize, writing, and file-analysis modes.</span></div>
-                <div class="feature-card"><strong>Local Only</strong><br><span style="color:var(--muted);">Requests go from BIG TUNA to Ollama on the same machine, not to a cloud API.</span></div>
-              </div>
+              <div class="empty-title">How can I help?</div>
+              <div class="empty-copy">Eco AI runs through a local Ollama model on this machine. Use files, skills, and saved chats while keeping inference local.</div>
+              ${suggestionGridHtml()}
             </div>
           </div>
         `;
+
+        container.querySelectorAll('[data-suggestion]').forEach(button => {
+          button.addEventListener('click', () => {
+            const item = SUGGESTIONS[Number(button.getAttribute('data-suggestion'))];
+            if (!item) return;
+            const prompt = document.getElementById('prompt');
+            prompt.value = item.prompt;
+            updatePromptHeight();
+            prompt.focus();
+          });
+        });
         return;
       }
 
@@ -715,21 +1116,29 @@
         const actions = message.role === 'assistant'
           ? `<div class="msg-actions"><button class="mini-btn" data-copy="${index}">Copy</button></div>`
           : '';
+
         row.innerHTML = `
-          <div class="msg-header">
+          <div class="msg-head">
             <span>${message.role === 'assistant' ? 'Eco AI' : 'You'}</span>
             <span>${formatTime(message.createdAt)}</span>
           </div>
-          <div class="bubble">${renderMarkdown(message.content || '')}${attachments}</div>
-          ${actions}
+          <div class="msg-body">
+            <div class="avatar">${message.role === 'assistant' ? 'E' : 'Y'}</div>
+            <div class="bubble-wrap">
+              <div class="bubble">${renderMarkdown(message.content || '')}</div>
+              ${attachments}
+              ${actions}
+            </div>
+          </div>
         `;
         container.appendChild(row);
       });
 
       container.querySelectorAll('[data-copy]').forEach(btn => {
         btn.addEventListener('click', async () => {
+          const chat = activeChat();
           const index = Number(btn.getAttribute('data-copy'));
-          const message = chat.messages[index];
+          const message = chat?.messages[index];
           if (!message) return;
           try {
             await navigator.clipboard.writeText(message.content || '');
@@ -739,7 +1148,8 @@
         });
       });
 
-      container.scrollTop = container.scrollHeight;
+      const wrap = document.getElementById('messages-wrap');
+      wrap.scrollTop = wrap.scrollHeight;
     }
 
     function renderModelSelect() {
@@ -749,16 +1159,14 @@
       const models = state.status.models || [];
       const options = [];
       if (state.status.recommendedModel) {
-        options.push(`<option value="">Auto (${esc(state.status.recommendedModel)})</option>`);
+        options.push(`<option value="">Auto · ${esc(state.status.recommendedModel)}</option>`);
       } else {
         options.push('<option value="">Auto</option>');
       }
       models.forEach(model => {
         options.push(`<option value="${esc(model.name)}">${esc(model.name)}</option>`);
       });
-      if (!models.length) {
-        options.push('<option value="" disabled>No local models</option>');
-      }
+      if (!models.length) options.push('<option value="" disabled>No local models</option>');
       select.innerHTML = options.join('');
       select.value = current && models.some(model => model.name === current) ? current : '';
     }
@@ -781,6 +1189,7 @@
       renderDraftFiles();
       syncControlsFromChat();
       document.getElementById('stop-btn').disabled = !state.generating;
+      updatePromptHeight();
     }
 
     function updateActiveChat(mutator) {
@@ -803,7 +1212,13 @@
         if (chat && !chat.model && state.settings.preferredModel) chat.model = state.settings.preferredModel;
         render();
       } catch (error) {
-        state.status = { available: false, models: [], recommendedModel: '', setupMessage: 'Could not reach the BIG TUNA server for Eco AI status.', error: String(error || '') };
+        state.status = {
+          available: false,
+          models: [],
+          recommendedModel: '',
+          setupMessage: 'Could not reach the BIG TUNA server for Eco AI status.',
+          error: String(error || ''),
+        };
         renderStatus();
       }
     }
@@ -823,7 +1238,14 @@
     async function sendChatRequest(chat) {
       state.generating = true;
       render();
-      const assistant = { id: uid(), role: 'assistant', content: '', attachments: [], createdAt: nowIso() };
+
+      const assistant = {
+        id: uid(),
+        role: 'assistant',
+        content: '',
+        attachments: [],
+        createdAt: nowIso(),
+      };
       chat.messages.push(assistant);
       renderMessages();
 
@@ -854,6 +1276,7 @@
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
+
           let newline = buffer.indexOf('\n');
           while (newline >= 0) {
             const line = buffer.slice(0, newline).trim();
@@ -863,6 +1286,7 @@
 
             let event;
             try { event = JSON.parse(line); } catch { continue; }
+
             if (event.type === 'meta' && event.model) {
               chat.model = event.model;
               state.settings.preferredModel = event.model;
@@ -902,6 +1326,7 @@
       const promptEl = document.getElementById('prompt');
       const content = promptEl.value.trim();
       if (!content && !state.draftFiles.length) return;
+
       const chat = activeChat();
       if (!chat) return;
 
@@ -923,7 +1348,9 @@
       });
       chat.updatedAt = nowIso();
 
-      if (chat.title === 'New Chat') chat.title = summarizeTitle(content || state.draftFiles[0]?.name || 'New Chat');
+      if (chat.title === 'New Chat') {
+        chat.title = summarizeTitle(content || state.draftFiles[0]?.name || 'New Chat');
+      }
 
       promptEl.value = '';
       state.draftFiles = [];
@@ -970,12 +1397,17 @@
     }
 
     function createAndSelectChat() {
-      const chat = newChat({ model: state.settings.preferredModel, skill: state.settings.defaultSkill });
+      const chat = newChat({
+        model: state.settings.preferredModel,
+        skill: state.settings.defaultSkill,
+      });
       state.chats.unshift(chat);
       state.activeChatId = chat.id;
       render();
       scheduleSave();
-      document.getElementById('prompt').focus();
+      const prompt = document.getElementById('prompt');
+      prompt.focus();
+      closeDrawer();
     }
 
     function renameActiveChat() {
@@ -1053,12 +1485,15 @@
       document.getElementById('new-chat-btn').onclick = createAndSelectChat;
       document.getElementById('rename-chat-btn').onclick = renameActiveChat;
       document.getElementById('delete-chat-btn').onclick = deleteActiveChat;
+      document.getElementById('rename-chat-mobile-btn').onclick = renameActiveChat;
+      document.getElementById('delete-chat-mobile-btn').onclick = deleteActiveChat;
       document.getElementById('regenerate-btn').onclick = regenerateLast;
       document.getElementById('send-btn').onclick = handleSend;
       document.getElementById('clear-draft-btn').onclick = () => {
         document.getElementById('prompt').value = '';
         state.draftFiles = [];
         renderDraftFiles();
+        updatePromptHeight();
       };
       document.getElementById('stop-btn').onclick = stopGeneration;
       document.getElementById('attach-btn').onclick = () => document.getElementById('file-input').click();
@@ -1077,12 +1512,20 @@
         state.settings.defaultSkill = event.target.value;
         scheduleSave();
       });
-      document.getElementById('prompt').addEventListener('keydown', event => {
+
+      const prompt = document.getElementById('prompt');
+      prompt.addEventListener('input', updatePromptHeight);
+      prompt.addEventListener('keydown', event => {
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
           handleSend();
         }
       });
+      updatePromptHeight();
+
+      document.getElementById('open-drawer-btn').onclick = openDrawer;
+      document.getElementById('close-drawer-btn').onclick = closeDrawer;
+      document.getElementById('drawer-backdrop').onclick = closeDrawer;
 
       Auth.beforeLogout(saveAll);
     });
