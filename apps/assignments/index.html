@@ -170,7 +170,10 @@
         <h1>Assignment Coach</h1>
         <div class="muted">Browser bot checks all Brightspace classes, sends coaching emails, and triages due dates.</div>
       </div>
-      <button id="check-now" class="primary">Check Now</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button id="login-browser">Open Brightspace Login</button>
+        <button id="check-now" class="primary">Check Now</button>
+      </div>
     </div>
 
     <div class="status-grid" id="metrics"></div>
@@ -201,6 +204,8 @@
   const actionEl = document.getElementById('link-action');
   const dashboardEl = document.getElementById('dashboard');
   const checkBtn = document.getElementById('check-now');
+  const loginBtn = document.getElementById('login-browser');
+  let activity = {};
 
   function escapeHtml(text) {
     return String(text ?? '')
@@ -283,6 +288,10 @@
   }
 
   function render(data) {
+    activity = data.activity || {};
+    loginBtn.textContent = activity.loginBrowserOpen ? 'Finish Brightspace Login' : 'Open Brightspace Login';
+    loginBtn.classList.toggle('primary', activity.loginBrowserOpen);
+    checkBtn.disabled = Boolean(activity.checking || activity.loginBrowserOpen);
     const counts = data.assignments.reduce((acc, a) => {
       acc.total++;
       acc[a.status] = (acc[a.status] || 0) + 1;
@@ -303,6 +312,7 @@
       `Email ${cfg.email ? 'configured' : 'missing'}`,
       `OpenAI ${cfg.openai ? cfg.model : 'missing'}`,
       `${cfg.dueWindowDays} day window`,
+      activity.loginBrowserOpen ? 'Brightspace login browser open' : 'Brightspace login browser closed',
     ].map(text => `<span class="pill">${escapeHtml(text)}</span>`).join('');
 
     document.getElementById('assignments').innerHTML = data.assignments.length ? data.assignments.map(a => `
@@ -351,6 +361,24 @@
     } finally {
       checkBtn.disabled = false;
       checkBtn.textContent = 'Check Now';
+    }
+  });
+
+  loginBtn.addEventListener('click', async () => {
+    loginBtn.disabled = true;
+    const closing = Boolean(activity.loginBrowserOpen);
+    loginBtn.textContent = closing ? 'Closing...' : 'Opening...';
+    try {
+      await api('/api/assignments/login-browser', {
+        method: 'POST',
+        body: JSON.stringify({ action: closing ? 'close' : 'open' }),
+      });
+      await load();
+    } catch (err) {
+      document.getElementById('assignments').insertAdjacentHTML('afterbegin', `<section class="panel error">${escapeHtml(err.message)}</section>`);
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.textContent = activity.loginBrowserOpen ? 'Finish Brightspace Login' : 'Open Brightspace Login';
     }
   });
 

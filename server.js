@@ -1080,6 +1080,18 @@ async function handleAPI(req, res, urlPath) {
     return jsonRes(res, result.ok ? 200 : 500, result);
   }
 
+  // POST /api/assignments/login-browser - open/close persistent Brightspace login browser
+  if (req.method === 'POST' && urlPath === '/api/assignments/login-browser') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (!assignmentCoach.isAdmin(user)) return jsonRes(res, 403, { error: 'Forbidden' });
+    const body = await parseBody(req);
+    const result = body.action === 'close'
+      ? await assignmentCoach.closeLoginBrowser()
+      : await assignmentCoach.openLoginBrowser();
+    return jsonRes(res, result.ok ? 200 : (result.status || 500), result);
+  }
+
   // POST /api/assignments/action - signed email-link action endpoint
   if (req.method === 'POST' && urlPath === '/api/assignments/action') {
     const body = await parseBody(req);

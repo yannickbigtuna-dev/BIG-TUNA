@@ -27,6 +27,7 @@ test('extracts common Brightspace due dates', () => {
 test('detects submitted assignment statuses', () => {
   assert.equal(_test.looksSubmitted('Submission complete'), true);
   assert.equal(_test.looksSubmitted('No submission yet'), false);
+  assert.equal(_test.looksSubmitted('Status: Not submitted'), false);
 });
 
 test('extracts clean assignment titles from row text', () => {

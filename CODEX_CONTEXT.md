@@ -249,8 +249,11 @@ Routes:
 ```text
 GET  /api/assignments
 POST /api/assignments/check-now
+POST /api/assignments/login-browser
 POST /api/assignments/action
 ```
+
+The dashboard's Brightspace login control opens the persistent browser profile visibly on the server machine. After signing in, use Finish Brightspace Login before Check Now so the scraper can safely reuse the profile.
 
 Configuration is environment-based and must not be committed:
 
@@ -360,6 +363,7 @@ Assignment coach:
 ```text
 GET  /api/assignments
 POST /api/assignments/check-now
+POST /api/assignments/login-browser
 POST /api/assignments/action
 ```
 
