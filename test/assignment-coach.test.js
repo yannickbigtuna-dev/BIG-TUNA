@@ -26,7 +26,9 @@ test('extracts common Brightspace due dates', () => {
 
 test('detects submitted assignment statuses', () => {
   assert.equal(_test.looksSubmitted('Submission complete'), true);
+  assert.equal(_test.looksSubmitted('1 Submission, 1 File'), true);
   assert.equal(_test.looksSubmitted('No submission yet'), false);
+  assert.equal(_test.looksSubmitted('0 Submissions'), false);
   assert.equal(_test.looksSubmitted('Status: Not submitted'), false);
 });
 
@@ -59,34 +61,34 @@ test('replaces legacy clickable-node failures with saved-session instructions', 
 test('checks only pinned courses and their assignment sections', async t => {
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html');
-    if (req.url === '/course') {
+    if (req.url === '/d2l/home/123') {
       res.end(`<!doctype html><title>Biology 101</title><h1>Biology 101</h1>
         <d2l-card id="assignments"></d2l-card>
         <script>
           const root = document.querySelector('#assignments').attachShadow({mode:'open'});
-          root.innerHTML = '<a href="/assignments">Assignments</a>';
+          root.innerHTML = '<a href="/d2l/lms/dropbox/dropbox.d2l?ou=123">Assignments</a>';
         </script>`);
       return;
     }
-    if (req.url === '/course-unpinned') {
+    if (req.url === '/d2l/home/456') {
       res.end(`<!doctype html><title>Chemistry 101</title><h1>Chemistry 101</h1>
-        <a href="/assignments-unpinned">Assignments</a>`);
+        <a href="/d2l/lms/dropbox/dropbox.d2l?ou=456">Assignments</a>`);
       return;
     }
-    if (req.url === '/assignments') {
+    if (req.url === '/d2l/lms/dropbox/dropbox.d2l?ou=123') {
       res.end(`<!doctype html><title>Assignments</title>
         <d2l-list-item id="row"></d2l-list-item>
         <script>
           const root = document.querySelector('#row').attachShadow({mode:'open'});
-          root.innerHTML = '<a href="/assignment/essay">Research Essay Due: 2026-06-10 23:59 No submission yet</a>';
+          root.innerHTML = '<a href="/d2l/lms/dropbox/user/folder_submit_files.d2l?db=1&ou=123">Research Essay Due: 2026-06-10 23:59 No submission yet</a>';
         </script>`);
       return;
     }
-    if (req.url === '/assignment/essay') {
-      res.end('<!doctype html><h1>Research Essay</h1><p>Write a research essay with at least five cited sources and a clear argument.</p>');
+    if (req.url === '/d2l/lms/dropbox/user/folder_submit_files.d2l?db=1&ou=123') {
+      res.end('<!doctype html><h1>Are You Still There?</h1><p>Write a research essay with at least five cited sources and a clear argument.</p>');
       return;
     }
-    if (req.url === '/assignments-unpinned') {
+    if (req.url === '/d2l/lms/dropbox/dropbox.d2l?ou=456') {
       res.end('<!doctype html><a href="/assignment/lab">Chemistry Lab Due: 2026-06-10 23:59 No submission yet</a>');
       return;
     }
@@ -100,8 +102,15 @@ test('checks only pinned courses and their assignment sections', async t => {
           const courses = document.createElement('d2l-course-menu');
           menu.appendChild(courses);
           const root = courses.attachShadow({mode:'open'});
-          root.innerHTML = '<d2l-card><a href="/course">Biology 101 course</a><button aria-label="Unpin course"></button></d2l-card>' +
-            '<d2l-card><a href="/course-unpinned">Chemistry 101 course</a><button aria-label="Pin course"></button></d2l-card>';
+          root.innerHTML = '<d2l-card id="biology"></d2l-card><d2l-card id="chemistry"></d2l-card>';
+          const biology = root.querySelector('#biology').attachShadow({mode:'open'});
+          biology.innerHTML = '<a href="/d2l/home/123">Biology 101</a><d2l-button-icon id="biology-pin"></d2l-button-icon>';
+          biology.querySelector('#biology-pin').attachShadow({mode:'open'}).innerHTML =
+            '<button aria-label="Biology 101 is pinned. Unpin course"></button>';
+          const chemistry = root.querySelector('#chemistry').attachShadow({mode:'open'});
+          chemistry.innerHTML = '<a href="/d2l/home/456">Chemistry 101</a><d2l-button-icon id="chemistry-pin"></d2l-button-icon>';
+          chemistry.querySelector('#chemistry-pin').attachShadow({mode:'open'}).innerHTML =
+            '<button aria-label="Pin Chemistry 101 course"></button>';
         });
       </script>`);
   });
