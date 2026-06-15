@@ -11,13 +11,19 @@ BIG-TUNA is a personal self-hosted website at `yannickmorgans.ca`. It runs on a 
 ## Mandatory Workflow
 
 1. Run `git pull origin main` before making changes.
-2. Inspect only the files needed after reading this context.
-3. Make the requested edits.
-4. Run `git status` and `git diff`.
-5. Do not commit secrets, `.env`, `node_modules`, cache/build junk, or local machine-only files.
-6. Commit completed changes with a clear message.
-7. Push with `git push origin main`.
-8. Tell the user what changed and that it was pushed.
+2. Start with the most capable available model acting as architect and top-level coordinator.
+3. The architect must inspect only the files needed after reading this context, then produce a thorough implementation spec before coding starts.
+4. That spec must be strong enough to act as the acceptance and testing guide for the final validation pass.
+5. Delegate implementation work to cheaper sub-agents whenever practical, using prompts derived from the architect spec.
+6. After sub-agents report back, use the most capable available model again as the testing and validation agent.
+7. The testing agent must verify the implementation against the spec, check for regressions, and decide whether the work is complete.
+8. If the work is not good enough, run another sub-agent implementation pass using the testing feedback, then retest.
+9. Once the work passes the spec, make the requested edits final.
+10. Run `git status` and `git diff`.
+11. Do not commit secrets, `.env`, `node_modules`, cache/build junk, or local machine-only files.
+12. Commit completed changes with a clear message.
+13. Push with `git push origin main`.
+14. Tell the user what changed and that it was pushed.
 
 Do not force push or rewrite history. If `git pull` produces a merge conflict, stop and explain it.
 
@@ -515,6 +521,8 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 General:
 
 - Keep changes narrowly scoped. This is a live site.
+- Default orchestration for non-trivial work is architect spec -> cheaper sub-agent implementation -> top-level validation/testing -> repeat until the spec passes.
+- The architect spec should define scope, constraints, implementation approach, and concrete acceptance checks that the final validation pass can execute.
 - Prefer existing plain Node and vanilla browser JavaScript patterns.
 - Do not introduce a framework, build step, transpiler, or database unless explicitly requested.
 - Use CommonJS in the root server and ES modules inside `mcp-server/`.
