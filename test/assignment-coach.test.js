@@ -56,7 +56,7 @@ test('replaces legacy clickable-node failures with saved-session instructions', 
   );
 });
 
-test('scrapes assignments rendered inside Brightspace-style shadow DOM', async t => {
+test('checks only pinned courses and their assignment sections', async t => {
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html');
     if (req.url === '/course') {
@@ -66,6 +66,11 @@ test('scrapes assignments rendered inside Brightspace-style shadow DOM', async t
           const root = document.querySelector('#assignments').attachShadow({mode:'open'});
           root.innerHTML = '<a href="/assignments">Assignments</a>';
         </script>`);
+      return;
+    }
+    if (req.url === '/course-unpinned') {
+      res.end(`<!doctype html><title>Chemistry 101</title><h1>Chemistry 101</h1>
+        <a href="/assignments-unpinned">Assignments</a>`);
       return;
     }
     if (req.url === '/assignments') {
@@ -81,7 +86,24 @@ test('scrapes assignments rendered inside Brightspace-style shadow DOM', async t
       res.end('<!doctype html><h1>Research Essay</h1><p>Write a research essay with at least five cited sources and a clear argument.</p>');
       return;
     }
-    res.end('<!doctype html><title>Brightspace Home</title><a href="/course">Biology 101 course</a>');
+    if (req.url === '/assignments-unpinned') {
+      res.end('<!doctype html><a href="/assignment/lab">Chemistry Lab Due: 2026-06-10 23:59 No submission yet</a>');
+      return;
+    }
+    res.end(`<!doctype html><title>Brightspace Home</title>
+      <button aria-label="Select a course" id="open-courses">Courses</button>
+      <div id="menu"></div>
+      <script>
+        document.querySelector('#open-courses').addEventListener('click', () => {
+          const menu = document.querySelector('#menu');
+          if (menu.childElementCount) return;
+          const courses = document.createElement('d2l-course-menu');
+          menu.appendChild(courses);
+          const root = courses.attachShadow({mode:'open'});
+          root.innerHTML = '<d2l-card><a href="/course">Biology 101 course</a><button aria-label="Unpin course"></button></d2l-card>' +
+            '<d2l-card><a href="/course-unpinned">Chemistry 101 course</a><button aria-label="Pin course"></button></d2l-card>';
+        });
+      </script>`);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
