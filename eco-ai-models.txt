@@ -1,0 +1,3 @@
+# Eco AI Ollama maintenance manifest
+llama3.1:8b
+qwen2.5-coder:7b

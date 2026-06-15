@@ -122,6 +122,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\SERVER\start-everythi
 
 `start-everything.ps1` is the canonical local orchestrator. It starts or restarts PM2 apps `apps-server` and `mcp-server`, saves the PM2 process list, starts `cloudflared.exe` with `cloudflared-config.yml` only when the tunnel process is absent, and starts `auto-update.ps1` hidden when the git reloader is absent. `auto-update.ps1` polls `origin/main` every 10 seconds, pulls newer commits, and restarts PM2 app `apps-server` after a successful pull so `server.js` route changes take effect.
 
+`start-everything.ps1` now also makes a best-effort, non-blocking attempt to start the local Ollama API before the rest of the stack so Eco AI is ready sooner after boot.
+
 There is no build step. Frontend files in `apps/` are served directly. Restart Node after changing `server.js` or `pty-worker.js`.
 
 Current `npm test` is a placeholder that exits with failure, so do not treat it as a useful test suite unless it has been changed.
@@ -514,6 +516,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Persists conversation history in `/api/data/eco-ai` and user preferences in `Auth.saveSettings('eco-ai', ...)`.
 - Supports multiple saved chats, model switching, skill presets (`general`, `coding`, `writing`, `study`, `summarize`, `file-analyst`), and browser-read text/code file attachments that are appended to prompt context.
 - The intended deployment is a local Ollama install on the website host machine. If Ollama is missing or offline, the UI should show a setup/offline message rather than failing silently.
+- `eco-ai-models.txt` is the model maintenance manifest. `maintain-eco-ai-models.ps1` locates Ollama, starts its API if needed, and pulls every nonblank/noncomment model in that manifest. `setup-eco-ai-models.ps1` installs Ollama with `winget` if absent, runs maintenance immediately, and registers a current-user daily 7:00 AM task with missed-start recovery.
 
 `lights`:
 

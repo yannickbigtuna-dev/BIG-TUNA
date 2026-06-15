@@ -33,6 +33,7 @@ The main server is a plain Node.js HTTP server with no web framework. It serves 
 Current apps include:
 
 - `capitals-quiz`
+- `eco-ai`
 - `list-maker`
 - `lights`
 - `pace-calculator`
@@ -127,6 +128,24 @@ pm2 save
 
 If this repository is not located at `C:\SERVER`, update the batch files, pm2 commands, and Cloudflare configuration paths before installing services.
 
+## Eco AI Ollama Maintenance
+
+Eco AI uses a local Ollama install on the website host. The repo keeps the baseline model list in `eco-ai-models.txt` and uses helper scripts to keep those models pulled.
+
+Run the one-time setup from a Windows terminal:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\SERVER\setup-eco-ai-models.ps1
+```
+
+That script:
+
+- installs Ollama with `winget` if it is missing
+- runs `maintain-eco-ai-models.ps1` immediately
+- registers a current-user daily task for 7:00 AM with missed-start recovery
+
+The maintenance script starts the Ollama API if needed and pulls every nonblank, noncomment model in `eco-ai-models.txt`.
+
 ## One-Click Startup
 
 Use `start-all.bat` or the Desktop `BIG-TUNA-Start-Everything.bat` shortcut file to start the production stack in one step. Both call `start-everything.ps1`, which:
@@ -144,6 +163,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\SERVER\start-everythi
 ```
 
 The git reloader polls `origin/main` every 10 seconds and pulls when GitHub has a newer commit.
+
+The startup script also attempts to start the local Ollama API in the background without blocking the rest of the stack.
 
 ## Cloudflare Tunnel
 

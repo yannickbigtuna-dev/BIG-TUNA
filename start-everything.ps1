@@ -6,6 +6,64 @@ if (-not (Test-Path $pm2)) {
     $pm2 = 'pm2.cmd'
 }
 
+function Get-OllamaExecutable {
+    $command = Get-Command ollama -CommandType Application -ErrorAction SilentlyContinue
+    if ($command) {
+        foreach ($candidate in @($command.Path, $command.Definition)) {
+            if ($candidate -and (Test-Path $candidate)) {
+                return $candidate
+            }
+        }
+    }
+
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'),
+        (Join-Path $env:ProgramFiles 'Ollama\ollama.exe')
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace(${env:ProgramFiles(x86)})) {
+        $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Ollama\ollama.exe')
+    }
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Test-OllamaApi {
+    try {
+        $null = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2 -ErrorAction Stop
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Start-OllamaApiIfNeeded {
+    $ollamaExe = Get-OllamaExecutable
+    if (-not $ollamaExe) {
+        Write-Host 'Ollama is not installed yet; skipping Eco AI startup.'
+        return
+    }
+
+    if (Test-OllamaApi) {
+        Write-Host 'Ollama API is already running.'
+        return
+    }
+
+    if (Get-Process -Name 'ollama' -ErrorAction SilentlyContinue) {
+        Write-Host 'Ollama is already starting in the background.'
+        return
+    }
+
+    Write-Host 'Starting Ollama API in the background'
+    Start-Process -FilePath $ollamaExe -ArgumentList 'serve' -WindowStyle Hidden | Out-Null
+}
+
 function Invoke-Pm2App {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -28,6 +86,7 @@ Write-Host ''
 Write-Host '=== BIG TUNA startup ==='
 Write-Host ''
 
+Start-OllamaApiIfNeeded
 Invoke-Pm2App -Name 'apps-server' -StartArgs @('start', 'C:\SERVER\server.js', '--name', 'apps-server', '--watch', 'false')
 Invoke-Pm2App -Name 'mcp-server' -StartArgs @('start', 'C:\SERVER\mcp-server\ecosystem.config.cjs')
 
