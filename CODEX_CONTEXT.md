@@ -517,6 +517,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Supports multiple saved chats, model switching, skill presets (`general`, `coding`, `writing`, `study`, `summarize`, `file-analyst`), and browser-read text/code file attachments that are appended to prompt context.
 - The intended deployment is a local Ollama install on the website host machine. If Ollama is missing or offline, the UI should show a setup/offline message rather than failing silently.
 - `eco-ai-models.txt` is the model maintenance manifest. `maintain-eco-ai-models.ps1` locates Ollama, starts its API if needed, and pulls every nonblank/noncomment model in that manifest. `setup-eco-ai-models.ps1` installs Ollama with `winget` if absent, runs maintenance immediately, and registers a current-user daily 7:00 AM task with missed-start recovery.
+- The current Windows host sets the user environment variable `OLLAMA_LLM_LIBRARY=cpu_avx2`. Ollama 0.30.6 generation crashes against the installed NVIDIA 546.17 driver with `CUDA error: device kernel image is invalid`; keep the CPU override until the GPU driver/runtime combination has been upgraded and validated.
 
 `lights`:
 
