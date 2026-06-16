@@ -1360,6 +1360,15 @@ async function handleAPI(req, res, urlPath) {
     });
     res.write(JSON.stringify({ type: 'meta', model }) + '\n');
 
+    // Keepalive heartbeat: long prompt processing on old/large chats can leave a
+    // big gap before the first token. Without periodic bytes, the Cloudflare
+    // Tunnel idle-times-out and the browser sees "load failed". Pings are ignored
+    // by the client and stop as soon as the stream ends.
+    const heartbeat = setInterval(() => {
+      if (res.writableEnded) return;
+      try { res.write(JSON.stringify({ type: 'ping', t: Date.now() }) + '\n'); } catch {}
+    }, 15000);
+
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -1459,6 +1468,7 @@ async function handleAPI(req, res, urlPath) {
         res.end();
       }
     } finally {
+      clearInterval(heartbeat);
       timeout.clear();
       try { reader.releaseLock(); } catch {}
     }

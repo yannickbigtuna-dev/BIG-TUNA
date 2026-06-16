@@ -705,6 +705,63 @@
 
     .mobile-only { display: none; }
 
+    /* ---------- Toast (transient, non-persisted notices) ---------- */
+    #eco-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 104px;
+      transform: translate(-50%, 12px);
+      z-index: 500;
+      max-width: min(92vw, 540px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 12px 11px 15px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-3);
+      color: var(--text);
+      font-size: 0.85rem;
+      line-height: 1.45;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+    }
+
+    #eco-toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+      pointer-events: auto;
+    }
+
+    #eco-toast .toast-msg { flex: 1; min-width: 0; }
+
+    #eco-toast .toast-action {
+      border: 0;
+      background: var(--accent);
+      color: var(--on-accent);
+      border-radius: var(--radius-full);
+      padding: 6px 13px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    #eco-toast .toast-action:hover { background: var(--accent-hover); }
+
+    #eco-toast .toast-close {
+      border: 0;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1;
+      padding: 2px 4px;
+      flex-shrink: 0;
+    }
+
+    #eco-toast .toast-close:hover { color: var(--text); }
+
     /* ---------- Responsive ---------- */
     @media (max-width: 760px) {
       .mobile-only { display: inline-flex; }
@@ -738,6 +795,7 @@
   <script src="/auth.js"></script>
 
   <div id="drawer-backdrop"></div>
+  <div id="eco-toast" role="status" aria-live="polite"></div>
 
   <div id="app-shell">
     <aside id="sidebar" aria-label="Chats">
@@ -846,6 +904,56 @@
       return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     }
 
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    let toastTimer = null;
+    function showToast(message, actionLabel, actionFn) {
+      const el = document.getElementById('eco-toast');
+      if (!el) return;
+      el.innerHTML = '';
+      const msg = document.createElement('span');
+      msg.className = 'toast-msg';
+      msg.textContent = message;
+      el.appendChild(msg);
+      if (actionLabel && typeof actionFn === 'function') {
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'toast-action';
+        action.textContent = actionLabel;
+        action.onclick = () => { hideToast(); actionFn(); };
+        el.appendChild(action);
+      }
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'toast-close';
+      close.setAttribute('aria-label', 'Dismiss');
+      close.textContent = '✕';
+      close.onclick = hideToast;
+      el.appendChild(close);
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(hideToast, 10000);
+    }
+    function hideToast() {
+      const el = document.getElementById('eco-toast');
+      if (el) el.classList.remove('show');
+    }
+
+    // A real saved answer is never discarded. Past failures used to persist an
+    // assistant turn whose body was an error string or was empty; strip those so
+    // reopening an old chat never shows "Eco AI error: load failed" again.
+    function pruneBrokenMessages(messages) {
+      return messages.filter(message => {
+        if (message.role !== 'assistant') return true;
+        const content = String(message.content || '').trim();
+        if (!content) return false;
+        if (/^Eco AI error:/i.test(content)) return false;
+        if (content === '[Generation stopped]') return false;
+        if (/^The local model returned no text\b/i.test(content)) return false;
+        return true;
+      });
+    }
+
     function nowIso() {
       return new Date().toISOString();
     }
@@ -886,18 +994,27 @@
       return fetch(path, { ...options, headers });
     }
 
+    async function persistChats() {
+      const payload = JSON.stringify({
+        chats: state.chats,
+        activeChatId: state.activeChatId,
+      });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await api('/api/data/' + APP_ID, { method: 'POST', body: payload });
+          if (res.ok) return true;
+        } catch {}
+        await sleep(500 * (attempt + 1));
+      }
+      return false;
+    }
+
     async function saveAll() {
       clearTimeout(state.saveTimer);
       state.saveTimer = null;
       await Promise.all([
-        Auth.saveSettings(APP_ID, state.settings),
-        api('/api/data/' + APP_ID, {
-          method: 'POST',
-          body: JSON.stringify({
-            chats: state.chats,
-            activeChatId: state.activeChatId,
-          }),
-        }),
+        Auth.saveSettings(APP_ID, state.settings).catch(() => {}),
+        persistChats(),
       ]).catch(() => {});
     }
 
@@ -1202,44 +1319,30 @@
       }));
     }
 
-    async function sendChatRequest(chat) {
-      state.generating = true;
-      render();
+    // One streaming attempt. Appends tokens onto `assistant.content` and resolves
+    // with { empty }. Throws on transport/stream error so the caller can retry.
+    async function streamOnce(chat, assistant, controller) {
+      const res = await api('/api/eco-ai/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: chat.model || '',
+          skill: chat.skill || 'general',
+          messages: currentPayloadMessages(chat).slice(0, -1),
+        }),
+        signal: controller.signal,
+      });
 
-      const assistant = {
-        id: uid(),
-        role: 'assistant',
-        content: '',
-        attachments: [],
-        createdAt: nowIso(),
-      };
-      chat.messages.push(assistant);
-      renderMessages();
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Eco AI request failed (HTTP ${res.status})`);
+      }
 
-      const controller = new AbortController();
-      state.activeAbort = controller;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let emptyCompletion = false;
 
       try {
-        const res = await api('/api/eco-ai/chat', {
-          method: 'POST',
-          body: JSON.stringify({
-            model: chat.model || '',
-            skill: chat.skill || 'general',
-            messages: currentPayloadMessages(chat).slice(0, -1),
-          }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok || !res.body) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || 'Eco AI request failed');
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let emptyCompletion = false;
-
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -1266,27 +1369,95 @@
             } else if (event.type === 'done') {
               emptyCompletion = !!event.empty;
             }
+            // Unknown event types (e.g. keepalive "ping") are intentionally ignored.
+          }
+        }
+      } finally {
+        try { reader.releaseLock(); } catch {}
+      }
+
+      return { empty: emptyCompletion };
+    }
+
+    // Returns true when a real assistant answer was produced and kept. Failures
+    // are non-destructive: the empty placeholder is removed instead of being
+    // saved as an error, so existing answers in the chat are never replaced.
+    async function sendChatRequest(chat) {
+      state.generating = true;
+      render();
+
+      const assistant = {
+        id: uid(),
+        role: 'assistant',
+        content: '',
+        attachments: [],
+        createdAt: nowIso(),
+      };
+      chat.messages.push(assistant);
+      renderMessages();
+
+      const controller = new AbortController();
+      state.activeAbort = controller;
+
+      let kept = false;
+      let lastError = '';
+      const MAX_ATTEMPTS = 3;
+
+      try {
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            const { empty } = await streamOnce(chat, assistant, controller);
+            if (assistant.content.trim() && !empty) {
+              kept = true;
+              lastError = '';
+            } else {
+              lastError = 'the local model returned no text';
+            }
+            break;
+          } catch (error) {
+            if (controller.signal.aborted) { lastError = ''; break; }
+            lastError = error.message || String(error);
+            const transient = (error instanceof TypeError)
+              || /load failed|failed to fetch|network|connection|stream/i.test(lastError);
+            // Only auto-retry when nothing has streamed yet, so we never duplicate text.
+            if (transient && attempt < MAX_ATTEMPTS && !assistant.content.trim()) {
+              await sleep(700 * attempt);
+              continue;
+            }
+            break;
           }
         }
 
-        if (!assistant.content.trim() || emptyCompletion) {
-          assistant.content = 'The local model returned no text. Try again, or switch the model to Auto and resend.';
-        }
-      } catch (error) {
-        assistant.content = controller.signal.aborted
-          ? (assistant.content || '[Generation stopped]')
-          : `Eco AI error: ${error.message || error}`;
+        // Keep any partial answer we did receive — a real response is never thrown away.
+        if (!kept && assistant.content.trim()) kept = true;
       } finally {
-        chat.updatedAt = nowIso();
+        const aborted = controller.signal.aborted;
         state.generating = false;
         state.activeAbort = null;
-        if (!chat.title || chat.title === 'New Chat') {
-          const firstUser = chat.messages.find(message => message.role === 'user');
-          if (firstUser) chat.title = summarizeTitle(firstUser.content);
+
+        if (kept) {
+          chat.updatedAt = nowIso();
+          if (!chat.title || chat.title === 'New Chat') {
+            const firstUser = chat.messages.find(message => message.role === 'user');
+            if (firstUser) chat.title = summarizeTitle(firstUser.content);
+          }
+        } else {
+          const index = chat.messages.indexOf(assistant);
+          if (index !== -1) chat.messages.splice(index, 1);
+          if (!aborted) {
+            showToast(
+              'Eco AI couldn’t respond (' + (lastError || 'unknown error') + '). Your message was kept.',
+              'Retry',
+              regenerateLast,
+            );
+          }
         }
+
         render();
         scheduleSave();
       }
+
+      return kept;
     }
 
     async function handleSend() {
@@ -1410,10 +1581,19 @@
       const chat = activeChat();
       if (!chat) return;
       if (!chat.messages.some(message => message.role === 'user')) return;
-      if (chat.messages[chat.messages.length - 1]?.role === 'assistant') chat.messages.pop();
+      // Hold onto the previous answer; only drop it if a new one succeeds.
+      let previous = null;
+      if (chat.messages[chat.messages.length - 1]?.role === 'assistant') {
+        previous = chat.messages.pop();
+      }
       render();
-      scheduleSave();
-      await sendChatRequest(chat);
+      const ok = await sendChatRequest(chat);
+      if (!ok && previous) {
+        chat.messages.push(previous);
+        chat.updatedAt = nowIso();
+        render();
+        scheduleSave();
+      }
     }
 
     function stopGeneration() {
@@ -1437,7 +1617,7 @@
         state.chats = savedData.chats.map(chat => ({
           ...newChat(),
           ...chat,
-          messages: Array.isArray(chat.messages) ? chat.messages.map(message => ({
+          messages: pruneBrokenMessages(Array.isArray(chat.messages) ? chat.messages.map(message => ({
             id: message.id || uid(),
             role: message.role === 'assistant' ? 'assistant' : 'user',
             content: typeof message.content === 'string' ? message.content : '',
@@ -1447,7 +1627,7 @@
               text: file.text || '',
             })) : [],
             createdAt: message.createdAt || nowIso(),
-          })) : [],
+          })) : []),
         }));
         state.activeChatId = typeof savedData.activeChatId === 'string' ? savedData.activeChatId : '';
       }
@@ -1506,6 +1686,12 @@
       document.getElementById('drawer-backdrop').onclick = closeDrawer;
 
       Auth.beforeLogout(saveAll);
+
+      // Best-effort flush so the last answer is never lost when the tab is hidden or closed.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') saveAll();
+      });
+      window.addEventListener('pagehide', () => { saveAll(); });
     });
   </script>
 </body>
