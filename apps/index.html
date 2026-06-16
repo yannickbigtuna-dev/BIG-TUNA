@@ -4,14 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>TUNA</title>
+<link rel="stylesheet" href="/styles/tokens.css">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #0a0a0a;
-    color: #eee;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -31,26 +26,26 @@
     user-select: none;
     text-decoration: none;
     color: inherit;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 4px 5px;
-    transition: background 0.18s, transform 0.18s;
+    transition: background var(--dur), transform var(--dur);
   }
   #temp-widget:hover,
   #temp-widget:focus-visible {
-    background: rgba(88, 166, 255, 0.08);
+    background: var(--accent-soft);
     outline: none;
     transform: translateY(-1px);
   }
   #temp-value {
-    font-size: 2.4rem;
+    font-size: var(--text-3xl);
     font-weight: 200;
     letter-spacing: -1px;
-    color: #fff;
+    color: var(--text);
     line-height: 1;
   }
   #temp-label {
-    font-size: 0.65rem;
-    color: #444;
+    font-size: var(--text-xs);
+    color: var(--text-dim);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     margin-top: 2px;
@@ -59,12 +54,12 @@
   /* Big TUNA logo */
   .logo {
     font-size: clamp(3.5rem, 14vw, 8rem);
-    font-weight: 900;
+    font-weight: var(--weight-black);
     letter-spacing: -0.04em;
     line-height: 1;
-    color: #58a6ff;
+    color: var(--accent);
     margin-bottom: 8px;
-    background: linear-gradient(135deg, #58a6ff 35%, #1f6feb 100%);
+    background: linear-gradient(135deg, var(--accent) 35%, var(--accent-press) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -73,7 +68,7 @@
   /* Date display */
   .date-display {
     font-size: 0.9rem;
-    color: #444;
+    color: var(--text-dim);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     margin-bottom: clamp(16px, 4vh, 32px);
@@ -92,37 +87,37 @@
     position: relative;
     width: clamp(32px, 7.5vw, 52px);
     height: clamp(48px, 11vw, 76px);
-    background: #111;
-    border-radius: 8px;
-    border: 1px solid #1e1e1e;
+    background: var(--bg-raised);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
     overflow: hidden;
     /* inner drum shadow — top & bottom fade */
     box-shadow:
       inset 0 14px 16px -8px rgba(0,0,0,.9),
       inset 0 -14px 16px -8px rgba(0,0,0,.9),
-      0 4px 20px rgba(0,0,0,.6);
+      var(--shadow-2);
   }
   .digit-slot.sec {
-    border-color: #1f6feb;
+    border-color: var(--accent);
     box-shadow:
       inset 0 14px 16px -8px rgba(0,0,0,.9),
       inset 0 -14px 16px -8px rgba(0,0,0,.9),
-      0 4px 20px rgba(0,0,0,.6),
-      0 0 12px rgba(88,166,255,.08);
+      var(--shadow-2),
+      0 0 12px var(--accent-soft);
   }
 
   .digit-val {
     position: absolute;
     width: 100%;
     text-align: center;
-    font-family: 'SF Mono', ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+    font-family: var(--font-mono);
     font-size: clamp(26px, 6vw, 44px);
-    font-weight: 700;
+    font-weight: var(--weight-bold);
     line-height: clamp(48px, 11vw, 76px);
-    color: #ddd;
+    color: var(--text);
     letter-spacing: -0.02em;
   }
-  .digit-slot.sec .digit-val { color: #58a6ff; }
+  .digit-slot.sec .digit-val { color: var(--accent); }
 
   /* roll animations */
   @keyframes roll-out-up {
@@ -138,14 +133,14 @@
 
   /* separator colon */
   .clock-sep {
-    font-family: 'SF Mono', ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-size: clamp(22px, 5vw, 36px);
     font-weight: 300;
-    color: #2a2a2a;
+    color: var(--text-faint);
     padding-bottom: 3px;
     flex-shrink: 0;
   }
-  .clock-sep.sec-sep { color: #1f6feb; }
+  .clock-sep.sec-sep { color: var(--accent); }
 
   /* App grid */
   .grid {
@@ -157,23 +152,17 @@
   }
 
   .card {
-    --accent: #58a6ff;
-    --accent-soft: rgba(88,166,255,.16);
     position: relative;
     isolation: isolate;
     min-height: 128px;
-    background:
-      radial-gradient(circle at 28% 18%, var(--accent-soft), transparent 34%),
-      linear-gradient(145deg, rgba(255,255,255,.07), rgba(255,255,255,.02) 48%, rgba(255,255,255,.045));
-    border-radius: 14px;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
     padding: 22px 16px 18px;
     text-decoration: none;
-    color: #f4f7fb;
-    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
-    border: 1px solid rgba(255,255,255,.1);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.08),
-      0 14px 28px rgba(0,0,0,.28);
+    color: var(--text);
+    transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-1);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -181,54 +170,34 @@
     gap: 10px;
     overflow: hidden;
   }
-  .card::after {
-    content: "";
-    position: absolute;
-    inset: auto 18px 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    opacity: .85;
-    z-index: -1;
-  }
   .card:hover {
     transform: translateY(-5px);
-    background:
-      radial-gradient(circle at 28% 18%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 38%),
-      linear-gradient(145deg, rgba(255,255,255,.095), rgba(255,255,255,.032) 48%, rgba(255,255,255,.06));
-    border-color: color-mix(in srgb, var(--accent) 65%, rgba(255,255,255,.2));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.12),
-      0 18px 34px rgba(0,0,0,.35),
-      0 0 24px color-mix(in srgb, var(--accent) 22%, transparent);
+    background: var(--surface-2);
+    border-color: var(--accent);
+    box-shadow: var(--shadow-3), 0 0 24px var(--accent-soft);
   }
   .card:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 4px;
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: var(--ring);
   }
   .card .icon {
     width: 48px;
     height: 48px;
-    border-radius: 12px;
+    border-radius: var(--radius);
     display: grid;
     place-items: center;
-    background: color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,.06));
-    border: 1px solid color-mix(in srgb, var(--accent) 35%, rgba(255,255,255,.1));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+    background: var(--accent-soft);
+    border: 1px solid var(--border-strong);
     font-size: 1.9rem;
     line-height: 1;
   }
   .card .name {
-    font-size: 0.93rem;
-    font-weight: 700;
+    font-size: var(--text-base);
+    font-weight: var(--weight-bold);
     line-height: 1.18;
     letter-spacing: 0;
   }
-  .card:nth-child(2) { --accent: #ffcc66; --accent-soft: rgba(255,204,102,.15); }
-  .card:nth-child(3) { --accent: #44d7b6; --accent-soft: rgba(68,215,182,.14); }
-  .card:nth-child(4) { --accent: #ff8a7a; --accent-soft: rgba(255,138,122,.15); }
-  .card:nth-child(5) { --accent: #7ee787; --accent-soft: rgba(126,231,135,.14); }
-  .card:nth-child(6) { --accent: #c297ff; --accent-soft: rgba(194,151,255,.14); }
-  .card:nth-child(7) { --accent: #f2a7d8; --accent-soft: rgba(242,167,216,.14); }
 
   #downloads-menu {
     position: fixed;
@@ -239,20 +208,20 @@
   }
 
   #downloads-btn {
-    font-family: monospace;
+    font-family: var(--font-mono);
     background: transparent;
     border: 0;
     padding: 0;
     font-size: 11px;
-    color: #2a2a2a;
+    color: var(--text-faint);
     letter-spacing: 0.05em;
-    transition: color 0.2s;
+    transition: color var(--dur);
     user-select: none;
     cursor: pointer;
   }
   #downloads-btn:hover,
   #downloads-btn:focus-visible {
-    color: #555;
+    color: var(--text-muted);
     outline: none;
   }
 
@@ -263,10 +232,10 @@
     min-width: 178px;
     display: none;
     padding: 7px;
-    background: rgba(12, 12, 12, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-3);
     text-align: left;
   }
 
@@ -278,8 +247,8 @@
   .download-item {
     display: block;
     padding: 8px 9px;
-    border-radius: 6px;
-    color: #9ba6b3;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
     font-size: 11px;
     line-height: 1.2;
     text-decoration: none;
@@ -288,8 +257,8 @@
 
   .download-item:hover,
   .download-item:focus-visible {
-    color: #f2f6fb;
-    background: rgba(88, 166, 255, 0.12);
+    color: var(--text);
+    background: var(--accent-soft);
     outline: none;
   }
 
@@ -302,22 +271,22 @@
     padding: 0 10px;
     display: grid;
     place-items: center;
-    font: 700 10px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font: var(--weight-bold) 10px/1 var(--font-ui);
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #343434;
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(255, 255, 255, 0.045);
-    border-radius: 8px;
+    color: var(--text-faint);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: color 0.18s, background 0.18s, border-color 0.18s;
+    transition: color var(--dur), background var(--dur), border-color var(--dur);
     user-select: none;
   }
   #minimal-btn:hover,
   #minimal-btn:focus-visible {
-    color: #58a6ff;
-    background: rgba(88, 166, 255, 0.08);
-    border-color: rgba(88, 166, 255, 0.18);
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent);
     outline: none;
   }
 
@@ -350,19 +319,20 @@
     height: 42px;
     display: grid;
     place-items: center;
-    color: #383838;
+    color: var(--text-faint);
     text-decoration: none;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(255, 255, 255, 0.045);
-    transition: color 0.18s, background 0.18s, border-color 0.18s, box-shadow 0.18s;
+    border-radius: var(--radius-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    transition: color var(--dur), background var(--dur), border-color var(--dur), box-shadow var(--dur);
     user-select: none;
   }
+  /* Warm glow is deliberate: this control opens the physical Lights app. */
   #lights-btn:hover {
-    color: #ffd36d;
-    background: rgba(255, 211, 109, 0.08);
-    border-color: rgba(255, 211, 109, 0.16);
-    box-shadow: 0 0 18px rgba(255, 211, 109, 0.1);
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 8%, transparent);
+    border-color: color-mix(in srgb, var(--warning) 16%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--warning) 10%, transparent);
   }
   #lights-btn svg {
     width: 21px;
@@ -431,7 +401,7 @@
     .card {
       min-height: 86px;
       padding: 12px 8px 10px;
-      border-radius: 10px;
+      border-radius: var(--radius);
       gap: 6px;
     }
 
@@ -627,24 +597,8 @@
   tickClock();
   setInterval(tickClock, 1000);
 
-  // Temperature — feels like, using Open-Meteo (no API key needed)
-  function fetchTemp(lat, lon) {
-    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=apparent_temperature&temperature_unit=celsius`)
-      .then(r => r.json())
-      .then(d => {
-        const t = Math.round(d.current.apparent_temperature);
-        document.getElementById('temp-value').textContent = `${t}°`;
-      })
-      .catch(() => {});
-  }
-
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      pos => fetchTemp(pos.coords.latitude, pos.coords.longitude),
-      () => {}
-    );
-  }
-
+  // Temperature — "feels like", from Open-Meteo (no API key). Tries the
+  // browser's location first, falls back to Halifax, then to a placeholder.
   const HALIFAX_WEATHER = { lat: 44.6488, lon: -63.5752 };
 
   async function fetchHomepageTemp(lat, lon) {

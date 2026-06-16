@@ -5,44 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#111316">
+<meta name="theme-color" content="#0a0a0a">
 <title>Lights</title>
+<link rel="stylesheet" href="/styles/tokens.css">
 <style>
-  * { box-sizing: border-box; }
-
-  :root {
-    --bg: #111316;
-    --wall: #20252a;
-    --wall-lit: #efe0ba;
-    --plate: #f3f0e8;
-    --plate-edge: #b9b2a3;
-    --switch: #faf7ee;
-    --switch-shadow: #b5afa3;
-    --text: #f5f5f5;
-    --muted: #8d949b;
-    --accent: #ffd36d;
-  }
-
   html { min-height: 100%; }
 
   body {
-    margin: 0;
     min-height: 100vh;
     min-height: 100svh;
     display: flex;
     flex-direction: column;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    color: var(--text);
     background:
-      radial-gradient(circle at 50% 42%, rgba(255, 211, 109, 0.12), transparent 34%),
-      linear-gradient(180deg, #171b20, #08090b);
+      radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--warning) 10%, transparent), transparent 34%),
+      linear-gradient(180deg, var(--bg-raised), var(--bg));
     transition: background 360ms ease;
   }
 
   body.is-on {
     background:
-      radial-gradient(circle at 50% 38%, rgba(255, 225, 154, 0.6), transparent 38%),
-      linear-gradient(180deg, var(--wall-lit), #6f5f47);
+      radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--warning) 52%, transparent), transparent 38%),
+      linear-gradient(180deg, #b8924a, #5a4220);
     color: #201b14;
   }
 
@@ -69,7 +52,7 @@
     inset: 52px 0 0;
     pointer-events: none;
     opacity: 0;
-    background: radial-gradient(ellipse at 50% 36%, rgba(255, 226, 156, 0.55), transparent 44%);
+    background: radial-gradient(ellipse at 50% 36%, color-mix(in srgb, var(--warning) 46%, transparent), transparent 44%);
     transition: opacity 360ms ease;
   }
 
@@ -80,7 +63,7 @@
     aspect-ratio: 0.64;
     display: grid;
     place-items: center;
-    filter: drop-shadow(0 30px 34px rgba(0, 0, 0, 0.45));
+    filter: drop-shadow(0 30px 34px color-mix(in srgb, var(--bg) 55%, transparent));
   }
 
   .plate {
@@ -89,15 +72,23 @@
     position: relative;
     display: grid;
     place-items: center;
-    border-radius: 8px;
-    background:
-      linear-gradient(145deg, rgba(255,255,255,0.95), rgba(211,205,192,0.98)),
-      var(--plate);
-    border: 1px solid var(--plate-edge);
+    border-radius: var(--radius-sm);
+    background: linear-gradient(145deg, var(--surface-3), var(--surface-2));
+    border: 1px solid var(--border-strong);
     box-shadow:
-      inset 2px 2px 2px rgba(255,255,255,0.85),
-      inset -3px -3px 6px rgba(90, 82, 68, 0.22),
-      0 12px 28px rgba(0, 0, 0, 0.36);
+      inset 2px 2px 2px color-mix(in srgb, var(--text) 8%, transparent),
+      inset -3px -3px 6px color-mix(in srgb, var(--bg) 22%, transparent),
+      var(--shadow-3);
+  }
+
+  /* ON state: plate picks up warm tones from the ambient light */
+  body.is-on .plate {
+    background: linear-gradient(145deg, #e8d9b8, #c9bb9a);
+    border-color: #a09070;
+    box-shadow:
+      inset 2px 2px 2px color-mix(in srgb, #fff 42%, transparent),
+      inset -3px -3px 6px color-mix(in srgb, #5a4220 22%, transparent),
+      var(--shadow-3);
   }
 
   .plate::before,
@@ -108,10 +99,14 @@
     width: 9px;
     height: 9px;
     transform: translateX(-50%);
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 35% 35%, #fff, #aba393 58%, #6f685e 100%);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.35);
+    border-radius: var(--radius-full);
+    background: radial-gradient(circle at 35% 35%, var(--text), var(--border-strong) 58%, var(--surface) 100%);
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--bg) 35%, transparent);
+  }
+
+  body.is-on .plate::before,
+  body.is-on .plate::after {
+    background: radial-gradient(circle at 35% 35%, #fff, #aba393 58%, #6f685e 100%);
   }
 
   .plate::before { top: 21px; }
@@ -125,15 +120,15 @@
     padding: 0;
     position: relative;
     cursor: pointer;
-    border-radius: 7px;
+    border-radius: var(--radius-sm);
     background: transparent;
     perspective: 600px;
     touch-action: manipulation;
   }
 
   .switch:focus-visible {
-    outline: 3px solid rgba(63, 130, 248, 0.9);
-    outline-offset: 8px;
+    outline: none;
+    box-shadow: var(--ring);
   }
 
   .switch[disabled] {
@@ -143,14 +138,13 @@
   .paddle {
     position: absolute;
     inset: 0;
-    border-radius: 7px;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.98), rgba(218,213,202,0.98));
-    border: 1px solid #b8b0a0;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
+    border: 1px solid var(--border-strong);
     box-shadow:
-      inset 0 10px 18px rgba(255,255,255,0.72),
-      inset 0 -16px 20px rgba(126, 115, 95, 0.25),
-      0 5px 8px rgba(0,0,0,0.23);
+      inset 0 10px 18px color-mix(in srgb, var(--text) 6%, transparent),
+      inset 0 -16px 20px color-mix(in srgb, var(--bg) 25%, transparent),
+      var(--shadow-2);
     transform: rotateX(-13deg);
     transform-origin: 50% 82%;
     transition: transform 210ms cubic-bezier(.2,.9,.2,1), box-shadow 210ms ease;
@@ -161,17 +155,19 @@
     position: absolute;
     inset: 50% 8px auto;
     height: 1px;
-    background: rgba(111, 102, 86, 0.18);
+    background: color-mix(in srgb, var(--border-strong) 50%, transparent);
   }
 
   body.is-on .paddle {
+    background: linear-gradient(180deg, #e8d9b8, #c9bb9a);
+    border-color: #a09070;
     transform: rotateX(13deg);
     transform-origin: 50% 18%;
     box-shadow:
-      inset 0 16px 20px rgba(255,255,255,0.72),
-      inset 0 -9px 15px rgba(126, 115, 95, 0.18),
-      0 2px 6px rgba(0,0,0,0.26),
-      0 0 24px rgba(255, 208, 92, 0.38);
+      inset 0 16px 20px color-mix(in srgb, #fff 40%, transparent),
+      inset 0 -9px 15px color-mix(in srgb, #5a4220 18%, transparent),
+      var(--shadow-1),
+      0 0 24px color-mix(in srgb, var(--warning) 38%, transparent);
   }
 
   .status-panel {
@@ -187,16 +183,16 @@
     display: grid;
     gap: 10px;
     padding: 14px;
-    border-radius: 14px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--surface) 60%, transparent);
+    border: 1px solid var(--border);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
 
   body.is-on .auth-panel {
-    background: rgba(255,255,255,0.34);
-    border-color: rgba(50, 38, 20, 0.08);
+    background: color-mix(in srgb, #e8d9b8 34%, transparent);
+    border-color: color-mix(in srgb, #5a4220 12%, transparent);
   }
 
   .auth-panel[hidden] {
@@ -211,25 +207,25 @@
   .auth-input {
     width: 100%;
     padding: 12px 13px;
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(0,0,0,0.22);
+    border-radius: var(--radius);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
     color: inherit;
     font: inherit;
   }
 
   .auth-input::placeholder {
-    color: rgba(255,255,255,0.45);
+    color: var(--text-dim);
   }
 
   body.is-on .auth-input {
-    background: rgba(255,255,255,0.62);
-    border-color: rgba(70, 58, 40, 0.12);
+    background: color-mix(in srgb, #e8d9b8 62%, transparent);
+    border-color: color-mix(in srgb, #5a4220 16%, transparent);
     color: #201b14;
   }
 
   body.is-on .auth-input::placeholder {
-    color: rgba(32, 27, 20, 0.46);
+    color: color-mix(in srgb, #201b14 46%, transparent);
   }
 
   .auth-button,
@@ -237,7 +233,7 @@
     width: 100%;
     min-height: 44px;
     border: 0;
-    border-radius: 10px;
+    border-radius: var(--radius);
     font: inherit;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -246,28 +242,30 @@
   }
 
   .auth-button {
-    background: #f3f0e8;
-    color: #161616;
+    background: var(--accent);
+    color: var(--on-accent);
   }
 
   .secondary-button {
-    background: rgba(255,255,255,0.1);
+    background: var(--surface-2);
     color: inherit;
+    border: 1px solid var(--border-strong);
   }
 
   body.is-on .secondary-button {
-    background: rgba(32, 27, 20, 0.08);
+    background: color-mix(in srgb, #201b14 10%, transparent);
+    border-color: color-mix(in srgb, #201b14 16%, transparent);
   }
 
   .install-tip {
     font-size: 0.82rem;
     line-height: 1.4;
-    color: var(--muted);
+    color: var(--text-muted);
     text-align: center;
   }
 
   body.is-on .install-tip {
-    color: rgba(32, 27, 20, 0.62);
+    color: color-mix(in srgb, #201b14 62%, transparent);
   }
 
   .state-label {
@@ -279,12 +277,12 @@
 
   .access-label {
     min-height: 1.25em;
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 0.88rem;
     line-height: 1.4;
   }
 
-  body.is-on .access-label { color: rgba(32, 27, 20, 0.66); }
+  body.is-on .access-label { color: color-mix(in srgb, #201b14 66%, transparent); }
 
   .poll-label {
     display: inline-flex;
@@ -292,7 +290,7 @@
     justify-content: center;
     gap: 7px;
     min-height: 1.2em;
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 0.78rem;
     line-height: 1.35;
   }
@@ -301,19 +299,19 @@
     width: 8px;
     height: 8px;
     flex: 0 0 8px;
-    border-radius: 50%;
-    background: #697079;
-    box-shadow: 0 0 0 3px rgba(105, 112, 121, 0.18);
+    border-radius: var(--radius-full);
+    background: var(--text-dim);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-dim) 18%, transparent);
   }
 
-  .poll-label.is-recent { color: #62d48f; }
+  .poll-label.is-recent { color: var(--success); }
   .poll-label.is-recent .poll-dot {
-    background: #62d48f;
-    box-shadow: 0 0 0 3px rgba(98, 212, 143, 0.2);
+    background: var(--success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
   }
 
-  body.is-on .poll-label { color: rgba(32, 27, 20, 0.66); }
-  body.is-on .poll-label.is-recent { color: #1c7a3c; }
+  body.is-on .poll-label { color: color-mix(in srgb, #201b14 66%, transparent); }
+  body.is-on .poll-label.is-recent { color: color-mix(in srgb, var(--success) 80%, #201b14); }
 
   .switch[aria-busy="true"] .paddle {
     transition-duration: 80ms;

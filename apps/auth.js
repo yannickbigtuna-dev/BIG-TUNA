@@ -22,63 +22,63 @@ const Auth = (() => {
   const css = `
     /* ── Login modal ── */
     #auth-modal-overlay {
-      position: fixed; inset: 0; background: #0a0a0a;
+      position: fixed; inset: 0; background: var(--bg);
       z-index: 9999; display: flex; align-items: center;
       justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--font-ui);
     }
     #auth-card {
-      background: #141414; border: 1px solid #222; border-radius: 20px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
       padding: 36px 32px 32px; width: 100%; max-width: 360px; margin: 20px;
     }
     #auth-card .auth-logo {
       font-size: 2rem; font-weight: 900; letter-spacing: -0.04em;
-      background: linear-gradient(135deg, #58a6ff 35%, #1f6feb 100%);
+      background: linear-gradient(135deg, var(--accent) 35%, var(--accent-press) 100%);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
       background-clip: text; margin-bottom: 4px; display: block;
     }
     #auth-card .auth-subtitle {
-      font-size: 0.72rem; color: #444; letter-spacing: 0.15em;
+      font-size: 0.72rem; color: var(--text-dim); letter-spacing: 0.15em;
       text-transform: uppercase; margin-bottom: 28px; display: block;
     }
     #auth-card h2 {
-      font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 20px;
+      font-size: 1.2rem; font-weight: 700; color: var(--text); margin-bottom: 20px;
     }
     .auth-field { margin-bottom: 12px; }
     .auth-field label {
       display: block; font-size: 0.65rem; text-transform: uppercase;
-      letter-spacing: 0.12em; color: #555; margin-bottom: 6px;
+      letter-spacing: 0.12em; color: var(--text-dim); margin-bottom: 6px;
     }
     .auth-field input {
-      width: 100%; background: #1e1e1e; border: 1px solid #2a2a2a;
-      border-radius: 10px; padding: 12px 14px; color: #fff; font-size: 1rem;
-      outline: none; transition: border-color 0.15s; box-sizing: border-box;
+      width: 100%; background: var(--surface-2); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm); padding: 12px 14px; color: var(--text); font-size: 1rem;
+      outline: none; transition: border-color 0.15s, box-shadow 0.15s; box-sizing: border-box;
       font-family: inherit;
     }
-    .auth-field input:focus { border-color: #444; }
+    .auth-field input:focus { border-color: var(--accent); box-shadow: var(--ring); }
     #auth-error {
-      color: #ff6b6b; font-size: 0.8rem; margin-bottom: 14px;
+      color: var(--danger); font-size: 0.8rem; margin-bottom: 14px;
       min-height: 1.2em; line-height: 1.4;
     }
     #auth-submit {
-      width: 100%; padding: 14px; background: #fff; color: #0a0a0a;
-      border: none; border-radius: 10px; font-size: 0.88rem; font-weight: 800;
-      letter-spacing: 0.1em; cursor: pointer; transition: opacity 0.15s;
+      width: 100%; padding: 14px; background: var(--accent); color: var(--on-accent);
+      border: none; border-radius: var(--radius-sm); font-size: 0.88rem; font-weight: 800;
+      letter-spacing: 0.1em; cursor: pointer; transition: background 0.15s;
       margin-bottom: 16px; font-family: inherit;
     }
-    #auth-submit:hover { opacity: 0.88; }
+    #auth-submit:hover { background: var(--accent-hover); }
     #auth-submit:disabled { opacity: 0.4; cursor: not-allowed; }
-    #auth-toggle { text-align: center; font-size: 0.8rem; color: #555; }
+    #auth-toggle { text-align: center; font-size: 0.8rem; color: var(--text-dim); }
     #auth-toggle-link {
-      color: #4f9eff; cursor: pointer; font-weight: 600;
+      color: var(--accent); cursor: pointer; font-weight: 600;
     }
-    #auth-toggle-link:hover { color: #7fb8ff; }
+    #auth-toggle-link:hover { color: var(--accent-hover); }
 
     /* ── Account widget ── */
     #auth-widget { position: relative; }
     #auth-widget-btn {
-      background: rgba(255,255,255,0.08); border: none; border-radius: 10px;
-      color: #fff; cursor: pointer; display: flex; align-items: center;
+      background: rgba(255,255,255,0.08); border: none; border-radius: var(--radius-sm);
+      color: var(--text); cursor: pointer; display: flex; align-items: center;
       gap: 6px; padding: 8px 12px; font-size: 0.75rem; font-weight: 700;
       letter-spacing: 0.06em; transition: background 0.15s; min-height: 36px;
       font-family: inherit; white-space: nowrap; touch-action: manipulation;
@@ -92,26 +92,26 @@ const Auth = (() => {
     }
     #auth-dropdown {
       position: absolute; top: calc(100% + 6px); right: 0;
-      background: #1c1c1c; border: 1px solid #2a2a2a; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
       padding: 6px; min-width: 150px; display: none;
-      box-shadow: 0 8px 28px rgba(0,0,0,0.6);
+      box-shadow: var(--shadow-3);
       z-index: 500;
     }
     #auth-dropdown.open { display: block; }
     .auth-dd-username {
-      font-size: 0.68rem; color: #555; padding: 6px 12px 4px;
+      font-size: 0.68rem; color: var(--text-dim); padding: 6px 12px 4px;
       letter-spacing: 0.1em; text-transform: uppercase;
     }
-    .auth-dd-divider { height: 1px; background: #262626; margin: 4px 0; }
+    .auth-dd-divider { height: 1px; background: var(--border); margin: 4px 0; }
     .auth-dd-btn {
       display: block; width: 100%; text-align: left; background: none;
-      border: none; color: #bbb; font-size: 0.82rem; font-family: inherit;
-      padding: 9px 12px; border-radius: 8px; cursor: pointer;
+      border: none; color: var(--text-muted); font-size: 0.82rem; font-family: inherit;
+      padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer;
       transition: background 0.12s; font-weight: 600;
     }
-    .auth-dd-btn:hover { background: rgba(255,255,255,0.07); color: #fff; }
-    .auth-dd-btn.danger { color: #ff6b6b; }
-    .auth-dd-btn.danger:hover { background: rgba(255,80,80,0.1); }
+    .auth-dd-btn:hover { background: var(--surface-3); color: var(--text); }
+    .auth-dd-btn.danger { color: var(--danger); }
+    .auth-dd-btn.danger:hover { background: var(--accent-soft); }
 
     /* Fixed corner fallback (when no data-auth-widget host) */
     #auth-widget-fixed {

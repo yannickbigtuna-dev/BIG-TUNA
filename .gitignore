@@ -5,6 +5,14 @@ dist/
 build/
 .cache/
 .vscode/
+
+# Runtime binaries and logs (downloaded/generated on the host, not source)
+cloudflared.exe
+cloudflared-err.log
+cloudflared-out.log
+*.log
+.Rhistory
+
 apps/lights/downloads/package-work/
 apps/lights/downloads/big-tuna-lights-mac.zip
 data/assignments/browser-profile/

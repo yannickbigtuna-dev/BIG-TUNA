@@ -6,16 +6,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Workout Timer</title>
+  <link rel="stylesheet" href="/styles/tokens.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    * { -webkit-tap-highlight-color: transparent; }
 
     :root {
-      --bg: #1a1a2e;
-      --text: #ffffff;
-      --sub: rgba(255,255,255,0.5);
-      --bar-bg: rgba(255,255,255,0.15);
-      --card: rgba(0,0,0,0.22);
       --transition: 0.5s ease;
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-bot: env(safe-area-inset-bottom, 0px);
@@ -28,9 +23,6 @@
     }
 
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
       display: flex;
       flex-direction: column;
       transition: background var(--transition);
@@ -75,9 +67,9 @@
     }
 
     .field {
-      background: var(--card);
-      border: 1px solid rgba(255,255,255,0.09);
-      border-radius: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 14px 16px 12px;
       display: flex;
       flex-direction: column;
@@ -88,7 +80,7 @@
       font-size: 0.65rem;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: var(--sub);
+      color: var(--text-muted);
     }
 
     .field input {
@@ -120,7 +112,7 @@
       font-size: 0.75rem;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: var(--sub);
+      color: var(--text-muted);
     }
 
     .toggle-switch {
@@ -135,8 +127,8 @@
     .toggle-track {
       position: absolute;
       inset: 0;
-      background: rgba(255,255,255,0.12);
-      border-radius: 99px;
+      background: var(--surface-3);
+      border-radius: var(--radius-full);
       cursor: pointer;
       transition: background 0.2s;
     }
@@ -146,20 +138,20 @@
       position: absolute;
       top: 3px; left: 3px;
       width: 20px; height: 20px;
-      background: #fff;
-      border-radius: 50%;
+      background: var(--text);
+      border-radius: var(--radius-full);
       transition: transform 0.2s;
     }
 
-    .toggle-switch input:checked + .toggle-track { background: rgba(100,200,120,0.7); }
+    .toggle-switch input:checked + .toggle-track { background: var(--success); }
     .toggle-switch input:checked + .toggle-track::after { transform: translateX(18px); }
 
     #exercise-names-section {
       width: 100%;
       max-width: 480px;
-      background: var(--card);
-      border: 1px solid rgba(255,255,255,0.09);
-      border-radius: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 14px 16px;
       margin-bottom: 16px;
       display: flex;
@@ -171,7 +163,7 @@
       font-size: 0.65rem;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: var(--sub);
+      color: var(--text-muted);
       margin-bottom: 2px;
     }
 
@@ -183,16 +175,16 @@
 
     .ex-name-num {
       font-size: 0.7rem;
-      color: var(--sub);
+      color: var(--text-muted);
       width: 20px;
       text-align: right;
       flex-shrink: 0;
     }
 
     .ex-name-input {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
       padding: 9px 12px;
       color: var(--text);
       font-size: 0.95rem;
@@ -204,8 +196,8 @@
       user-select: text;
     }
 
-    .ex-name-input::placeholder { color: rgba(255,255,255,0.2); }
-    .ex-name-input:focus { border-color: rgba(255,255,255,0.3); }
+    .ex-name-input::placeholder { color: var(--text-faint); }
+    .ex-name-input:focus { border-color: var(--accent); }
 
     /* ── EXERCISE NAME ON TIMER ── */
     #exercise-name-display {
@@ -224,28 +216,29 @@
       max-width: 480px;
       padding: 17px;
       border: none;
-      border-radius: 16px;
-      background: var(--text);
-      color: var(--bg);
+      border-radius: var(--radius-lg);
+      background: var(--accent);
+      color: var(--on-accent);
       font-size: 1rem;
       font-weight: 800;
       letter-spacing: 0.1em;
       cursor: pointer;
       touch-action: manipulation;
-      transition: opacity 0.15s, transform 0.1s;
+      transition: background 0.15s, transform 0.1s;
       margin-bottom: 10px;
     }
 
-    .btn-start:active { opacity: 0.8; transform: scale(0.98); }
+    .btn-start:hover { background: var(--accent-hover); }
+    .btn-start:active { background: var(--accent-press); transform: scale(0.98); }
 
     .btn-save-defaults {
       width: 100%;
       max-width: 480px;
       padding: 13px;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
       background: transparent;
-      color: rgba(255,255,255,0.5);
+      color: var(--text-muted);
       font-size: 0.78rem;
       font-weight: 700;
       letter-spacing: 0.1em;
@@ -257,14 +250,14 @@
 
     .btn-save-defaults:active,
     .btn-save-defaults:hover {
-      background: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.8);
-      border-color: rgba(255,255,255,0.2);
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--border-strong);
     }
 
     .btn-save-defaults.saved {
-      color: rgba(100,220,120,0.8);
-      border-color: rgba(100,220,120,0.3);
+      color: var(--success);
+      border-color: color-mix(in srgb, var(--success) 40%, transparent);
     }
 
     /* ── TIMER SCREEN ── */
@@ -305,15 +298,15 @@
     #bar-wrap {
       width: min(480px, 88vw);
       height: 6px;
-      background: var(--bar-bg);
-      border-radius: 99px;
+      background: var(--surface-3);
+      border-radius: var(--radius-full);
       overflow: hidden;
     }
 
     #bar {
       height: 100%;
-      background: rgba(255,255,255,0.8);
-      border-radius: 99px;
+      background: var(--accent);
+      border-radius: var(--radius-full);
       transition: width 0.9s linear;
     }
 
@@ -363,7 +356,7 @@
 
     .ctrl {
       border: none;
-      border-radius: 14px;
+      border-radius: var(--radius-lg);
       cursor: pointer;
       font-weight: 800;
       letter-spacing: 0.06em;
@@ -374,23 +367,28 @@
       gap: 6px;
       min-height: clamp(44px, 7vh, 54px);
       touch-action: manipulation;
-      transition: opacity 0.15s, transform 0.1s;
+      transition: background 0.15s, transform 0.1s;
     }
 
-    .ctrl:active { opacity: 0.75; transform: scale(0.97); }
+    .ctrl:active { transform: scale(0.97); }
     .ctrl svg { width: 17px; height: 17px; fill: currentColor; flex-shrink: 0; }
 
     #btn-playpause {
       flex: 2;
-      background: rgba(255,255,255,0.95);
-      color: #111;
+      background: var(--accent);
+      color: var(--on-accent);
     }
+
+    #btn-playpause:hover { background: var(--accent-hover); }
+    #btn-playpause:active { background: var(--accent-press); }
 
     #btn-stop, #btn-reset {
       flex: 1;
-      background: rgba(255,255,255,0.1);
-      color: #fff;
+      background: var(--surface-2);
+      color: var(--text);
     }
+
+    #btn-stop:hover, #btn-reset:hover { background: var(--surface-3); }
 
   </style>
 </head>

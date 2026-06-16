@@ -2217,15 +2217,15 @@ const server = http.createServer(async (req, res) => {
       const ext  = path.extname(filePath).toLowerCase();
       const mime = MIME[ext] || 'application/octet-stream';
       const hdrs = { 'Content-Type': mime };
-      if (ext === '.html' || ext === '.js') hdrs['Cache-Control'] = 'no-cache';
+      if (ext === '.html' || ext === '.js' || ext === '.css') hdrs['Cache-Control'] = 'no-cache';
       res.writeHead(200, hdrs);
       res.end(fs.readFileSync(filePath));
     }
   } catch {
     res.writeHead(404, { 'Content-Type': 'text/html' });
-    res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;background:#0f0f0f;color:#eee">
-      <h1>404 — Not Found</h1><p>${urlPath}</p>
-      <a href="/" style="color:#4f9eff">← Home</a></body></html>`);
+    res.end(`<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;background:#0a0a0a;color:#ededed">
+      <h1>404 — Not Found</h1><p style="color:#9a9a9a">${urlPath}</p>
+      <a href="/" style="color:#ff453a">← Home</a></body></html>`);
   }
 
   console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);

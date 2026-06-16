@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal — BIG TUNA</title>
+  <link rel="stylesheet" href="/styles/tokens.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; background: #0a0a0a; overflow: hidden; }
+    html, body { height: 100%; overflow: hidden; }
     body { display: flex; flex-direction: column; }
 
     #status-bar {
@@ -15,25 +15,26 @@
       align-items: center;
       gap: 10px;
       padding: 6px 14px;
-      background: #111;
-      border-bottom: 1px solid #222;
-      font-family: monospace;
+      background: var(--bg-raised);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
       font-size: 12px;
       flex-shrink: 0;
     }
     #status-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #555; flex-shrink: 0; transition: background 0.3s;
+      width: 8px; height: 8px; border-radius: var(--radius-full);
+      background: var(--text-dim); flex-shrink: 0; transition: background 0.3s;
     }
-    #status-dot.connected    { background: #3fb950; }
-    #status-dot.connecting   { background: #d29922; }
-    #status-dot.disconnected { background: #f85149; }
-    #status-text { color: #888; flex: 1; }
+    #status-dot.connected    { background: var(--success); }
+    #status-dot.connecting   { background: var(--warning); }
+    #status-dot.disconnected { background: var(--danger); }
+    #status-text { color: var(--text-muted); flex: 1; }
     #reconnect-btn {
-      display: none; padding: 3px 10px; background: #1f6feb;
-      color: #fff; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;
+      display: none; padding: 3px 10px; background: var(--accent);
+      color: var(--on-accent); border: none; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer;
     }
-    #reconnect-btn:hover { background: #388bfd; }
+    #reconnect-btn:hover { background: var(--accent-hover); }
+    #reconnect-btn:focus-visible { outline: none; box-shadow: var(--ring); }
 
     #terminal-container { flex: 1; overflow: hidden; padding: 4px; }
     .xterm { height: 100%; }

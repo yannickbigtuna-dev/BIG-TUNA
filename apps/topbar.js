@@ -8,19 +8,19 @@ const Topbar = (() => {
   'use strict';
 
   const APPS = [
-    { name: 'Climb Tracker',    href: '/climb-tracker/',      icon: '\u26f0' },
-    { name: 'Workout Timer',    href: '/workout-timer/',     icon: '⏱' },
-    { name: 'Quizzes',          href: '/quiz-app/',           icon: '❓' },
-    { name: 'Psych Sheet',      href: '/psych-sheet/',        icon: '🏊' },
-    { name: 'Lists',            href: '/list-maker/',         icon: '📋' },
-    { name: 'Eco AI',           href: '/eco-ai/',             icon: '🌱' },
-    { name: 'Assignments',      href: '/assignments/',        icon: '✓' },
-    { name: 'World Map',        href: '/world-map/',          icon: '🌍' },
-    { name: 'Pace Calculator',  href: '/pace-calculator/',    icon: '🏃' },
-    { name: 'Lights',           href: '/lights/',             icon: '💡' },
-    { name: 'Terminal',         href: '/terminal/',           icon: '🖥' },
+    { name: 'Climb Tracker',   href: '/climb-tracker/',   icon: '⛰' },
+    { name: 'Workout Timer',   href: '/workout-timer/',   icon: '⏱' },
+    { name: 'Quizzes',         href: '/quiz-app/',        icon: '❓' },
+    { name: 'Psych Sheet',     href: '/psych-sheet/',     icon: '🏊' },
+    { name: 'Lists',           href: '/list-maker/',      icon: '📋' },
+    { name: 'Weather',         href: '/weather/',         icon: '☀' },
+    { name: 'Eco AI',          href: '/eco-ai/',          icon: '🌱' },
+    { name: 'Assignments',     href: '/assignments/',     icon: '✓' },
+    { name: 'World Map',       href: '/world-map/',       icon: '🌍' },
+    { name: 'Pace Calculator', href: '/pace-calculator/', icon: '🏃' },
+    { name: 'Lights',          href: '/lights/',          icon: '💡' },
+    { name: 'Terminal',        href: '/terminal/',        icon: '🖥' },
   ];
-  APPS.splice(5, 0, { name: 'Weather', href: '/weather/', icon: '\u2600' });
 
   let _leftQueue   = [];   // elements queued before init
   let _titleText   = null; // title queued before init
@@ -39,10 +39,10 @@ const Topbar = (() => {
       gap: 8px;
       height: calc(52px + env(safe-area-inset-top, 0px));
       padding: env(safe-area-inset-top, 0px) 12px 0;
-      background: rgba(10, 10, 10, 0.94);
+      background: color-mix(in srgb, var(--bg) 94%, transparent);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border-bottom: 1px solid #1a1a1a;
+      border-bottom: 1px solid var(--border);
       box-sizing: border-box;
     }
 
@@ -55,10 +55,10 @@ const Topbar = (() => {
 
     #tt-center {
       flex: 1;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--font-ui);
       font-size: 0.78rem;
       font-weight: 700;
-      color: #555;
+      color: var(--text-dim);
       letter-spacing: 0.08em;
       text-transform: uppercase;
       white-space: nowrap;
@@ -82,10 +82,10 @@ const Topbar = (() => {
       gap: 5px;
       background: rgba(255, 255, 255, 0.08);
       border: none;
-      border-radius: 10px;
-      color: #fff;
+      border-radius: var(--radius-sm);
+      color: var(--text);
       cursor: pointer;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--font-ui);
       font-size: 0.72rem;
       font-weight: 700;
       letter-spacing: 0.07em;
@@ -106,13 +106,13 @@ const Topbar = (() => {
       position: absolute;
       top: calc(100% + 6px);
       right: 0;
-      background: #141414;
-      border: 1px solid #2a2a2a;
-      border-radius: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
       padding: 6px;
       min-width: 190px;
       display: none;
-      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.7);
+      box-shadow: var(--shadow-3);
       z-index: 500;
     }
     #tt-apps-dd.open { display: block; }
@@ -122,16 +122,16 @@ const Topbar = (() => {
       align-items: center;
       gap: 10px;
       padding: 10px 12px;
-      border-radius: 9px;
+      border-radius: var(--radius-sm);
       text-decoration: none;
-      color: #ccc;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: var(--text-muted);
+      font-family: var(--font-ui);
       font-size: 0.86rem;
       font-weight: 600;
       transition: background 0.12s, color 0.12s;
     }
-    .tt-app-item:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
-    .tt-app-item.tt-current { color: #444; pointer-events: none; cursor: default; }
+    .tt-app-item:hover { background: var(--surface-3); color: var(--text); }
+    .tt-app-item.tt-current { color: var(--text-faint); pointer-events: none; cursor: default; }
     .tt-app-item .tt-app-icon { font-size: 1.1rem; width: 24px; text-align: center; flex-shrink: 0; }
   `;
 

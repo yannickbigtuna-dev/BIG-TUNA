@@ -1,0 +1,211 @@
+/* ==========================================================================
+   BIG TUNA — design tokens + base
+   The single source of truth for color, type, spacing, radius, and elevation.
+   Every app links this file and derives its styles from these variables:
+     <link rel="stylesheet" href="/styles/tokens.css">
+   Do not hardcode hex colors, ad-hoc radii, or one-off shadows in an app.
+   Accent is red; neutrals are a dark ramp on near-black.
+   ========================================================================== */
+
+:root {
+  /* ---- Neutral ramp (near-black background up to near-white text) ---- */
+  --bg:            #0a0a0a;  /* page background */
+  --bg-raised:     #111111;  /* sticky bars, footers */
+  --surface:       #161616;  /* cards, panels */
+  --surface-2:     #1e1e1e;  /* inputs, nested surfaces */
+  --surface-3:     #262626;  /* hover fills, chips */
+  --border:        #262626;  /* default hairline */
+  --border-strong: #353535;  /* emphasized divider, input border */
+
+  --text:          #ededed;  /* primary text */
+  --text-muted:    #9a9a9a;  /* secondary text */
+  --text-dim:      #5e5e5e;  /* labels, meta */
+  --text-faint:    #3a3a3a;  /* disabled, watermark */
+
+  /* ---- Accent (red) ---- */
+  --accent:        #ff453a;  /* primary actions, active state, brand */
+  --accent-hover:  #ff6b61;  /* hover on dark (lighter, not darker) */
+  --accent-press:  #d93a31;  /* active/pressed */
+  --accent-soft:   rgba(255, 69, 58, 0.12);  /* tint fills, selected rows */
+  --accent-ring:   rgba(255, 69, 58, 0.45);  /* focus ring */
+  --on-accent:     #ffffff;  /* text/icons on an accent fill */
+
+  /* ---- Semantic (used sparingly; accent already carries "danger") ---- */
+  --success:       #34c759;
+  --warning:       #ff9f0a;
+  --danger:        var(--accent);
+
+  /* ---- Type ---- */
+  --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Consolas, monospace;
+
+  --text-xs:   0.72rem;
+  --text-sm:   0.82rem;
+  --text-base: 0.94rem;
+  --text-lg:   1.10rem;
+  --text-xl:   1.40rem;
+  --text-2xl:  1.85rem;
+  --text-3xl:  2.40rem;
+
+  --weight-regular: 400;
+  --weight-medium:  600;
+  --weight-bold:    700;
+  --weight-black:   900;
+
+  --leading-tight: 1.15;
+  --leading-normal: 1.5;
+  --tracking-label: 0.08em;  /* uppercase labels */
+
+  /* ---- Spacing (4px base grid) ---- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Radius ---- */
+  --radius-sm:   8px;    /* buttons, inputs, small controls */
+  --radius:      12px;   /* default */
+  --radius-lg:   16px;   /* cards, panels, modals */
+  --radius-full: 999px;  /* pills, avatars, toggles */
+
+  /* ---- Elevation (one shadow scale) ---- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.50);
+  --shadow-3: 0 14px 36px rgba(0, 0, 0, 0.62);
+
+  /* ---- Motion ---- */
+  --ease:      cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast:  0.12s;
+  --dur:       0.18s;
+  --dur-slow:  0.30s;
+
+  /* ---- Focus ring (apply to interactive elements) ---- */
+  --ring: 0 0 0 3px var(--accent-ring);
+
+  color-scheme: dark;
+}
+
+/* ---- Reset ---- */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- Typography defaults ---- */
+h1, h2, h3, h4 { line-height: var(--leading-tight); font-weight: var(--weight-bold); }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+code, kbd, samp, pre { font-family: var(--font-mono); }
+
+::selection { background: var(--accent-soft); color: var(--text); }
+
+/* ---- Accessible focus: visible ring only for keyboard users ---- */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Form controls inherit type by default ---- */
+button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled, input:disabled, select:disabled, textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Scrollbars (WebKit) ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: var(--radius-full); border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ==========================================================================
+   Shared primitives — opt-in classes for the common controls.
+   Apps keep their own layout, but use these for buttons/inputs/cards so the
+   interaction language (hover, focus, radius, elevation) stays identical.
+   ========================================================================== */
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+  line-height: 1;
+  white-space: nowrap;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+  touch-action: manipulation;
+}
+.btn:hover { background: var(--surface-3); }
+.btn:active { transform: translateY(1px); }
+
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { background: var(--accent-press); }
+
+.btn-ghost { background: transparent; border-color: var(--border-strong); color: var(--text-muted); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+
+/* Inputs */
+.field {
+  width: 100%;
+  min-height: 38px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.field::placeholder { color: var(--text-dim); }
+.field:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-1);
+}
+
+/* Uppercase meta/label text */
+.label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}

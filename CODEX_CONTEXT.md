@@ -154,6 +154,8 @@ Static serving:
 - Static root is `apps/`.
 - `/` serves `apps/index.html`.
 - `/topbar.js` and `/auth.js` are served from `apps/topbar.js` and `apps/auth.js`.
+- `/styles/tokens.css` is served from `apps/styles/tokens.css` — the shared design-token stylesheet every app links (see Frontend App Conventions).
+- HTML, JS, **and CSS** responses are sent with `Cache-Control: no-cache`.
 - `/favicon.ico` returns HTTP 204 with a short cache lifetime so browser default favicon probes do not create noisy 404s.
 - App URLs are folder-based, for example `/list-maker/` maps to `apps/list-maker/index.html`.
 - HTML and JS responses are sent with `Cache-Control: no-cache`.
@@ -204,15 +206,28 @@ Each app is a standalone HTML file at `apps/{app-id}/index.html`. There is no fr
 Standard app boot pattern:
 
 ```html
-<script src="/topbar.js"></script>
-<script src="/auth.js"></script>
-<script>
-  Topbar.setTitle('My App');
-  Auth.onReady(user => {
-    // Start app here.
-  });
-</script>
+<head>
+  <link rel="stylesheet" href="/styles/tokens.css">
+</head>
+<body>
+  <script src="/topbar.js"></script>
+  <script src="/auth.js"></script>
+  <script>
+    Topbar.setTitle('My App');
+    Auth.onReady(user => {
+      // Start app here.
+    });
+  </script>
+</body>
 ```
+
+Design tokens (`apps/styles/tokens.css`):
+
+- The single source of truth for color, type, spacing, radius, and elevation, plus the CSS reset, accessible focus ring, and opt-in `.btn`/`.field`/`.card` primitives.
+- Every app links it in `<head>` and derives all styling from `var(--…)`. Do **not** hardcode hex colors, ad-hoc border-radii, or one-off box-shadows in an app.
+- The visual language is a dark "instrument panel": near-black surfaces, a single **red** accent (`--accent: #ff453a`), semantic green/amber for success/warning only, monospace (`--font-mono`) for numeric/technical readouts.
+- `topbar.js` and `auth.js` inject their CSS via `var(--…)` too, so they restyle with the tokens. Multiple distinct colors are only acceptable in genuine data visualization (chart series, climbing hold colors, map data) — not as decoration.
+- See `ARCHITECTURE.md` for the full pattern summary and token table.
 
 Shared topbar:
 
@@ -559,6 +574,7 @@ General:
 
 Frontend:
 
+- Link `/styles/tokens.css` in `<head>` and style every element with `var(--…)` tokens — no hardcoded hex, radius, or shadow values. See `ARCHITECTURE.md`.
 - Load `topbar.js` before `auth.js` for authenticated apps.
 - Gate authenticated app startup with `Auth.onReady`.
 - Use `Auth` helpers for per-user settings when possible.
