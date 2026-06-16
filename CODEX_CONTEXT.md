@@ -512,9 +512,9 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Authenticated static app at `/eco-ai/`.
 - Uses `topbar.js` and `auth.js`.
 - Uses `/api/eco-ai/status` to detect whether local Ollama is reachable and which models are installed.
-- Uses `/api/eco-ai/chat` for streaming local chat completions proxied to Ollama.
+- Uses `/api/eco-ai/chat` for streaming local chat completions proxied to Ollama. The stream is newline-delimited JSON and should surface upstream errors plus `done.empty` when Ollama returns no text so the UI never shows an empty assistant response.
 - Persists conversation history in `/api/data/eco-ai` and user preferences in `Auth.saveSettings('eco-ai', ...)`.
-- Supports multiple saved chats, model switching, skill presets (`general`, `coding`, `writing`, `study`, `summarize`, `file-analyst`), and browser-read text/code file attachments that are appended to prompt context.
+- Supports multiple saved chats, simple mode presets (`general`, `coding`, `writing`, `study`, `summarize`, `file-analyst`), shorthand model switching with Auto as the default, and browser-read text/code file attachments that are appended to prompt context.
 - The intended deployment is a local Ollama install on the website host machine. If Ollama is missing or offline, the UI should show a setup/offline message rather than failing silently.
 - `eco-ai-models.txt` is the model maintenance manifest. `maintain-eco-ai-models.ps1` locates Ollama, starts its API if needed, and pulls every nonblank/noncomment model in that manifest. `setup-eco-ai-models.ps1` installs Ollama with `winget` if absent, runs maintenance immediately, and registers a current-user daily 7:00 AM task with missed-start recovery.
 - The current Windows host sets the user environment variable `OLLAMA_LLM_LIBRARY=cpu_avx2`. Ollama 0.30.6 generation crashes against the installed NVIDIA 546.17 driver with `CUDA error: device kernel image is invalid`; keep the CPU override until the GPU driver/runtime combination has been upgraded and validated.

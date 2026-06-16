@@ -1363,11 +1363,15 @@ async function handleAPI(req, res, urlPath) {
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let streamedContent = false;
 
     try {
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) {
+          buffer += decoder.decode();
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
 
         let newlineIndex = buffer.indexOf('\n');
@@ -1381,7 +1385,20 @@ async function handleAPI(req, res, urlPath) {
           try { line = JSON.parse(rawLine); } catch { continue; }
 
           const delta = typeof line?.message?.content === 'string' ? line.message.content : '';
-          if (delta) res.write(JSON.stringify({ type: 'delta', content: delta }) + '\n');
+          if (delta) {
+            streamedContent = true;
+            res.write(JSON.stringify({ type: 'delta', content: delta }) + '\n');
+          }
+
+          if (line?.error) {
+            res.write(JSON.stringify({
+              type: 'error',
+              error: String(line.error),
+            }) + '\n');
+            res.end();
+            timeout.clear();
+            return;
+          }
 
           if (line?.done) {
             res.write(JSON.stringify({
@@ -1389,6 +1406,7 @@ async function handleAPI(req, res, urlPath) {
               doneReason: line.done_reason || '',
               totalDuration: line.total_duration || 0,
               evalCount: line.eval_count || 0,
+              empty: !streamedContent,
             }) + '\n');
             res.end();
             timeout.clear();
@@ -1402,20 +1420,34 @@ async function handleAPI(req, res, urlPath) {
         try {
           const line = JSON.parse(finalChunk);
           const delta = typeof line?.message?.content === 'string' ? line.message.content : '';
-          if (delta) res.write(JSON.stringify({ type: 'delta', content: delta }) + '\n');
+          if (delta) {
+            streamedContent = true;
+            res.write(JSON.stringify({ type: 'delta', content: delta }) + '\n');
+          }
+          if (line?.error) {
+            res.write(JSON.stringify({
+              type: 'error',
+              error: String(line.error),
+            }) + '\n');
+          }
           if (line?.done) {
             res.write(JSON.stringify({
               type: 'done',
               doneReason: line.done_reason || '',
               totalDuration: line.total_duration || 0,
               evalCount: line.eval_count || 0,
+              empty: !streamedContent,
             }) + '\n');
           }
         } catch {}
       }
 
       if (!res.writableEnded) {
-        res.write(JSON.stringify({ type: 'done', doneReason: 'stream-end' }) + '\n');
+        res.write(JSON.stringify({
+          type: 'done',
+          doneReason: 'stream-end',
+          empty: !streamedContent,
+        }) + '\n');
         res.end();
       }
     } catch (error) {
