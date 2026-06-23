@@ -15,4 +15,6 @@ cloudflared-out.log
 
 apps/lights/downloads/package-work/
 apps/lights/downloads/big-tuna-lights-mac.zip
-data/assignments/browser-profile/
+# Assignment coach: per-user Brightspace credentials, browser profiles, and
+# scraped assignment state must never be committed.
+data/assignments/

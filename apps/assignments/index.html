@@ -6,9 +6,7 @@
 <title>Assignment Coach</title>
 <link rel="stylesheet" href="/styles/tokens.css">
 <style>
-  body {
-    min-height: 100vh;
-  }
+  body { min-height: 100vh; }
   main {
     width: min(1120px, 100%);
     margin: 0 auto;
@@ -16,16 +14,13 @@
   }
   .toolbar {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 16px;
   }
-  h1 {
-    margin: 0;
-    font-size: 1.35rem;
-    letter-spacing: 0;
-  }
+  h1 { margin: 0; font-size: 1.35rem; letter-spacing: 0; }
+  h2 { letter-spacing: 0; }
   .muted { color: var(--text-muted); }
   button, .button {
     border: 1px solid var(--border);
@@ -55,40 +50,24 @@
     border-radius: var(--radius-sm);
     background: var(--surface);
   }
-  .metric {
-    padding: 13px;
-    min-height: 76px;
-  }
+  .metric { padding: 13px; min-height: 76px; }
   .metric .label {
     color: var(--text-muted);
     font-size: .74rem;
     text-transform: uppercase;
     letter-spacing: .08em;
   }
-  .metric .value {
-    margin-top: 7px;
-    font-size: 1.25rem;
-    font-weight: 800;
-  }
-  .panel {
-    padding: 14px;
-    margin-bottom: 16px;
-  }
-  .assignment-list {
-    display: grid;
-    gap: 10px;
-  }
-  .assignment {
-    padding: 14px;
+  .metric .value { margin-top: 7px; font-size: 1.25rem; font-weight: 800; }
+  .panel { padding: 14px; margin-bottom: 16px; }
+  .assignment-list { display: grid; gap: 10px; }
+  .assignment { padding: 14px; }
+  .assignment-head {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 12px;
+    align-items: start;
   }
-  .assignment h2 {
-    margin: 0 0 6px;
-    font-size: 1rem;
-    letter-spacing: 0;
-  }
+  .assignment h2 { margin: 0 0 6px; font-size: 1rem; }
   .meta {
     display: flex;
     flex-wrap: wrap;
@@ -112,33 +91,41 @@
   .pill.suppressed { color: var(--text-muted); }
   .pill.completed { color: var(--accent); }
   .error { color: var(--danger); }
-  .action-card {
-    width: min(680px, 100%);
-    margin: 44px auto;
-    padding: 18px;
+  .coaching {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    white-space: pre-wrap;
+    font-size: .9rem;
+    line-height: 1.5;
   }
-  textarea {
+  .coaching summary { cursor: pointer; font-weight: 700; color: var(--text-muted); }
+  .card { width: min(720px, 100%); margin: 24px auto; padding: 18px; }
+  label { display: block; font-weight: 700; margin: 14px 0 6px; font-size: .92rem; }
+  label .hint { font-weight: 400; color: var(--text-muted); font-size: .82rem; }
+  input[type=text], input[type=email], input[type=password], input[type=url], input[type=number], textarea, select {
     width: 100%;
-    min-height: 160px;
-    resize: vertical;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 12px;
+    padding: 11px 12px;
     background: var(--surface-2);
     color: var(--text);
     font: inherit;
-    line-height: 1.4;
   }
-  textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
-  .runs {
-    display: grid;
-    gap: 7px;
-    color: var(--text-muted);
-    font-size: .86rem;
-  }
+  textarea { min-height: 110px; resize: vertical; line-height: 1.4; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+  .check input { width: auto; }
+  .runs { display: grid; gap: 7px; color: var(--text-muted); font-size: .86rem; }
+  .notice { padding: 10px 12px; border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .notice.ok { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+  .notice.bad { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
   @media (max-width: 760px) {
-    .toolbar, .assignment { grid-template-columns: 1fr; display: grid; }
+    .toolbar { grid-template-columns: 1fr; display: grid; }
     .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .row { grid-template-columns: 1fr; }
+    .assignment-head { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -150,31 +137,85 @@
 </script>
 
 <main>
-  <section id="link-action" class="panel action-card" hidden></section>
+  <section id="link-action" class="panel card" hidden></section>
 
-  <section id="dashboard">
+  <!-- Onboarding / settings form -->
+  <section id="setup" class="panel card" hidden>
+    <h1 id="setup-title">Set up your assignment coach</h1>
+    <p class="muted">Your Brightspace login is encrypted and stored privately on the server. Only you can see your assignments and coaching.</p>
+    <div id="setup-notice"></div>
+
+    <label>Brightspace home / landing URL
+      <span class="hint">The page with your course list (e.g. https://school.brightspace.com/d2l/home)</span>
+      <input type="url" id="startUrl" placeholder="https://school.brightspace.com/d2l/home" autocomplete="off">
+    </label>
+    <label>Brightspace login URL <span class="hint">Optional — only if your school uses a separate sign-in page</span>
+      <input type="url" id="loginUrl" placeholder="https://school.brightspace.com/d2l/login" autocomplete="off">
+    </label>
+    <div class="row">
+      <label>Brightspace username
+        <input type="text" id="username" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Brightspace password
+        <input type="password" id="password" autocomplete="new-password" placeholder="(unchanged)">
+      </label>
+    </div>
+    <label>Notification email <span class="hint">Where your morning coaching email is sent</span>
+      <input type="email" id="email" autocomplete="off" spellcheck="false">
+    </label>
+
+    <label>Which courses to track
+      <select id="courseMode">
+        <option value="pinned">Auto: all courses I have pinned in Brightspace</option>
+        <option value="list">Only the specific courses I list below</option>
+      </select>
+    </label>
+    <label id="courses-label" hidden>Course URLs <span class="hint">One per line — the Brightspace home URL of each course</span>
+      <textarea id="courses" placeholder="https://school.brightspace.com/d2l/home/123456"></textarea>
+    </label>
+
+    <div class="row">
+      <label>Due window (days) <span class="hint">Track assignments due within this many days</span>
+        <input type="number" id="dueWindowDays" min="1" max="60" value="7">
+      </label>
+    </div>
+    <div class="check">
+      <input type="checkbox" id="enabled" checked>
+      <label for="enabled" style="margin:0">Send me a coaching email every morning</label>
+    </div>
+
+    <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="primary" id="save-setup">Save &amp; continue</button>
+      <button id="cancel-setup" hidden>Cancel</button>
+    </div>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="dashboard" hidden>
     <div class="toolbar">
       <div>
         <h1>Assignment Coach</h1>
-        <div class="muted">Browser bot checks all Brightspace classes, sends coaching emails, and triages due dates.</div>
+        <div class="muted">Tracks your Brightspace assignments, shows status, and emails coaching every morning.</div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button id="login-browser">Open Brightspace Login</button>
-        <button id="check-now" class="primary">Check Now</button>
+        <button id="edit-setup">Edit setup</button>
+        <button id="email-now">Email me coaching</button>
+        <button id="check-now" class="primary">Check now</button>
       </div>
     </div>
 
+    <div id="dash-notice"></div>
     <div class="status-grid" id="metrics"></div>
 
     <section class="panel">
-      <strong>Configuration</strong>
+      <strong>Status</strong>
       <div id="config" class="meta" style="margin-top:10px"></div>
     </section>
 
     <section class="assignment-list" id="assignments"></section>
 
     <section class="panel" style="margin-top:16px">
-      <strong>Recent Runs</strong>
+      <strong>Recent checks</strong>
       <div class="runs" id="runs" style="margin-top:10px"></div>
     </section>
   </section>
@@ -183,6 +224,7 @@
 <script>
   const params = new URLSearchParams(location.search);
   const pendingAction = {
+    user: params.get('user') || '',
     id: params.get('assignment') || '',
     action: params.get('action') || '',
     expires: params.get('expires') || '',
@@ -190,18 +232,15 @@
   };
 
   const actionEl = document.getElementById('link-action');
+  const setupEl = document.getElementById('setup');
   const dashboardEl = document.getElementById('dashboard');
   const checkBtn = document.getElementById('check-now');
-  const loginBtn = document.getElementById('login-browser');
-  let activity = {};
+  const emailBtn = document.getElementById('email-now');
 
   function escapeHtml(text) {
     return String(text ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   async function api(path, options = {}) {
@@ -213,7 +252,8 @@
     return data;
   }
 
-  async function submitLinkAction(instructions = '') {
+  // ── signed email link landing (yes / no / never) ──────────────────────────
+  function submitLinkAction(instructions = '') {
     return api('/api/assignments/action', {
       method: 'POST',
       body: JSON.stringify({ ...pendingAction, instructions }),
@@ -221,29 +261,27 @@
   }
 
   function renderActionLanding() {
-    if (!pendingAction.id || !pendingAction.action) return false;
-    dashboardEl.hidden = true;
+    if (!pendingAction.id || !pendingAction.action || !pendingAction.user) return false;
     actionEl.hidden = false;
 
     if (pendingAction.action === 'no') {
       actionEl.innerHTML = `
-        <h1>Revise Coaching</h1>
+        <h1>Revise coaching</h1>
         <p class="muted">Add the instructions you want used for another coaching pass.</p>
-        <textarea id="revision-text" placeholder="Add constraints, style preferences, rubric notes, or what was missing."></textarea>
+        <textarea id="revision-text" placeholder="Add constraints, rubric notes, or what was missing."></textarea>
         <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
-          <button class="primary" id="send-revision">Send Revision</button>
+          <button class="primary" id="send-revision">Send revision</button>
           <a class="button" href="/assignments/">Dashboard</a>
         </div>
-        <p id="action-result" class="muted"></p>
-      `;
+        <p id="action-result" class="muted"></p>`;
       document.getElementById('send-revision').addEventListener('click', async () => {
         const btn = document.getElementById('send-revision');
         const result = document.getElementById('action-result');
         btn.disabled = true;
-        result.textContent = 'Sending revision request...';
+        result.textContent = 'Sending revision request…';
         try {
           await submitLinkAction(document.getElementById('revision-text').value);
-          result.textContent = 'Revision request sent. A new coaching email will arrive when it is ready.';
+          result.textContent = 'Revision request sent. A new coaching email will arrive shortly.';
         } catch (err) {
           result.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
           btn.disabled = false;
@@ -252,126 +290,194 @@
       return true;
     }
 
-    const label = pendingAction.action === 'never' ? 'Never Try Again' : 'Mark Reviewed';
-    actionEl.innerHTML = `
-      <h1>${escapeHtml(label)}</h1>
-      <p class="muted">Applying this signed email action.</p>
-      <p id="action-result">Working...</p>
-    `;
+    const label = pendingAction.action === 'never' ? 'Stop tracking' : 'Mark reviewed';
+    actionEl.innerHTML = `<h1>${escapeHtml(label)}</h1><p id="action-result">Working…</p>`;
     submitLinkAction()
-      .then(() => {
-        document.getElementById('action-result').textContent = 'Done. The assignment tracker has been updated.';
-      })
-      .catch(err => {
-        document.getElementById('action-result').innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
-      });
+      .then(() => { document.getElementById('action-result').textContent = 'Done. Your tracker has been updated.'; })
+      .catch(err => { document.getElementById('action-result').innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`; });
     return true;
   }
 
+  // ── setup form ────────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  function toggleCourses() {
+    $('courses-label').hidden = $('courseMode').value !== 'list';
+  }
+  $('courseMode').addEventListener('change', toggleCourses);
+
+  function fillSetup(cfg) {
+    if (!cfg) return;
+    $('startUrl').value = cfg.startUrl || '';
+    $('loginUrl').value = cfg.loginUrl || '';
+    $('username').value = cfg.username || '';
+    $('email').value = cfg.email || '';
+    $('courseMode').value = cfg.courseMode || 'pinned';
+    $('courses').value = (cfg.courses || []).map(c => c.url).join('\n');
+    $('dueWindowDays').value = cfg.dueWindowDays || 7;
+    $('enabled').checked = cfg.enabled !== false;
+    $('password').placeholder = cfg.hasPassword ? '(unchanged — leave blank to keep)' : '';
+    toggleCourses();
+  }
+
+  function showSetup(cfg, { canCancel } = {}) {
+    actionEl.hidden = true;
+    dashboardEl.hidden = true;
+    setupEl.hidden = false;
+    $('setup-title').textContent = cfg ? 'Edit your assignment coach' : 'Set up your assignment coach';
+    $('cancel-setup').hidden = !canCancel;
+    $('setup-notice').innerHTML = '';
+    fillSetup(cfg);
+  }
+
+  $('save-setup').addEventListener('click', async () => {
+    const btn = $('save-setup');
+    const notice = $('setup-notice');
+    btn.disabled = true;
+    notice.innerHTML = '';
+    const payload = {
+      startUrl: $('startUrl').value.trim(),
+      loginUrl: $('loginUrl').value.trim(),
+      username: $('username').value.trim(),
+      password: $('password').value,
+      email: $('email').value.trim(),
+      courseMode: $('courseMode').value,
+      courses: $('courses').value.split('\n').map(s => s.trim()).filter(Boolean),
+      dueWindowDays: Number($('dueWindowDays').value) || 7,
+      enabled: $('enabled').checked,
+    };
+    try {
+      await api('/api/assignments/config', { method: 'POST', body: JSON.stringify(payload) });
+      $('password').value = '';
+      setupEl.hidden = true;
+      await load();
+    } catch (err) {
+      notice.innerHTML = `<div class="notice bad">${escapeHtml(err.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('cancel-setup').addEventListener('click', () => { setupEl.hidden = true; load(); });
+  $('edit-setup').addEventListener('click', async () => {
+    try {
+      const data = await api('/api/assignments/config');
+      showSetup(data.config, { canCancel: true });
+    } catch (err) {
+      showSetup(null, { canCancel: true });
+    }
+  });
+
+  // ── dashboard ─────────────────────────────────────────────────────────────
   function dueLabel(value) {
     if (!value) return 'No due date';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'Unknown due date';
-    return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return 'Unknown due date';
+    return d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
   }
 
   function render(data) {
-    activity = data.activity || {};
-    loginBtn.textContent = activity.loginBrowserOpen ? 'Finish Brightspace Login' : 'Open Brightspace Login';
-    loginBtn.classList.toggle('primary', activity.loginBrowserOpen);
-    checkBtn.disabled = Boolean(activity.checking || activity.loginBrowserOpen);
+    const cfg = data.config;
+    const status = data.status || {};
+
     const counts = data.assignments.reduce((acc, a) => {
       acc.total++;
       acc[a.status] = (acc[a.status] || 0) + 1;
       return acc;
     }, { total: 0 });
-    document.getElementById('metrics').innerHTML = [
-      ['Total', counts.total || 0],
+
+    $('metrics').innerHTML = [
+      ['Tracked', counts.total || 0],
       ['Coached', counts.coached || 0],
-      ['Needs Info', counts['needs-info'] || 0],
+      ['Needs info', counts['needs-info'] || 0],
       ['Completed', counts.completed || 0],
     ].map(([label, value]) => `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`).join('');
 
-    const cfg = data.configured;
-    document.getElementById('config').innerHTML = [
-      `Workflow ${cfg.enabled ? 'enabled' : 'disabled'}`,
-      `Brightspace ${cfg.brightspace ? 'configured' : 'missing'}`,
-      `${cfg.configuredCourses || 0} configured course URL${cfg.configuredCourses === 1 ? '' : 's'}`,
-      `Email ${cfg.email ? 'configured' : 'missing'}`,
-      `OpenAI ${cfg.openai ? cfg.model : 'missing'}`,
-      `${cfg.dueWindowDays} day window`,
-      activity.loginBrowserOpen ? 'Brightspace login browser open' : 'Brightspace login browser closed',
-    ].map(text => `<span class="pill">${escapeHtml(text)}</span>`).join('');
+    $('config').innerHTML = [
+      `Tracking ${cfg && cfg.enabled ? 'on' : 'off'}`,
+      `${cfg ? (cfg.courseMode === 'list' ? `${cfg.courses.length} course${cfg.courses.length === 1 ? '' : 's'}` : 'pinned courses') : 'not set up'}`,
+      `Coaching email ${cfg && cfg.email ? cfg.email : 'not set'}`,
+      `AI ${status.aiReady ? status.model : 'unavailable'}`,
+      `Email delivery ${status.serverEmailReady ? 'ready' : 'unavailable'}`,
+      `${cfg ? cfg.dueWindowDays : 7} day window`,
+      `Daily check ~${String(status.dailyHour ?? 6).padStart(2, '0')}:00`,
+    ].map(t => `<span class="pill">${escapeHtml(t)}</span>`).join('');
 
-    document.getElementById('assignments').innerHTML = data.assignments.length ? data.assignments.map(a => `
+    $('assignments').innerHTML = data.assignments.length ? data.assignments.map(a => `
       <article class="assignment">
-        <div>
-          <h2>${escapeHtml(a.title)}</h2>
-          <div class="meta">
-            <span>${escapeHtml(a.course || 'Brightspace')}</span>
-            <span>Due ${escapeHtml(dueLabel(a.dueAt))}</span>
-            <span>${a.submitted ? 'Submitted' : 'No submission detected'}</span>
-            ${a.sourceUrl ? `<a href="${escapeHtml(a.sourceUrl)}" target="_blank" rel="noreferrer" class="muted">Open</a>` : ''}
+        <div class="assignment-head">
+          <div>
+            <h2>${escapeHtml(a.title)}</h2>
+            <div class="meta">
+              <span>${escapeHtml(a.course || 'Brightspace')}</span>
+              <span>Due ${escapeHtml(dueLabel(a.dueAt))}</span>
+              <span>${a.submitted ? 'Submitted' : 'No submission detected'}</span>
+              ${a.sourceUrl ? `<a href="${escapeHtml(a.sourceUrl)}" target="_blank" rel="noreferrer" class="muted">Open</a>` : ''}
+            </div>
           </div>
+          <div><span class="pill ${escapeHtml(a.status)}">${escapeHtml(a.status)}</span></div>
         </div>
-        <div><span class="pill ${escapeHtml(a.status)}">${escapeHtml(a.status)}</span></div>
-      </article>
-    `).join('') : '<section class="panel muted">No assignments tracked yet.</section>';
+        ${a.coaching ? `<details class="coaching"><summary>Coaching notes</summary>${escapeHtml(a.coaching)}</details>` : ''}
+      </article>`).join('') : '<section class="panel muted">No assignments tracked yet. Run a check to scan Brightspace.</section>';
 
-    document.getElementById('runs').innerHTML = data.runs.length ? data.runs.map(run => {
-      const courses = (run.courses || []).map(course =>
-        `${escapeHtml(course.title)}: ${escapeHtml(course.status)} (${course.assignments || 0} assignments)` +
-        (course.errors?.length ? ` <span class="error">${escapeHtml(course.errors.join('; '))}</span>` : '')
+    $('runs').innerHTML = data.runs.length ? data.runs.map(run => {
+      const courses = (run.courses || []).map(c =>
+        `${escapeHtml(c.title)}: ${escapeHtml(c.status)} (${c.assignments || 0})` +
+        (c.errors && c.errors.length ? ` <span class="error">${escapeHtml(c.errors.join('; '))}</span>` : '')
       ).join('<br>');
       return `<div>${escapeHtml(run.startedAt)} · found ${run.found || 0} · emailed ${run.emailed || 0}` +
-        `${run.errors?.length ? ` · <span class="error">${escapeHtml(run.errors.join('; '))}</span>` : ''}` +
+        `${run.errors && run.errors.length ? ` · <span class="error">${escapeHtml(run.errors.join('; '))}</span>` : ''}` +
         `${courses ? `<div style="margin:5px 0 5px 12px">${courses}</div>` : ''}</div>`;
-    }).join('') : '<div>No runs yet.</div>';
+    }).join('') : '<div>No checks yet.</div>';
+  }
+
+  function notice(msg, kind = 'ok') {
+    $('dash-notice').innerHTML = `<div class="notice ${kind}">${escapeHtml(msg)}</div>`;
   }
 
   async function load() {
-    try {
-      const data = await api('/api/assignments');
-      render(data);
-    } catch (err) {
-      document.getElementById('assignments').innerHTML = `<section class="panel error">${escapeHtml(err.message)}</section>`;
+    const data = await api('/api/assignments');
+    if (!data.status || !data.status.configured) {
+      showSetup(data.config, { canCancel: Boolean(data.config) });
+      return;
     }
+    setupEl.hidden = true;
+    actionEl.hidden = true;
+    dashboardEl.hidden = false;
+    checkBtn.disabled = Boolean(data.activity && data.activity.checking);
+    render(data);
   }
 
   checkBtn.addEventListener('click', async () => {
     checkBtn.disabled = true;
-    checkBtn.textContent = 'Checking...';
+    checkBtn.textContent = 'Checking…';
+    $('dash-notice').innerHTML = '';
     try {
-      await api('/api/assignments/check-now', { method: 'POST', body: '{}' });
+      const r = await api('/api/assignments/check-now', { method: 'POST', body: '{}' });
+      if (r.run && r.run.errors && r.run.errors.length) notice(r.run.errors.join('; '), 'bad');
       await load();
     } catch (err) {
-      document.getElementById('assignments').insertAdjacentHTML('afterbegin', `<section class="panel error">${escapeHtml(err.message)}</section>`);
+      notice(err.message, 'bad');
     } finally {
       checkBtn.disabled = false;
-      checkBtn.textContent = 'Check Now';
+      checkBtn.textContent = 'Check now';
     }
   });
 
-  loginBtn.addEventListener('click', async () => {
-    loginBtn.disabled = true;
-    const closing = Boolean(activity.loginBrowserOpen);
-    loginBtn.textContent = closing ? 'Closing...' : 'Opening...';
+  emailBtn.addEventListener('click', async () => {
+    emailBtn.disabled = true;
+    $('dash-notice').innerHTML = '';
     try {
-      await api('/api/assignments/login-browser', {
-        method: 'POST',
-        body: JSON.stringify({ action: closing ? 'close' : 'open' }),
-      });
-      await load();
+      const r = await api('/api/assignments/email-now', { method: 'POST', body: '{}' });
+      notice(r.emailed ? `Sent coaching for ${r.emailed} assignment(s).` : (r.reason || 'Nothing to send right now.'), 'ok');
     } catch (err) {
-      document.getElementById('assignments').insertAdjacentHTML('afterbegin', `<section class="panel error">${escapeHtml(err.message)}</section>`);
+      notice(err.message, 'bad');
     } finally {
-      loginBtn.disabled = false;
-      loginBtn.textContent = activity.loginBrowserOpen ? 'Finish Brightspace Login' : 'Open Brightspace Login';
+      emailBtn.disabled = false;
     }
   });
 
   if (!renderActionLanding()) {
-    Auth.onReady(() => load());
+    Auth.onReady(() => load().catch(err => notice(err.message, 'bad')));
   }
 </script>
 </body>

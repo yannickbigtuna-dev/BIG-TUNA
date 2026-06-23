@@ -59,7 +59,7 @@ Main server:
 - Module system: CommonJS
 - Dependencies used directly: Node stdlib, `ws`, `node-pty` through `pty-worker.js`, Puppeteer packages for PDF/parsing-related features and Brightspace browser automation.
 - Responsibilities: static file serving from `apps/`, all `/api/*` routes, auth/session management, local file persistence, shared-list Server-Sent Events, web terminal WebSocket upgrades, and the assignment coach scheduler.
-- The assignment coach workflow is loaded from `lib/assignment-coach.js`. It uses Puppeteer, OpenAI Responses API, Resend email, signed action links, and file-backed state under `data/assignments/`.
+- The assignment coach workflow is loaded from `lib/assignment-coach.js`. It is multi-user: each user stores encrypted Brightspace credentials and their own scraped state under `data/assignments/users/{userId}/`. It uses Puppeteer (credential-based headless login + scraping), the Anthropic Messages API (Claude Opus 4.8) for coaching, Resend email, AES-256-GCM credential encryption, signed/per-user action links, and a daily morning scheduler. `data/assignments/` is gitignored (credentials and browser profiles must never be committed).
 
 MCP server:
 
@@ -264,42 +264,54 @@ Current app folders:
 
 ## Assignment Coach
 
-The `/assignments/` app is an admin-only Brightspace assignment coach. It checks Brightspace, tracks assignments due soon with no detected submission, emails coaching notes or missing-info alerts, and handles signed YES/NO/NEVER action links. It must remain an academic-support workflow: summaries, deliverables, outlines, work plans, questions, and quality checklists only. Do not change it into a final-answer generator or automatic coursework submission workflow.
+The `/assignments/` app is a **per-user** Brightspace assignment coach. Every authenticated BIG TUNA user gets a fully isolated workspace — no user can see another user's credentials, assignments, runs, or coaching. There is **no admin role**: each API request is scoped to the authenticated user's own id (`data/assignments/users/{userId}/`). The workflow must remain an academic-support tool: summaries, deliverables, outlines, work plans, questions, and quality checklists only. Do not change it into a final-answer generator or automatic coursework submission workflow.
 
-Brightspace discovery is browser-bot based, not Brightspace API based. The bot opens the Brightspace course selector, checks only courses marked as pinned in that dropdown, including dropdown content rendered inside open `d2l-*` shadow DOM components, and scans only each pinned course's Assignments/Dropbox section. `BRIGHTSPACE_URL` should point at the Brightspace landing/home page where the pinned-course dropdown is available; `BRIGHTSPACE_COURSE_URLS` may provide a fallback start URL but does not override the pinned-only rule. The bot reuses a persistent browser profile and reports `login-required` when its saved session expires. Automated username/password login is not supported.
+### First-run onboarding
 
-Routes:
+On first visit (no saved config) the app shows a setup form collecting: Brightspace home/landing URL, optional login URL, Brightspace username + password, notification email, which courses to track (auto-pinned or an explicit list of course URLs), a due window, and a "send me a coaching email every morning" toggle. The password is encrypted at rest (AES-256-GCM; key from `ASSIGNMENTS_CRYPTO_SECRET` / `MCP_SECRET` / a gitignored `data/assignments/.cryptokey`) and is never returned to the client.
+
+### How it works
+
+- **Login:** the scraper logs into Brightspace headlessly using the user's stored credentials (fills username/password across frames, handles two-step SSO, detects MFA and degrades to a clear `login-required` status). Each user has a persistent browser profile so sessions are reused. Browser launches are serialised (one at a time) to bound server load.
+- **Discovery:** course discovery is browser-bot based. In pinned mode it opens the Brightspace course selector and checks only pinned courses (including `d2l-*` shadow DOM), scanning each course's Assignments/Dropbox section. In list mode it scrapes exactly the course URLs the user configured.
+- **Coaching:** generated with the Anthropic Messages API using Claude Opus 4.8 (`ANTHROPIC_MODEL` override), adaptive thinking, academic-support system prompt.
+- **Email:** a daily morning scheduler (default 06:00 local, `ASSIGNMENTS_DAILY_HOUR`) runs each enabled+configured user's check and emails them one coaching digest covering assignments due within their window, with per-assignment YES / NO / NEVER action links. Links are HMAC-signed **and bound to the user id**, so one user's link can never touch another user's data.
+
+Per-user data layout under `data/assignments/` (whole directory gitignored):
 
 ```text
-GET  /api/assignments
-POST /api/assignments/check-now
-POST /api/assignments/login-browser
-POST /api/assignments/action
+data/assignments/users/{userId}/config.json   (enabled, urls, username, encrypted credential, email, courses, window)
+data/assignments/users/{userId}/state.json    (tracked assignments + run history)
+data/assignments/users/{userId}/profile/       (persistent browser profile)
+data/assignments/scheduler.json                (daily-run bookkeeping)
+data/assignments/.cryptokey                     (generated AES key when no env secret)
 ```
 
-The dashboard's Brightspace login control opens the persistent browser profile visibly on the server machine. After signing in, use Finish Brightspace Login before Check Now so the scraper can safely reuse the profile.
-
-Configuration is environment-based and must not be committed:
+Routes (all require `Authorization: Bearer <token>` except `/action`, which is HMAC-verified):
 
 ```text
-ASSIGNMENTS_ENABLED=1
-ASSIGNMENTS_ADMIN_USER=yannick
+GET    /api/assignments                 dashboard data for the current user
+GET    /api/assignments/config          current user's setup status (no secrets)
+POST   /api/assignments/config          save onboarding / settings
+DELETE /api/assignments/config          wipe the current user's assignment data
+POST   /api/assignments/check-now       manual scrape (body {email:true} also sends the digest)
+POST   /api/assignments/email-now       send the coaching digest from current state
+POST   /api/assignments/action          signed YES/NO/NEVER email-link action (carries user id)
+```
+
+Server configuration is environment-based, shared across users, and must not be committed:
+
+```text
 PUBLIC_BASE_URL=https://yannickmorgans.ca
-BRIGHTSPACE_URL=...
-BRIGHTSPACE_ASSIGNMENTS_URL=...
-BRIGHTSPACE_COURSE_URLS=...
-BRIGHTSPACE_USER_DATA_DIR=...
-BRIGHTSPACE_ASSIGNMENT_SELECTOR=...
-BRIGHTSPACE_COURSE_LINK_PATTERN=...
-BRIGHTSPACE_ASSIGNMENT_PATHS=...
-BRIGHTSPACE_MAX_COURSES=30
-ASSIGNMENTS_DUE_WINDOW_DAYS=7
-ASSIGNMENTS_ACTION_SECRET=...
-OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-5.2
+ASSIGNMENTS_DAILY_HOUR=6
+ASSIGNMENTS_CRYPTO_SECRET=...        # AES key material for stored credentials (falls back to MCP_SECRET / keyfile)
+ASSIGNMENTS_ACTION_SECRET=...        # HMAC secret for action links (falls back to MCP_SECRET / keyfile)
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-opus-4-8
 RESEND_API_KEY=...
-ASSIGNMENTS_FROM_EMAIL=...
-ASSIGNMENTS_TO_EMAIL=...
+ASSIGNMENTS_FROM_EMAIL=...           # verified Resend sender (recipient is each user's own email)
+BRIGHTSPACE_MAX_COURSES=30           # optional scraper tuning
+BRIGHTSPACE_SETTLE_MS / BRIGHTSPACE_INITIAL_SETTLE_MS / BRIGHTSPACE_HEADLESS / BRIGHTSPACE_ASSIGNMENT_SELECTOR / BRIGHTSPACE_COURSE_LINK_PATTERN / BRIGHTSPACE_ASSIGNMENT_PATHS  # optional
 ```
 
 Desktop app source:
@@ -365,8 +377,12 @@ data/lights/device-status.json
 data/radar/yhz-YYYY-MM-DD.json
   Daily Halifax local-time set of unique ADSB aircraft IDs seen by the public YHZ radar endpoint, stored as a JSON array.
 
-data/assignments/state.json
-  Assignment coach state: tracked Brightspace assignments, attempts, statuses, and recent run summaries. Browser profile data may also live under `data/assignments/browser-profile/` when configured.
+data/assignments/users/{userId}/config.json
+  Per-user assignment coach config: enabled flag, Brightspace URLs, username, AES-256-GCM-encrypted password, notification email, course list/mode, due window. Never committed (the whole data/assignments/ tree is gitignored).
+data/assignments/users/{userId}/state.json
+  Per-user tracked assignments, attempts/coaching, statuses, and recent run summaries.
+data/assignments/users/{userId}/profile/
+  Per-user persistent Brightspace browser profile (session reuse).
 ```
 
 Legacy migrations exist in `server.js` for older `data/settings.json` and single-file climbs. Do not remove migration code unless all production data has been verified and backed up.
@@ -385,10 +401,13 @@ GET/POST /api/data/:appId
 Assignment coach:
 
 ```text
-GET  /api/assignments
-POST /api/assignments/check-now
-POST /api/assignments/login-browser
-POST /api/assignments/action
+GET    /api/assignments
+GET    /api/assignments/config
+POST   /api/assignments/config
+DELETE /api/assignments/config
+POST   /api/assignments/check-now
+POST   /api/assignments/email-now
+POST   /api/assignments/action
 ```
 
 Climbs v1:

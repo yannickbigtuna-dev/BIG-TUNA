@@ -1475,46 +1475,68 @@ async function handleAPI(req, res, urlPath) {
     return;
   }
 
-  // GET /api/assignments - admin-only Brightspace assignment coach dashboard data
+  // GET /api/assignments - per-user assignment coach dashboard data
   if (req.method === 'GET' && urlPath === '/api/assignments') {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
-    if (!assignmentCoach.isAdmin(user)) return jsonRes(res, 403, { error: 'Forbidden' });
-    return jsonRes(res, 200, assignmentCoach.listAssignments());
+    return jsonRes(res, 200, assignmentCoach.listAssignments(user.id));
   }
 
-  // POST /api/assignments/check-now - admin-only manual Brightspace check
+  // GET /api/assignments/config - this user's setup status (no secrets)
+  if (req.method === 'GET' && urlPath === '/api/assignments/config') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    return jsonRes(res, 200, {
+      config: assignmentCoach.publicConfig(assignmentCoach.readConfig(user.id)),
+      status: assignmentCoach.listAssignments(user.id).status,
+    });
+  }
+
+  // POST /api/assignments/config - save onboarding / settings for this user
+  if (req.method === 'POST' && urlPath === '/api/assignments/config') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    const body = await parseBody(req);
+    const result = assignmentCoach.saveConfig(user.id, body, {});
+    return jsonRes(res, result.ok ? 200 : (result.status || 400), result);
+  }
+
+  // DELETE /api/assignments/config - wipe this user's assignment data
+  if (req.method === 'DELETE' && urlPath === '/api/assignments/config') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    return jsonRes(res, 200, assignmentCoach.deleteUserData(user.id));
+  }
+
+  // POST /api/assignments/check-now - manual check for this user (optionally emails the digest)
   if (req.method === 'POST' && urlPath === '/api/assignments/check-now') {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
-    if (!assignmentCoach.isAdmin(user)) return jsonRes(res, 403, { error: 'Forbidden' });
-    const result = await assignmentCoach.runCheck({ manual: true });
-    return jsonRes(res, result.ok ? 200 : 500, result);
-  }
-
-  // POST /api/assignments/login-browser - open/close persistent Brightspace login browser
-  if (req.method === 'POST' && urlPath === '/api/assignments/login-browser') {
-    const user = getSessionUser(getToken(req));
-    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
-    if (!assignmentCoach.isAdmin(user)) return jsonRes(res, 403, { error: 'Forbidden' });
     const body = await parseBody(req);
-    const result = body.action === 'close'
-      ? await assignmentCoach.closeLoginBrowser()
-      : await assignmentCoach.openLoginBrowser();
+    const result = await assignmentCoach.runCheck(user.id, { manual: true, sendDigest: Boolean(body.email) });
     return jsonRes(res, result.ok ? 200 : (result.status || 500), result);
   }
 
-  // POST /api/assignments/action - signed email-link action endpoint
+  // POST /api/assignments/email-now - send the coaching digest to this user from current state
+  if (req.method === 'POST' && urlPath === '/api/assignments/email-now') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    const result = await assignmentCoach.emailNow(user.id);
+    return jsonRes(res, result.ok ? 200 : (result.status || 500), result);
+  }
+
+  // POST /api/assignments/action - signed email-link action endpoint (bound to a userId)
   if (req.method === 'POST' && urlPath === '/api/assignments/action') {
     const body = await parseBody(req);
+    const userId = typeof body.user === 'string' ? body.user : '';
     const id = typeof body.id === 'string' ? body.id : '';
     const action = typeof body.action === 'string' ? body.action : '';
     const expires = typeof body.expires === 'string' || typeof body.expires === 'number' ? body.expires : '';
     const sig = typeof body.sig === 'string' ? body.sig : '';
-    if (!assignmentCoach.verifyAction({ id, action, expires, sig })) {
+    if (!assignmentCoach.verifyAction({ userId, id, action, expires, sig })) {
       return jsonRes(res, 403, { error: 'Invalid or expired action link' });
     }
-    const result = await assignmentCoach.handleAction({ id, action, instructions: body.instructions });
+    const result = await assignmentCoach.handleAction({ userId, id, action, instructions: body.instructions });
     return jsonRes(res, result.ok ? 200 : (result.status || 400), result);
   }
 

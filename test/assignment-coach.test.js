@@ -5,6 +5,11 @@ const os = require('node:os');
 const fs = require('node:fs');
 const path = require('node:path');
 
+process.env.ASSIGNMENTS_CRYPTO_SECRET = process.env.ASSIGNMENTS_CRYPTO_SECRET || 'test-crypto-secret';
+process.env.ASSIGNMENTS_ACTION_SECRET = process.env.ASSIGNMENTS_ACTION_SECRET || 'test-action-secret';
+process.env.BRIGHTSPACE_INITIAL_SETTLE_MS = process.env.BRIGHTSPACE_INITIAL_SETTLE_MS || '1';
+process.env.BRIGHTSPACE_SETTLE_MS = process.env.BRIGHTSPACE_SETTLE_MS || '1';
+
 const { _test } = require('../lib/assignment-coach');
 
 test('configured course URLs are validated and deduplicated', () => {
@@ -17,6 +22,48 @@ test('configured course URLs are validated and deduplicated', () => {
     'https://school.example/d2l/home/123',
     'https://school.example/d2l/home/456',
   ]);
+});
+
+test('parseCourses validates, dedupes, and labels course entries', () => {
+  const courses = _test.parseCourses([
+    'https://school.example/d2l/home/123',
+    { name: 'Chem', url: 'https://school.example/d2l/home/456' },
+    'javascript:alert(1)',
+    'https://school.example/d2l/home/123',
+  ]);
+  assert.equal(courses.length, 2);
+  assert.equal(courses[0].url, 'https://school.example/d2l/home/123');
+  assert.equal(courses[1].name, 'Chem');
+});
+
+test('encrypts and decrypts a stored secret', () => {
+  const blob = _test.encryptSecret('hunter2');
+  assert.notEqual(blob.data, 'hunter2');
+  assert.ok(blob.iv && blob.tag && blob.data);
+  assert.equal(_test.decryptSecret(blob), 'hunter2');
+  assert.equal(_test.decryptSecret(null), '');
+  assert.equal(_test.decryptSecret({ iv: 'x', tag: 'y', data: 'z' }), '');
+});
+
+test('public config never leaks the encrypted credential', () => {
+  const cfg = {
+    enabled: true, startUrl: 'https://s.example/d2l/home', username: 'me',
+    credential: _test.encryptSecret('secret'), email: 'me@example.com',
+    courseMode: 'pinned', courses: [], dueWindowDays: 7,
+  };
+  const pub = _test.publicConfig(cfg);
+  assert.equal(pub.hasPassword, true);
+  assert.equal(pub.credential, undefined);
+  assert.equal(JSON.stringify(pub).includes('secret'), false);
+});
+
+test('action links are signed per user and reject cross-user use', () => {
+  const expires = Date.now() + 60000;
+  const sig = _test.signAction('userA', 'assign1', 'yes', expires);
+  assert.equal(_test.verifyAction({ userId: 'userA', id: 'assign1', action: 'yes', expires, sig }), true);
+  assert.equal(_test.verifyAction({ userId: 'userB', id: 'assign1', action: 'yes', expires, sig }), false);
+  assert.equal(_test.verifyAction({ userId: 'userA', id: 'assign1', action: 'never', expires, sig }), false);
+  assert.equal(_test.verifyAction({ userId: 'userA', id: 'assign1', action: 'yes', expires: Date.now() - 1, sig }), false);
 });
 
 test('extracts common Brightspace due dates', () => {
@@ -37,13 +84,13 @@ test('extracts clean assignment titles from row text', () => {
   assert.equal(_test.extractTitle('Lab Report due date June 15, 2026 Status not submitted', 'fallback'), 'Lab Report');
 });
 
-test('recognizes an expired saved Brightspace session', () => {
+test('recognizes a Brightspace sign-in page', () => {
   assert.match(_test.loginPageReason({
     url: 'https://school.example/login',
     title: 'Sign In',
     bodyText: 'Enter your credentials',
     hasPassword: true,
-  }), /saved session expired/i);
+  }), /sign[- ]?in is required/i);
   assert.equal(_test.loginPageReason({
     url: 'https://school.example/d2l/home/123',
     title: 'Course Home',
@@ -51,10 +98,15 @@ test('recognizes an expired saved Brightspace session', () => {
   }), '');
 });
 
-test('replaces legacy clickable-node failures with saved-session instructions', () => {
+test('detects MFA / two-factor pages', () => {
+  assert.match(_test.mfaReason('Enter the verification code we sent to your phone'), /two-factor|mfa/i);
+  assert.equal(_test.mfaReason('Course home page'), '');
+});
+
+test('reports blocked automated interaction clearly', () => {
   assert.match(
     _test.browserErrorMessage(new Error('Node is either not clickable or not an Element')),
-    /automated clicking is disabled/i
+    /blocked automated interaction/i
   );
 });
 
@@ -120,25 +172,11 @@ test('checks only pinned courses and their assignment sections', async t => {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'assignment-coach-test-'));
   t.after(() => fs.rmSync(profile, { recursive: true, force: true }));
 
-  const previous = {};
-  const env = {
-    BRIGHTSPACE_URL: `http://127.0.0.1:${server.address().port}/`,
-    BRIGHTSPACE_USER_DATA_DIR: profile,
-    BRIGHTSPACE_INITIAL_SETTLE_MS: '1',
-    BRIGHTSPACE_SETTLE_MS: '1',
-  };
-  for (const [key, value] of Object.entries(env)) {
-    previous[key] = process.env[key];
-    process.env[key] = value;
-  }
-  t.after(() => {
-    for (const key of Object.keys(env)) {
-      if (previous[key] === undefined) delete process.env[key];
-      else process.env[key] = previous[key];
-    }
+  const result = await _test.scrapeBrightspace({
+    startUrl: `http://127.0.0.1:${server.address().port}/`,
+    profileDir: profile,
+    courseMode: 'pinned',
   });
-
-  const result = await _test.scrapeBrightspace();
   assert.equal(result.courses.length, 1);
   assert.equal(result.courses[0].status, 'ok');
   assert.equal(result.assignments.length, 1);
