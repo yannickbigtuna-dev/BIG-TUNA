@@ -16,6 +16,9 @@ cloudflared-out.log
 
 apps/lights/downloads/package-work/
 apps/lights/downloads/big-tuna-lights-mac.zip
-# Assignment coach: per-user Brightspace credentials, browser profiles, and
-# scraped assignment state must never be committed.
-data/assignments/
+# Runtime state — the server rewrites these constantly. Tracking them in git
+# keeps the live server's working tree permanently "dirty", which silently
+# blocks `git pull` in auto-update.ps1. Keep all of data/ out of git (back it up
+# separately). This also covers per-user Brightspace credentials and browser
+# profiles under data/assignments/, which must never be committed.
+data/
