@@ -87,7 +87,7 @@ Write-Host '=== BIG TUNA startup ==='
 Write-Host ''
 
 Start-OllamaApiIfNeeded
-Invoke-Pm2App -Name 'apps-server' -StartArgs @('start', 'C:\SERVER\server.js', '--name', 'apps-server', '--watch', 'false')
+Invoke-Pm2App -Name 'apps-server' -StartArgs @('start', 'C:\SERVER\ecosystem.config.cjs', '--update-env')
 Invoke-Pm2App -Name 'mcp-server' -StartArgs @('start', 'C:\SERVER\mcp-server\ecosystem.config.cjs')
 
 Write-Host 'Saving PM2 process list'
