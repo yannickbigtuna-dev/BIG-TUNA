@@ -13,7 +13,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: calc(env(safe-area-inset-top, 0px) + 92px) 20px calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding: calc(env(safe-area-inset-top, 0px) + 96px) 20px calc(env(safe-area-inset-bottom, 0px) + 112px);
     text-align: center;
     position: relative;
     overflow-x: hidden;
@@ -65,84 +65,87 @@
   }
   #temp-widget:hover { transform: translateY(-1px); background: rgba(255,255,255,0.05); }
   #temp-value { font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--text); line-height: 1; letter-spacing: -0.02em; }
-  #temp-label { font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 3px; opacity: 0.7; }
+  #temp-label { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-dim); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 4px; opacity: 0.7; }
 
   #nav-divider { width: 1px; height: 30px; background: var(--glass-border); }
 
   #nav-clock-wrap { display: flex; flex-direction: column; align-items: flex-start; }
-  #nav-clock { font-family: var(--font-mono); font-size: var(--text-base); color: var(--accent); font-weight: var(--weight-medium); line-height: 1; letter-spacing: 0.02em; }
-  #nav-tz { font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 4px; opacity: 0.7; }
+  #nav-clock { font-family: var(--font-mono); font-size: var(--text-base); color: var(--accent); font-weight: var(--weight-medium); line-height: 1; letter-spacing: 0.04em; }
+  #nav-tz { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-dim); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 5px; opacity: 0.7; }
 
   /* ── Centerpiece ── */
   .stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%; }
 
-  .logo {
-    font-size: clamp(3.2rem, 13vw, 6.5rem);
-    font-weight: var(--weight-black);
-    letter-spacing: -0.045em;
-    line-height: 1;
-    color: var(--accent);
+  .date-display {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    letter-spacing: 0.4em;
     text-transform: uppercase;
-    text-shadow: 0 0 40px var(--accent-glow);
-    margin-bottom: 14px;
-    user-select: none;
+    opacity: 0.85;
+    margin-bottom: clamp(8px, 1.6vh, 16px);
+    padding-left: 0.4em; /* optical balance for tracking */
   }
 
-  .date-display {
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    letter-spacing: 0.3em;
+  .logo {
+    font-size: clamp(3.6rem, 15vw, 8rem);
+    font-weight: var(--weight-black);
+    letter-spacing: -0.05em;
+    line-height: 0.92;
+    color: var(--accent);
     text-transform: uppercase;
-    margin-bottom: clamp(18px, 4vh, 30px);
+    text-shadow: 0 0 60px var(--accent-glow), 0 0 24px color-mix(in srgb, var(--accent) 40%, transparent);
+    margin-bottom: clamp(22px, 5vh, 46px);
+    user-select: none;
   }
 
   /* ── Segment clock ── */
   .clock-digital {
     display: flex;
     align-items: center;
-    gap: clamp(5px, 1.4vw, 10px);
+    gap: clamp(6px, 1.6vw, 12px);
     margin-bottom: clamp(28px, 7vh, 56px);
     user-select: none;
   }
   .digit-slot {
     position: relative;
-    width: clamp(40px, 8vw, 58px);
-    height: clamp(58px, 12vw, 86px);
-    background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+    width: clamp(44px, 8.4vw, 70px);
+    height: clamp(62px, 12.4vw, 100px);
+    background: linear-gradient(180deg, #1a1a1a 0%, #0b0b0b 100%);
     border-radius: var(--radius);
     border: 1px solid var(--glass-border);
     overflow: hidden;
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.6), var(--shadow-1);
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.65), var(--shadow-1);
   }
-  .digit-slot.sec { border-color: var(--accent-ring); }
+  .digit-slot.sec { border-color: var(--accent-ring); box-shadow: inset 0 2px 8px rgba(0,0,0,0.65), 0 0 24px color-mix(in srgb, var(--accent) 16%, transparent); }
   .digit-val {
     position: absolute;
     width: 100%;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: clamp(30px, 6.4vw, 46px);
+    font-size: clamp(34px, 6.8vw, 56px);
     font-weight: var(--weight-bold);
-    line-height: clamp(58px, 12vw, 86px);
+    line-height: clamp(62px, 12.4vw, 100px);
     color: var(--text);
     letter-spacing: -0.02em;
   }
-  .digit-slot.sec .digit-val { color: var(--accent); text-shadow: 0 0 16px var(--accent-glow); }
+  .digit-slot.sec .digit-val { color: var(--accent); text-shadow: 0 0 18px var(--accent-glow); }
 
   @keyframes roll-out-up { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-115%); opacity: 0; } }
   @keyframes roll-in-up  { 0% { transform: translateY(115%); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
   .digit-val.leaving  { animation: roll-out-up 0.28s var(--ease) forwards; }
   .digit-val.arriving { animation: roll-in-up  0.28s var(--ease) forwards; }
 
-  .clock-sep { font-family: var(--font-mono); font-size: clamp(24px, 5vw, 38px); font-weight: 300; color: var(--text-faint); padding-bottom: 4px; flex-shrink: 0; }
+  .clock-sep { font-family: var(--font-mono); font-size: clamp(28px, 5.4vw, 44px); font-weight: 300; color: var(--text-faint); padding-bottom: 6px; flex-shrink: 0; }
   .clock-sep.sec-sep { color: var(--accent); opacity: 0.5; }
 
   /* ── Rainbow app grid ── */
   .grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: clamp(12px, 1.6vw, 20px);
+    gap: clamp(12px, 1.6vw, 22px);
     width: 100%;
-    max-width: 920px;
+    max-width: 960px;
   }
   .card {
     position: relative;
@@ -164,10 +167,10 @@
     transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
   }
   .card:hover {
-    transform: translateY(-5px);
-    background: rgba(26, 26, 26, 0.85);
-    border-color: color-mix(in srgb, var(--tile) 50%, transparent);
-    box-shadow: 0 16px 34px -12px color-mix(in srgb, var(--tile) 28%, transparent);
+    transform: translateY(-8px);
+    background: rgba(255, 255, 255, 0.07);
+    border-color: color-mix(in srgb, var(--tile) 55%, transparent);
+    box-shadow: 0 18px 38px -12px color-mix(in srgb, var(--tile) 32%, transparent);
   }
   .card:focus-visible { outline: none; border-color: var(--tile); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tile) 45%, transparent); }
   .card .icon {
@@ -176,67 +179,87 @@
     border-radius: var(--radius-lg);
     display: grid;
     place-items: center;
-    background: color-mix(in srgb, var(--tile) 12%, transparent);
+    background: color-mix(in srgb, var(--tile) 14%, transparent);
     color: var(--tile);
-    transition: transform var(--dur) var(--ease);
+    transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
   }
-  .card:hover .icon { transform: scale(1.1); }
+  .card:hover .icon { transform: scale(1.1); box-shadow: 0 0 22px -4px color-mix(in srgb, var(--tile) 45%, transparent); }
   .card .icon svg { width: clamp(26px, 3vw, 34px); height: clamp(26px, 3vw, 34px); }
   .card .name {
-    font-size: var(--text-sm);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
     font-weight: var(--weight-medium);
-    letter-spacing: 0.01em;
-    line-height: 1.18;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.2;
+    color: var(--text-muted);
     transition: color var(--dur) var(--ease);
   }
   .card:hover .name { color: var(--tile); }
 
-  /* ── Glass bottom nav ── */
+  /* ── Floating glass dock (bottom) ── */
   #botnav {
     position: fixed;
     bottom: 0; left: 0; right: 0;
     z-index: 50;
     display: flex;
+    justify-content: center;
+    padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
+    pointer-events: none;
+  }
+  .dock {
+    pointer-events: auto;
+    display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px clamp(14px, 4vw, 40px) calc(env(safe-area-inset-bottom, 0px) + 12px);
+    gap: 5px;
+    padding: 7px;
     background: var(--glass-strong);
     backdrop-filter: var(--blur);
     -webkit-backdrop-filter: var(--blur);
-    border-top: 1px solid var(--glass-border);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-3);
   }
-  .nav-pill {
+  .dock-btn {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
+    gap: 8px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
     color: var(--text-muted);
-    padding: 9px 14px;
-    font-size: var(--text-xs);
-    font-weight: var(--weight-bold);
-    letter-spacing: 0.1em;
+    padding: 10px 18px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: var(--weight-medium);
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     text-decoration: none;
-    transition: background var(--dur), color var(--dur), border-color var(--dur), transform var(--dur-fast);
+    transition: background var(--dur), color var(--dur), transform var(--dur-fast);
     user-select: none;
   }
-  .nav-pill:hover, .nav-pill:focus-visible { background: rgba(255,255,255,0.10); color: var(--text); outline: none; }
-  .nav-pill:active { transform: scale(0.96); }
-  .nav-pill svg.ic { width: 18px; height: 18px; }
+  .dock-btn:hover, .dock-btn:focus-visible { background: rgba(255,255,255,0.08); color: var(--text); outline: none; }
+  .dock-btn:active { transform: scale(0.95); }
+  .dock-btn svg.ic { width: 17px; height: 17px; }
 
-  #botnav-right { display: flex; align-items: center; gap: 10px; position: relative; }
+  /* MIN = primary coral pill */
+  #minimal-pill {
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  #minimal-pill:hover, #minimal-pill:focus-visible { background: var(--accent-hover); color: var(--on-accent); }
 
-  #lights-btn { color: var(--text-muted); padding: 9px 11px; }
-  #lights-btn:hover { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, transparent); box-shadow: 0 0 18px color-mix(in srgb, var(--warning) 14%, transparent); }
+  #lights-btn { padding: 10px 14px; }
+  #lights-btn:hover { color: var(--warning); }
 
+  #downloads-menu { position: relative; }
   #downloads-list {
     position: absolute;
-    right: 0;
-    bottom: calc(100% + 10px);
-    min-width: 184px;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(100% + 12px);
+    min-width: 188px;
     display: none;
     padding: 7px;
     background: var(--surface);
@@ -248,7 +271,7 @@
   #downloads-menu.is-open #downloads-list { display: grid; gap: 4px; }
   .download-item {
     display: block;
-    padding: 9px 11px;
+    padding: 9px 12px;
     border-radius: var(--radius-sm);
     color: var(--text-muted);
     font-size: 0.78rem;
@@ -262,28 +285,29 @@
   body.minimal-mode { justify-content: center; }
   body.minimal-mode #topnav,
   body.minimal-mode .grid,
-  body.minimal-mode #downloads-menu { display: none !important; }
-  body.minimal-mode .logo { font-size: clamp(4rem, 16vw, 8rem); margin-bottom: 16px; }
+  body.minimal-mode #downloads-menu,
+  body.minimal-mode #lights-btn { display: none !important; }
+  body.minimal-mode .logo { font-size: clamp(4.4rem, 17vw, 9rem); margin-bottom: 18px; }
   body.minimal-mode .clock-digital { margin-bottom: 0; }
 
   @media (max-width: 820px) {
     .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 560px; }
   }
   @media (max-width: 600px) {
-    body { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top, 0px) + 78px); }
+    body { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top, 0px) + 80px); }
     #nav-divider, #nav-clock-wrap { display: none; }
-    .logo { font-size: clamp(2.8rem, 15vw, 3.6rem); margin-bottom: 8px; }
-    .date-display { font-size: 0.66rem; letter-spacing: 0.24em; margin-bottom: 14px; }
-    .clock-digital { gap: 4px; margin-bottom: 22px; }
-    .digit-slot { width: clamp(30px, 11vw, 42px); height: clamp(44px, 16vw, 60px); border-radius: 10px; }
-    .digit-val { font-size: clamp(22px, 8vw, 30px); line-height: clamp(44px, 16vw, 60px); }
-    .clock-sep { font-size: 1.4rem; }
+    .date-display { font-size: 0.64rem; letter-spacing: 0.3em; margin-bottom: 8px; }
+    .logo { font-size: clamp(3rem, 16vw, 4rem); margin-bottom: 14px; }
+    .clock-digital { gap: 5px; margin-bottom: 24px; }
+    .digit-slot { width: clamp(32px, 11.5vw, 46px); height: clamp(46px, 17vw, 64px); border-radius: 11px; }
+    .digit-val { font-size: clamp(24px, 8.5vw, 32px); line-height: clamp(46px, 17vw, 64px); }
+    .clock-sep { font-size: 1.5rem; }
     .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; max-width: 420px; }
     .card { border-radius: var(--radius-lg); gap: 8px; }
-    .card .name { font-size: 0.7rem; }
-    .nav-pill span { display: none; }
-    .nav-pill { padding: 10px; }
+    .dock-btn span { display: none; }
+    .dock-btn { padding: 11px; }
     #minimal-pill span { display: inline; }
+    #minimal-pill { padding: 11px 16px; }
   }
 </style>
 </head>
@@ -308,8 +332,8 @@
 </nav>
 
 <main class="stage">
-  <div class="logo">BIG TUNA</div>
   <div class="date-display" id="date-display"></div>
+  <div class="logo">BIG TUNA</div>
 
   <!-- Segment clock -->
   <div class="clock-digital" id="clock">
@@ -368,16 +392,16 @@
   </div>
 </main>
 
-<!-- Glass bottom nav -->
+<!-- Floating glass dock -->
 <nav id="botnav">
-  <button id="minimal-pill" class="nav-pill" type="button" aria-label="Enter minimal mode" aria-pressed="false">
-    <svg class="ic" id="minimal-icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-    <span id="minimal-label">Min</span>
-  </button>
+  <div class="dock">
+    <button id="minimal-pill" class="dock-btn" type="button" aria-label="Enter minimal mode" aria-pressed="false">
+      <svg class="ic" id="minimal-icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      <span id="minimal-label">Min</span>
+    </button>
 
-  <div id="botnav-right">
-    <div id="downloads-menu" style="position: static;">
-      <button id="downloads-btn" class="nav-pill" type="button" aria-haspopup="true" aria-expanded="false">
+    <div id="downloads-menu">
+      <button id="downloads-btn" class="dock-btn" type="button" aria-haspopup="true" aria-expanded="false">
         <svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
         <span>Downloads</span>
       </button>
@@ -387,7 +411,8 @@
         <a class="download-item" role="menuitem" href="https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/codex-mac-latest/big-tuna-codex-mac.zip">Codex app</a>
       </div>
     </div>
-    <a href="/lights/" id="lights-btn" class="nav-pill" aria-label="Lights">
+
+    <a href="/lights/" id="lights-btn" class="dock-btn" aria-label="Lights">
       <svg class="ic" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
     </a>
   </div>

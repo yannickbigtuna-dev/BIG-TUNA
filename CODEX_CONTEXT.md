@@ -245,10 +245,12 @@ Homepage:
 
 - File: `apps/index.html`
 - Custom launcher page with clock, weather/temperature widget, and app cards.
-- The current launcher uses a glass top nav, glass bottom nav, a rainbow-tinted app grid, and a pointer-following ambient background on fine-pointer devices.
-- Has a persisted minimal mode toggled by the bottom-left button; minimal mode hides homepage chrome, app cards, and downloads menu, leaving BIG TUNA, date, clock, lights link, and the exit button.
-- Minimal mode is toggled from the bottom nav in the current layout.
-- The bottom-right homepage downloads menu lists release-asset downloads for the Lights app, Weather app, and the BIG TUNA Codex macOS launcher.
+- The launcher uses a glass top nav, a centered floating glass dock at the bottom, a rainbow-tinted app grid, and a pointer-following ambient background on fine-pointer devices.
+- Hero layout (top to bottom): the uppercase date line, the large glowing coral "BIG TUNA" wordmark, then a digit-slot clock (HH:MM:SS) whose seconds digits glow coral and whose digits roll on change. App labels are uppercase Geist Mono.
+- The bottom floating dock groups three controls in one glass capsule: a coral primary MIN pill (minimal mode), a DOWNLOADS pill, and an icon-only lights link. The downloads menu pops upward from the dock.
+- The visual direction was generated with the Stitch design MCP; the reference screenshot is saved at `docs/design/homepage-stitch-reference.png`. The page is hand-rebuilt natively (no Tailwind/CDN) on `/styles/tokens.css` so all live behaviour and conventions are preserved.
+- Has a persisted minimal mode toggled by the dock's MIN pill; minimal mode hides homepage chrome, app cards, downloads menu, and lights link, leaving BIG TUNA, date, clock, and the exit (MIN) button.
+- The dock's downloads menu lists release-asset downloads for the Lights app, Weather app, and the BIG TUNA Codex macOS launcher.
 - The top-right homepage weather widget links to `/weather/` and displays Open-Meteo apparent temperature. It tries browser geolocation first and falls back to Halifax coordinates (`44.6488,-63.5752`) when geolocation is denied, unavailable, times out, or the first weather request fails.
 - Adding an app may require updating both homepage cards and `topbar.js`, even though the static server can auto-index folders.
 
