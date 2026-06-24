@@ -244,13 +244,15 @@ Shared topbar:
 Homepage:
 
 - File: `apps/index.html`
-- Custom launcher page with clock, weather/temperature widget, and app cards.
-- The launcher uses a glass top nav, a centered floating glass dock at the bottom, a rainbow-tinted app grid, and a pointer-following ambient background on fine-pointer devices.
-- Hero layout (top to bottom): the uppercase date line, the large glowing coral "BIG TUNA" wordmark, then a digit-slot clock (HH:MM:SS) whose seconds digits glow coral and whose digits roll on change. App labels are uppercase Geist Mono.
-- The bottom floating dock groups three controls in one glass capsule: a coral primary MIN pill (minimal mode), a DOWNLOADS pill, and an icon-only lights link. The downloads menu pops upward from the dock.
-- The visual direction was generated with the Stitch design MCP; the reference screenshot is saved at `docs/design/homepage-stitch-reference.png`. The page is hand-rebuilt natively (no Tailwind/CDN) on `/styles/tokens.css` so all live behaviour and conventions are preserved.
-- Has a persisted minimal mode toggled by the dock's MIN pill; minimal mode hides homepage chrome, app cards, downloads menu, and lights link, leaving BIG TUNA, date, clock, and the exit (MIN) button.
-- The dock's downloads menu lists release-asset downloads for the Lights app, Weather app, and the BIG TUNA Codex macOS launcher.
+- Custom launcher page with clock, weather/temperature widget, an Ask Emma assistant bar, and app cards.
+- The launcher uses a glass top nav, a 3-column rainbow-tinted app grid, bottom-right corner utility buttons, and a pointer-following ambient background on fine-pointer devices.
+- Hero layout (top to bottom): the large glowing coral "BIG TUNA" wordmark, the uppercase date line, then a digit-slot clock (HH:MM:SS) whose seconds digits glow coral and whose digits roll on change. Clock digits use Geist (tabular numerals), not mono.
+- Top nav: left holds the `[data-auth-widget]` account slot (auth.js fills it); right shows only the Open-Meteo "feels like" temperature (no nav clock in this layout).
+- "Ask Emma" prompt bar (the Eco AI assistant): a glass input below the clock with a coral sparkle icon and a ⌘K/Ctrl+K focus shortcut. Submitting navigates to `/eco-ai/`, passing the typed text as `?q=`. This bar replaces the former Eco AI grid tile, so the grid has 9 tiles (Climb Tracker, Workout Timer, Quizzes, Psych Sheet, Lists, Assignments, World Map, Pace Calculator, Capitals Quiz) and Eco AI is reached via the bar.
+- Tiles show a colored icon chip plus a label on desktop; on screens ≤600px the labels are hidden (icon-only, per the mobile design) with the accessible name kept on each tile's `aria-label`.
+- Bottom-right corner has two glass circular icon buttons: Downloads (opens the release-asset menu for the Lights app, Weather app, and the BIG TUNA Codex macOS launcher) and a lightbulb link to `/lights/`.
+- The visual direction comes from the Stitch "Spectrum App Hub" project (desktop screen `a6ae5e90dae6418981b6bfeb74763396`, mobile screen `f6e7cd0a654448c39a5ba09c5e811a8a`); reference screenshots are saved at `docs/design/homepage-desktop-reference.png` and `docs/design/homepage-mobile-reference.png`. The page is hand-rebuilt natively (no Tailwind/CDN) on `/styles/tokens.css` so all live behaviour and conventions are preserved.
+- Note: the previous persisted minimal-mode toggle was removed because this design has no control for it.
 - The top-right homepage weather widget links to `/weather/` and displays Open-Meteo apparent temperature. It tries browser geolocation first and falls back to Halifax coordinates (`44.6488,-63.5752`) when geolocation is denied, unavailable, times out, or the first weather request fails.
 - Adding an app may require updating both homepage cards and `topbar.js`, even though the static server can auto-index folders.
 
