@@ -7,20 +7,44 @@
 const Topbar = (() => {
   'use strict';
 
+  // `color` is the rainbow token each app tints to (matches the homepage grid).
   const APPS = [
-    { name: 'Climb Tracker',   href: '/climb-tracker/',   icon: '⛰' },
-    { name: 'Workout Timer',   href: '/workout-timer/',   icon: '⏱' },
-    { name: 'Quizzes',         href: '/quiz-app/',        icon: '❓' },
-    { name: 'Psych Sheet',     href: '/psych-sheet/',     icon: '🏊' },
-    { name: 'Lists',           href: '/list-maker/',      icon: '📋' },
-    { name: 'Weather',         href: '/weather/',         icon: '☀' },
-    { name: 'Eco AI',          href: '/eco-ai/',          icon: '🌱' },
-    { name: 'Assignments',     href: '/assignments/',     icon: '✓' },
-    { name: 'World Map',       href: '/world-map/',       icon: '🌍' },
-    { name: 'Pace Calculator', href: '/pace-calculator/', icon: '🏃' },
-    { name: 'Lights',          href: '/lights/',          icon: '💡' },
-    { name: 'Terminal',        href: '/terminal/',        icon: '🖥' },
+    { name: 'Climb Tracker',   href: '/climb-tracker/',   icon: '⛰', color: 'var(--c-red)' },
+    { name: 'Workout Timer',   href: '/workout-timer/',   icon: '⏱', color: 'var(--c-orange)' },
+    { name: 'Quizzes',         href: '/quiz-app/',        icon: '❓', color: 'var(--c-yellow)' },
+    { name: 'Psych Sheet',     href: '/psych-sheet/',     icon: '🏊', color: 'var(--c-green)' },
+    { name: 'Lists',           href: '/list-maker/',      icon: '📋', color: 'var(--c-teal)' },
+    { name: 'Weather',         href: '/weather/',         icon: '☀', color: 'var(--c-cyan)' },
+    { name: 'Eco AI',          href: '/eco-ai/',          icon: '🌱', color: 'var(--c-cyan)' },
+    { name: 'Assignments',     href: '/assignments/',     icon: '✓', color: 'var(--c-blue)' },
+    { name: 'World Map',       href: '/world-map/',       icon: '🌍', color: 'var(--c-indigo)' },
+    { name: 'Pace Calculator', href: '/pace-calculator/', icon: '🏃', color: 'var(--c-purple)' },
+    { name: 'Lights',          href: '/lights/',          icon: '💡', color: 'var(--c-amber)' },
+    { name: 'Terminal',        href: '/terminal/',        icon: '🖥', color: 'var(--c-green)' },
   ];
+
+  // Capitals Quiz isn't in the dropdown list above but still gets a tint.
+  const EXTRA_COLORS = [
+    { href: '/capitals-quiz/', color: 'var(--c-pink)' },
+  ];
+
+  // Tint the whole app to its rainbow accent by overriding --accent (every
+  // primitive — buttons, focus rings, links — derives from it). Applied as
+  // early as possible to avoid a flash of the default brand red.
+  (function applyAppAccent() {
+    try {
+      const path = location.pathname.replace(/\/$/, '') || '/';
+      const match = APPS.concat(EXTRA_COLORS).find(a => {
+        const p = a.href.replace(/\/$/, '');
+        return path === p || path.startsWith(p + '/');
+      });
+      if (!match || !match.color) return;
+      const root = document.documentElement.style;
+      root.setProperty('--accent', match.color);
+      root.setProperty('--accent-hover', `color-mix(in srgb, ${match.color} 78%, #ffffff)`);
+      root.setProperty('--accent-press', `color-mix(in srgb, ${match.color} 82%, #000000)`);
+    } catch {}
+  })();
 
   let _leftQueue   = [];   // elements queued before init
   let _titleText   = null; // title queued before init

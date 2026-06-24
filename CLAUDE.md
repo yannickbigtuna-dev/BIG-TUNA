@@ -2,6 +2,37 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session Rules (read first)
+
+This is a live website repo. The live server machine auto-pulls from GitHub and updates the Cloudflare Tunnel site.
+
+At the start of every session:
+
+1. Run `git pull origin main` first.
+2. Read `CODEX_CONTEXT.md` before making changes. It is the persistent project map shared with Codex — keep it as the single source of truth for both agents.
+
+### Multi-agent workflow for every requested change
+
+Every change must be engineered and planned before any code is written, then built, then independently tested. Use this loop:
+
+1. **Architect (plan with the best model).** Drive the planning pass with the most capable Claude model available (Opus — currently `claude-opus-4-8`) acting as the architect and top-level coordinator. The architect inspects the request, gathers the minimum required repo context, and writes a thorough implementation spec **before any coding starts**.
+2. The spec must be detailed enough to double as the acceptance and testing checklist for the later validation pass.
+3. **Dispatch to sub-agents (build with efficient models).** Delegate the actual implementation to sub-agents running cheaper, more efficient models (e.g. Sonnet `claude-sonnet-4-6`, or Haiku `claude-haiku-4-5-20251001` for simple tasks), each given a clear task prompt derived directly from the spec. Use the `Agent` tool to spawn them.
+4. **Tester (validate with the most capable model).** After the sub-agents report back, run a dedicated testing/validation agent on the most capable model available (Opus — `claude-opus-4-8`). The tester verifies the implementation against the architect's spec, runs/inspects the relevant tests, checks for regressions, and confirms the work behaves as intended.
+5. **Feedback loop.** If tests fail or the work is incomplete, incorrect, or weak, send specific feedback from the tester to a **new** sub-agent pass and rebuild. Repeat implement → report → test → feedback until the work fully meets the architect's original spec. Do not ship work that has not passed the tester against the spec.
+
+### Finishing every requested change
+
+1. Make the requested edits.
+2. Update `CODEX_CONTEXT.md` in the same change if architecture, routes, data formats, deployment, app conventions, dependencies, security assumptions, or coding standards changed.
+3. Run `git status` and `git diff`.
+4. If the change is complete and has passed the tester, commit with a clear message.
+5. Push to main using `git push origin main`.
+6. Tell the user what changed and that it was pushed.
+
+Never commit `.env` files, passwords, API keys, `node_modules`, or local cache/build junk.
+Do not force push. Do not rewrite history. If there is a merge conflict, stop and explain it.
+
 ## What This Is
 
 BIG TUNA — a personal self-hosted web server running on Windows at yannickmorgans.ca. It serves a collection of single-page apps through a Cloudflare Tunnel (no port forwarding needed).

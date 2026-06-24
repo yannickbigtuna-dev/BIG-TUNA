@@ -44,6 +44,7 @@ Do not force push or rewrite history. If `git pull` produces a merge conflict, s
 +-- ios/                      # Native Apple platform source checked into the repo
 +-- cloudflared-config.yml    # Cloudflare Tunnel ingress config
 +-- *.bat, *.ps1              # Windows setup/start/helper scripts
++-- open-big-tuna-codex.ps1  # Local helper: pulls latest main and launches Codex in this repo
 ```
 
 Important local-machine assumptions: several scripts and log messages still refer to `C:\SERVER`, while this checkout may be `C:\BIG-TUNA`. Be careful before changing paths; deployment scripts may rely on the production path.
@@ -225,7 +226,9 @@ Design tokens (`apps/styles/tokens.css`):
 
 - The single source of truth for color, type, spacing, radius, and elevation, plus the CSS reset, accessible focus ring, and opt-in `.btn`/`.field`/`.card` primitives.
 - Every app links it in `<head>` and derives all styling from `var(--…)`. Do **not** hardcode hex colors, ad-hoc border-radii, or one-off box-shadows in an app.
-- The visual language is a dark "instrument panel": near-black surfaces, a single **red** accent (`--accent: #ff453a`), semantic green/amber for success/warning only, monospace (`--font-mono`) for numeric/technical readouts.
+- The visual language is now a dark glass system: pure-black background, translucent/blurred surfaces, Geist and Geist Mono typography, and a default coral-red brand accent.
+- `tokens.css` also defines a shared rainbow accent ramp (`--c-red` through `--c-pink`). `topbar.js` can override `--accent` per app based on the current route so shared primitives inherit an app-specific tint without each app redefining styles.
+- Per-app accent colors are part of the shared launcher/topbar language now; avoid random one-off decorative colors outside that shared token system.
 - `topbar.js` and `auth.js` inject their CSS via `var(--…)` too, so they restyle with the tokens. Multiple distinct colors are only acceptable in genuine data visualization (chart series, climbing hold colors, map data) — not as decoration.
 - See `ARCHITECTURE.md` for the full pattern summary and token table.
 
@@ -235,13 +238,16 @@ Shared topbar:
 - Include before `auth.js`.
 - APIs: `Topbar.setTitle(title)`, `Topbar.addLeft(element)`.
 - It injects a sticky nav with HOME, APPS dropdown, centered title, and `[data-auth-widget]` slot.
+- It also applies the route-specific accent override early on load so each app can inherit its assigned shared-token tint.
 - The APPS dropdown list is hardcoded in `topbar.js`; update it when adding/removing visible apps.
 
 Homepage:
 
 - File: `apps/index.html`
 - Custom launcher page with clock, weather/temperature widget, and app cards.
+- The current launcher uses a glass top nav, glass bottom nav, a rainbow-tinted app grid, and a pointer-following ambient background on fine-pointer devices.
 - Has a persisted minimal mode toggled by the bottom-left button; minimal mode hides homepage chrome, app cards, and downloads menu, leaving BIG TUNA, date, clock, lights link, and the exit button.
+- Minimal mode is toggled from the bottom nav in the current layout.
 - The bottom-right homepage downloads menu lists release-asset downloads for the Lights app, Weather app, and the BIG TUNA Codex macOS launcher.
 - The top-right homepage weather widget links to `/weather/` and displays Open-Meteo apparent temperature. It tries browser geolocation first and falls back to Halifax coordinates (`44.6488,-63.5752`) when geolocation is denied, unavailable, times out, or the first weather request fails.
 - Adding an app may require updating both homepage cards and `topbar.js`, even though the static server can auto-index folders.
@@ -596,6 +602,7 @@ Frontend:
 
 - Link `/styles/tokens.css` in `<head>` and style every element with `var(--…)` tokens — no hardcoded hex, radius, or shadow values. See `ARCHITECTURE.md`.
 - Load `topbar.js` before `auth.js` for authenticated apps.
+- Prefer the shared glass-surface primitives and tokenized accent system over app-local styling. If an app needs a distinct accent, override `--accent` from the shared token ramp instead of introducing raw colors.
 - Gate authenticated app startup with `Auth.onReady`.
 - Use `Auth` helpers for per-user settings when possible.
 - For app data that outgrows settings, use `/api/data/:appId` or a dedicated route.

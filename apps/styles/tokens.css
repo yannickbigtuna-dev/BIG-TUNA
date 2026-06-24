@@ -1,43 +1,72 @@
 /* ==========================================================================
-   BIG TUNA — design tokens + base
+   BIG TUNA — design tokens + base  ·  "Spectrum" / Rainbow edition
    The single source of truth for color, type, spacing, radius, and elevation.
    Every app links this file and derives its styles from these variables:
      <link rel="stylesheet" href="/styles/tokens.css">
    Do not hardcode hex colors, ad-hoc radii, or one-off shadows in an app.
-   Accent is red; neutrals are a dark ramp on near-black.
+
+   Identity: pure-black canvas, glass surfaces (translucent + blur), Geist type.
+   Brand accent is a bright coral-red. Each app is themed to a single color from
+   the rainbow ramp by overriding `--accent` (e.g. `body { --accent: var(--c-blue); }`).
+   The homepage launcher uses all rainbow colors together.
    ========================================================================== */
 
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap');
+
 :root {
-  /* ---- Neutral ramp (near-black background up to near-white text) ---- */
-  --bg:            #0a0a0a;  /* page background */
-  --bg-raised:     #111111;  /* sticky bars, footers */
-  --surface:       #161616;  /* cards, panels */
-  --surface-2:     #1e1e1e;  /* inputs, nested surfaces */
+  /* ---- Neutral ramp (pure-black canvas up to near-white text) ---- */
+  --bg:            #000000;  /* page background (true black) */
+  --bg-raised:     #0e0e0e;  /* sticky bars, footers */
+  --surface:       #131313;  /* cards, panels */
+  --surface-2:     #1b1b1b;  /* inputs, nested surfaces */
   --surface-3:     #262626;  /* hover fills, chips */
-  --border:        #262626;  /* default hairline */
+  --border:        #232323;  /* default hairline */
   --border-strong: #353535;  /* emphasized divider, input border */
 
-  --text:          #ededed;  /* primary text */
-  --text-muted:    #9a9a9a;  /* secondary text */
-  --text-dim:      #5e5e5e;  /* labels, meta */
-  --text-faint:    #3a3a3a;  /* disabled, watermark */
+  --text:          #e8e8e8;  /* primary text */
+  --text-muted:    #a0a0a0;  /* secondary text */
+  --text-dim:      #6a6a6a;  /* labels, meta */
+  --text-faint:    #404040;  /* disabled, watermark */
 
-  /* ---- Accent (red) ---- */
-  --accent:        #ff453a;  /* primary actions, active state, brand */
-  --accent-hover:  #ff6b61;  /* hover on dark (lighter, not darker) */
-  --accent-press:  #d93a31;  /* active/pressed */
-  --accent-soft:   rgba(255, 69, 58, 0.12);  /* tint fills, selected rows */
-  --accent-ring:   rgba(255, 69, 58, 0.45);  /* focus ring */
+  /* ---- Glass (translucent surface treatment) ---- */
+  --glass:         rgba(19, 19, 19, 0.70);  /* card/panel glass fill */
+  --glass-strong:  rgba(10, 10, 10, 0.80);  /* nav bars */
+  --glass-border:  rgba(255, 255, 255, 0.10);
+  --glass-border-hover: rgba(255, 255, 255, 0.18);
+  --blur:          blur(14px);
+
+  /* ---- Brand / app accent (default = coral-red; apps override --accent) ---- */
+  --accent:        #ff5544;  /* primary actions, active state, brand */
+  --accent-hover:  #ff7a6d;  /* hover on dark (lighter, not darker) */
+  --accent-press:  #e63d2e;  /* active/pressed */
+  --accent-soft:   color-mix(in srgb, var(--accent) 14%, transparent);  /* tint fills, selected rows */
+  --accent-ring:   color-mix(in srgb, var(--accent) 45%, transparent);  /* focus ring */
+  --accent-glow:   color-mix(in srgb, var(--accent) 28%, transparent);  /* hover glow */
   --on-accent:     #ffffff;  /* text/icons on an accent fill */
 
-  /* ---- Semantic (used sparingly; accent already carries "danger") ---- */
-  --success:       #34c759;
-  --warning:       #ff9f0a;
-  --danger:        var(--accent);
+  /* ---- Rainbow ramp (per-app accents + the homepage spectrum grid) ----
+     Tailwind-500 family; each app picks ONE as its --accent. Soft variants are
+     12% tints for icon chips / selected states. */
+  --c-red:     #ef4444;  --c-red-soft:    rgba(239, 68, 68, 0.12);
+  --c-orange:  #f97316;  --c-orange-soft: rgba(249, 115, 22, 0.12);
+  --c-amber:   #f59e0b;  --c-amber-soft:  rgba(245, 158, 11, 0.12);
+  --c-yellow:  #eab308;  --c-yellow-soft: rgba(234, 179, 8, 0.12);
+  --c-green:   #22c55e;  --c-green-soft:  rgba(34, 197, 94, 0.12);
+  --c-teal:    #14b8a6;  --c-teal-soft:   rgba(20, 184, 166, 0.12);
+  --c-cyan:    #06b6d4;  --c-cyan-soft:   rgba(6, 182, 212, 0.12);
+  --c-blue:    #3b82f6;  --c-blue-soft:   rgba(59, 130, 246, 0.12);
+  --c-indigo:  #6366f1;  --c-indigo-soft: rgba(99, 102, 241, 0.12);
+  --c-purple:  #a855f7;  --c-purple-soft: rgba(168, 85, 247, 0.12);
+  --c-pink:    #ec4899;  --c-pink-soft:   rgba(236, 72, 153, 0.12);
+
+  /* ---- Semantic ---- */
+  --success:       #22c55e;
+  --warning:       #f59e0b;
+  --danger:        #ff5544;
 
   /* ---- Type ---- */
-  --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'SF Mono', ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Consolas, monospace;
+  --font-ui:   'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
 
   --text-xs:   0.72rem;
   --text-sm:   0.82rem;
@@ -50,7 +79,7 @@
   --weight-regular: 400;
   --weight-medium:  600;
   --weight-bold:    700;
-  --weight-black:   900;
+  --weight-black:   800;
 
   --leading-tight: 1.15;
   --leading-normal: 1.5;
@@ -68,16 +97,17 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ---- Radius ---- */
-  --radius-sm:   8px;    /* buttons, inputs, small controls */
-  --radius:      12px;   /* default */
-  --radius-lg:   16px;   /* cards, panels, modals */
+  /* ---- Radius (softer, rounder spectrum look) ---- */
+  --radius-sm:   10px;   /* buttons, inputs, small controls */
+  --radius:      14px;   /* default */
+  --radius-lg:   20px;   /* cards, panels, modals */
+  --radius-xl:   28px;   /* large tiles, hero surfaces */
   --radius-full: 999px;  /* pills, avatars, toggles */
 
   /* ---- Elevation (one shadow scale) ---- */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.40);
-  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.50);
-  --shadow-3: 0 14px 36px rgba(0, 0, 0, 0.62);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-3: 0 18px 44px rgba(0, 0, 0, 0.65);
 
   /* ---- Motion ---- */
   --ease:      cubic-bezier(0.4, 0, 0.2, 1);
@@ -108,7 +138,7 @@ body {
 }
 
 /* ---- Typography defaults ---- */
-h1, h2, h3, h4 { line-height: var(--leading-tight); font-weight: var(--weight-bold); }
+h1, h2, h3, h4 { line-height: var(--leading-tight); font-weight: var(--weight-bold); letter-spacing: -0.01em; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
@@ -153,9 +183,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
   gap: var(--space-2);
   min-height: 38px;
   padding: var(--space-2) var(--space-4);
-  border: 1px solid transparent;
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text);
   font-weight: var(--weight-bold);
   font-size: var(--text-sm);
@@ -164,11 +194,11 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
   touch-action: manipulation;
 }
-.btn:hover { background: var(--surface-3); }
-.btn:active { transform: translateY(1px); }
+.btn:hover { background: rgba(255, 255, 255, 0.10); border-color: var(--glass-border-hover); }
+.btn:active { transform: translateY(1px) scale(0.99); }
 
-.btn-primary { background: var(--accent); color: var(--on-accent); }
-.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn-primary:hover { background: var(--accent-hover); box-shadow: 0 8px 24px -8px var(--accent-glow); }
 .btn-primary:active { background: var(--accent-press); }
 
 .btn-ghost { background: transparent; border-color: var(--border-strong); color: var(--text-muted); }
@@ -188,13 +218,15 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .field::placeholder { color: var(--text-dim); }
 .field:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 
-/* Cards */
+/* Cards — glass surface */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
   box-shadow: var(--shadow-1);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
 }
 
 /* Uppercase meta/label text */
