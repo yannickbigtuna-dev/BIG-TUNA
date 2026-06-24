@@ -434,6 +434,8 @@ GET             /api/climbs2/photo/:id?t=<token>
 POST/DELETE     /api/climbs2/photo/:id
 ```
 
+`POST /api/climbs2` is durability-hardened so climbs are never lost: each climb in `body.climbs` is upserted to its own atomically-written `climbs/{id}.txt` file inside an isolated try/catch (a malformed record is skipped, never aborting the batch), deletes require an explicit id-validated `body.deletedClimbIds`, and `body.sessions` is **merged by id** into the existing `sessions.txt` (upsert — never wholesale replace) so a stale or second device can add/update sessions but can never silently drop ones it did not send (there is no delete-session action). The response returns `{ ok, saved, skipped, deleted }`.
+
 Quiz app:
 
 ```text
@@ -532,6 +534,12 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Uses `/api/climbs2` for sessions and climb metadata, and `/api/climbs2/photo/:id` for per-climb JPEG photos.
 - Client compresses selected camera/library images to JPEG data URLs before upload.
 - Active sessions are represented by entries in the existing `sessions` array with empty `endedAt`; climb records link to sessions through `sessionId`.
+- UI is a native rebuild (no Tailwind/CDN) of the Stitch "Spectrum App Hub" CRUX climb screens (Dashboard `b6c4caf4fa4546cfa4f31fb2cee13e86`, Logbook `4dd2d3ca96504951a34edd2922cec048`, Analytics `ffbc7b4df0374eb798d7ca3897abac0f`) on `/styles/tokens.css`, inheriting the route accent (`--c-red`). It keeps the shared topbar/auth and presents three segmented views:
+  - **Overview** — photo-style hero with live stat cards (climbs this month, peak send grade, day streak), the Start/End session control, a Progression bar chart (peak send grade per month, last 6 months), and a Recent Sends list.
+  - **Logbook** — search/grade/status filters plus collapsible session cards (peak grade + send count per session) that expand to their climb cards (photo, status badge, delete).
+  - **Stats** — summary tiles plus client-computed Grade Distribution bars, a 5-week Work Capacity heatmap, and derived Recent Milestones.
+- Logging a climb happens in a slide-over sheet opened from the header "Add Climb"/"Add Photo" buttons (grade/hold-color/status/tries/photo/notes); all analytics are computed in the browser from real climb data. Hold-color swatches remain legitimate data-viz, not decoration.
+- The client reconciles on `visibilitychange` (re-fetches when the tab regains focus) so edits made on another device/tab are picked up.
 
 `capitals-quiz` and `world-map`:
 

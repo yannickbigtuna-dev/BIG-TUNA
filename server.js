@@ -1855,28 +1855,50 @@ async function handleAPI(req, res, urlPath) {
     cv2EnsureDirs(user.id);
     const body = await parseBody(req);
 
-    // Upsert climbs
+    let saved = 0, skipped = 0, deleted = 0;
+
+    // Upsert climbs. Each climb is its own atomically-written file, so a bad
+    // record can never corrupt or drop the others — isolate every write.
     if (Array.isArray(body.climbs)) {
       for (const c of body.climbs) {
-        if (!c.id || !isValidId(c.id)) continue;
-        const tmp = cv2ClimbFile(user.id, c.id) + '.tmp';
-        fs.writeFileSync(tmp, cv2Serialize(c));
-        fs.renameSync(tmp, cv2ClimbFile(user.id, c.id));
+        if (!c || !c.id || !isValidId(c.id)) { skipped++; continue; }
+        try {
+          const dest = cv2ClimbFile(user.id, c.id);
+          const tmp  = dest + '.tmp';
+          fs.writeFileSync(tmp, cv2Serialize(c));
+          fs.renameSync(tmp, dest);
+          saved++;
+        } catch (err) {
+          skipped++;
+          console.error('climbs2 upsert failed for', c.id, err.message);
+        }
       }
     }
-    // Delete climbs
+    // Delete climbs (explicit, id-validated only)
     if (Array.isArray(body.deletedClimbIds)) {
       for (const id of body.deletedClimbIds) {
         if (!isValidId(id)) continue;
         try { fs.unlinkSync(cv2ClimbFile(user.id, id)); } catch {}
         try { fs.unlinkSync(cv2PhotoFile(user.id, id)); } catch {}
+        deleted++;
       }
     }
-    // Sync sessions
+    // Sync sessions via merge-by-id (upsert), never wholesale replace. The app
+    // has no delete-session action, so merging means a stale or second device
+    // can update/add sessions but can never silently drop ones it didn't send.
     if (Array.isArray(body.sessions)) {
-      cv2WriteSessions(user.id, body.sessions);
+      const existing = cv2ReadSessions(user.id);
+      const byId = new Map();
+      for (const s of existing) { if (s && s.id) byId.set(s.id, s); }
+      for (const s of body.sessions) {
+        if (!s || !s.id) continue;
+        byId.set(s.id, { ...(byId.get(s.id) || {}), ...s });
+      }
+      const merged = Array.from(byId.values())
+        .sort((a, b) => (Date.parse(b.startedAt) || 0) - (Date.parse(a.startedAt) || 0));
+      cv2WriteSessions(user.id, merged);
     }
-    return jsonRes(res, 200, { ok: true });
+    return jsonRes(res, 200, { ok: true, saved, skipped, deleted });
   }
 
   // DELETE /api/climbs2/photo/:id
