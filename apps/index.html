@@ -7,16 +7,16 @@
 <link rel="stylesheet" href="/styles/tokens.css">
 <style>
   body {
-    min-height: 100vh;
-    min-height: 100svh;
+    height: 100vh;
+    height: 100svh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: calc(env(safe-area-inset-top, 0px) + 96px) 20px calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding: calc(env(safe-area-inset-top, 0px) + 84px) 20px calc(env(safe-area-inset-bottom, 0px) + 84px);
     text-align: center;
     position: relative;
-    overflow-x: hidden;
+    overflow: hidden;
   }
 
   /* Mouse-follow atmosphere */
@@ -63,7 +63,7 @@
   #temp-label { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 4px; opacity: 0.6; }
 
   /* ── Centerpiece ── */
-  .stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%; }
+  .stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%; transform-origin: center center; will-change: transform; }
 
   .hero { display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 2vh, 20px); margin-bottom: clamp(30px, 6vh, 54px); }
 
@@ -173,16 +173,6 @@
     font-size: var(--text-base);
   }
   #emma-input::placeholder { color: color-mix(in srgb, var(--text-muted) 50%, transparent); }
-  .emma-kbd {
-    flex-shrink: 0;
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    color: var(--text-dim);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    padding: 4px 8px;
-    opacity: 0.6;
-  }
 
   /* ── Rainbow app grid (3 columns) ── */
   .grid {
@@ -298,7 +288,7 @@
   .download-item:hover, .download-item:focus-visible { color: var(--text); background: rgba(255,255,255,0.06); outline: none; }
 
   @media (max-width: 600px) {
-    body { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top, 0px) + 84px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 88px); }
+    body { padding-top: calc(env(safe-area-inset-top, 0px) + 76px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
     .logo { font-size: clamp(2.4rem, 13vw, 3rem); }
     .date-display { font-size: 0.64rem; letter-spacing: 0.26em; }
     .digit-slot { width: clamp(38px, 13vw, 48px); height: clamp(52px, 18vw, 64px); }
@@ -307,7 +297,6 @@
     .grid { gap: 14px; max-width: 400px; }
     .card { gap: 0; border-radius: var(--radius-lg); }
     .card .name { display: none; }  /* mobile design: icon-only tiles */
-    .emma-kbd { display: none; }
   }
 </style>
 </head>
@@ -346,7 +335,6 @@
     <div class="emma-inner">
       <span class="emma-spark"><svg viewBox="0 0 24 24"><path d="M12 2.5l2.35 6.15L20.5 11l-6.15 2.35L12 19.5l-2.35-6.15L3.5 11l6.15-2.35L12 2.5Z"/></svg></span>
       <input id="emma-input" name="q" type="text" placeholder="Ask Emma…" aria-label="Ask Emma — open the Eco AI assistant">
-      <kbd class="emma-kbd">⌘ K</kbd>
     </div>
   </form>
 
@@ -460,6 +448,8 @@
   setInterval(tickClock, 1000);
 
   // ── Ask Emma → Eco AI ──
+  // Whatever is typed is handed to Eco AI as ?q=…; the assistant opens a fresh
+  // chat with that exact prompt already sent (see apps/eco-ai/index.html).
   const emmaForm = document.getElementById('ask-emma');
   const emmaInput = document.getElementById('emma-input');
   emmaForm.addEventListener('submit', e => {
@@ -467,13 +457,28 @@
     const q = emmaInput.value.trim();
     window.location.href = q ? `/eco-ai/?q=${encodeURIComponent(q)}` : '/eco-ai/';
   });
-  // ⌘K / Ctrl+K focuses the prompt
-  document.addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      emmaInput.focus();
-    }
-  });
+
+  // ── Fit-to-screen: scale the stage so the homepage never needs scrolling ──
+  // The clock, Ask Emma bar and app tiles shrink together to match whatever
+  // viewport they land in, on any screen size or orientation.
+  const stage = document.querySelector('.stage');
+  function fitStage() {
+    if (!stage) return;
+    stage.style.transform = 'none';
+    const cs = getComputedStyle(document.body);
+    const availH = window.innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const availW = document.body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const needH = stage.offsetHeight;
+    const needW = stage.offsetWidth;
+    if (!needH || !needW) return;
+    let scale = Math.min(availH / needH, availW / needW, 1);
+    if (!isFinite(scale) || scale <= 0) scale = 1;
+    stage.style.transform = `scale(${scale})`;
+  }
+  fitStage();
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', fitStage);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitStage);
 
   // ── Temperature: Open-Meteo "feels like" ──
   const HALIFAX_WEATHER = { lat: 44.6488, lon: -63.5752 };

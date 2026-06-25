@@ -1692,6 +1692,19 @@
         if (document.visibilityState === 'hidden') saveAll();
       });
       window.addEventListener('pagehide', () => { saveAll(); });
+
+      // Arriving from the homepage Ask Emma bar (/eco-ai/?q=…): open a fresh chat,
+      // drop the exact prompt into the composer, and send it automatically.
+      const incomingQuery = (new URLSearchParams(location.search).get('q') || '').trim();
+      if (incomingQuery) {
+        // Clear the query string so a refresh doesn't resend the same prompt.
+        history.replaceState(null, '', location.pathname);
+        createAndSelectChat();
+        const promptEl = document.getElementById('prompt');
+        promptEl.value = incomingQuery;
+        updatePromptHeight();
+        handleSend();
+      }
     });
   </script>
 </body>
