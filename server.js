@@ -26,6 +26,14 @@ const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
 const LIGHTS_DEVICE_INVERT_OUTPUT = true;
+// Auto-schedule: lights ON at sunset, OFF at sunrise and at 22:00 local.
+const LIGHTS_LAT = 44.6488;            // Halifax, NS
+const LIGHTS_LON = -63.5752;
+const LIGHTS_TZ = 'America/Halifax';
+const LIGHTS_OFF_HOUR = 22;            // 10 PM local
+// Mirror INVERT_WEBSITE_STATE in apps/lights: a website "On" is stored as on=false.
+const LIGHTS_WEBSITE_INVERT = true;
+const LIGHTS_SCHEDULE_INTERVAL_MS = 30000;
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 const ECO_AI_STATUS_TIMEOUT_MS = 4000;
 const ECO_AI_CHAT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -152,6 +160,78 @@ function getLightsDeviceStatusPayload() {
     recentlyPolled: lastPoll > 0 && Date.now() - lastPoll <= LIGHTS_DEVICE_RECENT_MS,
     recentWindowMs: LIGHTS_DEVICE_RECENT_MS,
   };
+}
+
+// ── Lights auto-schedule (sunset → on, sunrise & 22:00 → off) ─────────────────
+// SunCalc-derived sunrise/sunset (UTC). Comparing epoch ms is timezone-agnostic.
+let lightsScheduleLastMs = 0;
+let lightsScheduleLastMinute = -1;
+
+function sunTimesUTC(date, lat, lng) {
+  const rad = Math.PI / 180, dayMs = 86400000, J1970 = 2440588, J2000 = 2451545;
+  const toJulian = d => d.valueOf() / dayMs - 0.5 + J1970;
+  const fromJulian = j => new Date((j + 0.5 - J1970) * dayMs);
+  const toDays = d => toJulian(d) - J2000;
+  const e = rad * 23.4397, lw = rad * -lng, phi = rad * lat;
+  const d = toDays(date);
+  const M = rad * (357.5291 + 0.98560028 * d);
+  const L = M + rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M)) + rad * 102.9372 + Math.PI;
+  const dec = Math.asin(Math.sin(L) * Math.sin(e));
+  const J0 = 0.0009;
+  const n = Math.round(d - J0 - lw / (2 * Math.PI));
+  const Jnoon = J2000 + (J0 + lw / (2 * Math.PI) + n) + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
+  const cosW = (Math.sin(-0.833 * rad) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec));
+  if (cosW <= -1 || cosW >= 1) return {};   // polar day / night — no transition
+  const w0 = Math.acos(cosW);
+  const Jset = J2000 + (J0 + (w0 + lw) / (2 * Math.PI) + n) + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
+  return { sunrise: fromJulian(2 * Jnoon - Jset), sunset: fromJulian(Jset) };
+}
+
+function localMinuteOfDay(ms, tz) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(ms));
+  let h = 0, m = 0;
+  for (const p of parts) {
+    if (p.type === 'hour') h = parseInt(p.value, 10);
+    if (p.type === 'minute') m = parseInt(p.value, 10);
+  }
+  if (h === 24) h = 0;
+  return h * 60 + m;
+}
+
+function applyScheduledLights(desiredOn, reason) {
+  // A website "On" maps to stored on=false when LIGHTS_WEBSITE_INVERT is set.
+  const storedOn = LIGHTS_WEBSITE_INVERT ? desiredOn !== true : desiredOn === true;
+  if (readLightsState().on === storedOn) return;
+  writeLightsState(storedOn, 'schedule');
+  console.log(`[lights] auto ${desiredOn ? 'ON' : 'OFF'} (${reason})`);
+}
+
+function tickLightsSchedule() {
+  const now = Date.now();
+  const minute = localMinuteOfDay(now, LIGHTS_TZ);
+  // First tick after start: seed only, never fire retroactively (respects manual state).
+  if (lightsScheduleLastMs === 0) {
+    lightsScheduleLastMs = now;
+    lightsScheduleLastMinute = minute;
+    return;
+  }
+  const { sunrise, sunset } = sunTimesUTC(new Date(now), LIGHTS_LAT, LIGHTS_LON);
+  const crossed = t => t && lightsScheduleLastMs < t.getTime() && t.getTime() <= now;
+
+  if (crossed(sunset))  applyScheduledLights(true, 'sunset');
+  if (crossed(sunrise)) applyScheduledLights(false, 'sunrise');
+  const off = LIGHTS_OFF_HOUR * 60;
+  if (lightsScheduleLastMinute < off && minute >= off) applyScheduledLights(false, '22:00');
+
+  lightsScheduleLastMs = now;
+  lightsScheduleLastMinute = minute;
+}
+
+function startLightsScheduler() {
+  tickLightsSchedule();
+  setInterval(tickLightsSchedule, LIGHTS_SCHEDULE_INTERVAL_MS);
 }
 
 // ── Input validation ──────────────────────────────────────────────────────────
@@ -2368,6 +2448,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(` Apps folder: C:\\SERVER\\apps\\`);
   console.log(` Data folder: C:\\SERVER\\data\\\n`);
   assignmentCoach.startScheduler();
+  startLightsScheduler();
 });
 
 server.on('error', err => {

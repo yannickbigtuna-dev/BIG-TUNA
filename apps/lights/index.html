@@ -91,22 +91,40 @@
       var(--shadow-3);
   }
 
+  /* The two plate screws double as status indicators. */
   .plate::before,
   .plate::after {
     content: "";
     position: absolute;
     left: 50%;
-    width: 9px;
-    height: 9px;
+    width: 11px;
+    height: 11px;
     transform: translateX(-50%);
     border-radius: var(--radius-full);
     background: radial-gradient(circle at 35% 35%, var(--text), var(--border-strong) 58%, var(--surface) 100%);
     box-shadow: inset 0 1px 2px color-mix(in srgb, var(--bg) 35%, transparent);
+    transition: background 240ms ease, box-shadow 240ms ease;
   }
 
   body.is-on .plate::before,
   body.is-on .plate::after {
     background: radial-gradient(circle at 35% 35%, #fff, #aba393 58%, #6f685e 100%);
+  }
+
+  /* Top screw → green when signed in as yannick. */
+  body.is-authed .plate::before {
+    background: radial-gradient(circle at 35% 35%, #d9ffe0, var(--success) 58%, #1c5e2c 100%);
+    box-shadow:
+      inset 0 1px 2px color-mix(in srgb, #08230f 35%, transparent),
+      0 0 10px color-mix(in srgb, var(--success) 72%, transparent);
+  }
+
+  /* Bottom screw → green when the device polled within the last 5 seconds. */
+  body.is-polled .plate::after {
+    background: radial-gradient(circle at 35% 35%, #d9ffe0, var(--success) 58%, #1c5e2c 100%);
+    box-shadow:
+      inset 0 1px 2px color-mix(in srgb, #08230f 35%, transparent),
+      0 0 10px color-mix(in srgb, var(--success) 72%, transparent);
   }
 
   .plate::before { top: 21px; }
@@ -170,149 +188,6 @@
       0 0 24px color-mix(in srgb, var(--warning) 38%, transparent);
   }
 
-  .status-panel {
-    width: min(100%, 340px);
-    display: grid;
-    gap: 7px;
-    text-align: center;
-    min-height: 62px;
-  }
-
-  .auth-panel {
-    width: min(100%, 340px);
-    display: grid;
-    gap: 10px;
-    padding: 14px;
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--surface) 60%, transparent);
-    border: 1px solid var(--border);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-
-  body.is-on .auth-panel {
-    background: color-mix(in srgb, #e8d9b8 34%, transparent);
-    border-color: color-mix(in srgb, #5a4220 12%, transparent);
-  }
-
-  .auth-panel[hidden] {
-    display: none;
-  }
-
-  .auth-actions {
-    display: grid;
-    gap: 10px;
-  }
-
-  .auth-input {
-    width: 100%;
-    padding: 12px 13px;
-    border-radius: var(--radius);
-    border: 1px solid var(--border-strong);
-    background: var(--surface-2);
-    color: inherit;
-    font: inherit;
-  }
-
-  .auth-input::placeholder {
-    color: var(--text-dim);
-  }
-
-  body.is-on .auth-input {
-    background: color-mix(in srgb, #e8d9b8 62%, transparent);
-    border-color: color-mix(in srgb, #5a4220 16%, transparent);
-    color: #201b14;
-  }
-
-  body.is-on .auth-input::placeholder {
-    color: color-mix(in srgb, #201b14 46%, transparent);
-  }
-
-  .auth-button,
-  .secondary-button {
-    width: 100%;
-    min-height: 44px;
-    border: 0;
-    border-radius: var(--radius);
-    font: inherit;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    touch-action: manipulation;
-  }
-
-  .auth-button {
-    background: var(--accent);
-    color: var(--on-accent);
-  }
-
-  .secondary-button {
-    background: var(--surface-2);
-    color: inherit;
-    border: 1px solid var(--border-strong);
-  }
-
-  body.is-on .secondary-button {
-    background: color-mix(in srgb, #201b14 10%, transparent);
-    border-color: color-mix(in srgb, #201b14 16%, transparent);
-  }
-
-  .install-tip {
-    font-size: 0.82rem;
-    line-height: 1.4;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
-  body.is-on .install-tip {
-    color: color-mix(in srgb, #201b14 62%, transparent);
-  }
-
-  .state-label {
-    font-size: 0.86rem;
-    font-weight: 800;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  .access-label {
-    min-height: 1.25em;
-    color: var(--text-muted);
-    font-size: 0.88rem;
-    line-height: 1.4;
-  }
-
-  body.is-on .access-label { color: color-mix(in srgb, #201b14 66%, transparent); }
-
-  .poll-label {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    min-height: 1.2em;
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    line-height: 1.35;
-  }
-
-  .poll-dot {
-    width: 8px;
-    height: 8px;
-    flex: 0 0 8px;
-    border-radius: var(--radius-full);
-    background: var(--text-dim);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-dim) 18%, transparent);
-  }
-
-  .poll-label.is-recent { color: var(--success); }
-  .poll-label.is-recent .poll-dot {
-    background: var(--success);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
-  }
-
-  body.is-on .poll-label { color: color-mix(in srgb, #201b14 66%, transparent); }
-  body.is-on .poll-label.is-recent { color: color-mix(in srgb, var(--success) 80%, #201b14); }
-
   .switch[aria-busy="true"] .paddle {
     transition-duration: 80ms;
     filter: saturate(0.78);
@@ -336,27 +211,6 @@
         </button>
       </div>
     </div>
-    <div class="status-panel">
-      <div class="state-label" id="state-label">Loading</div>
-      <div class="access-label" id="access-label"></div>
-      <div class="poll-label" id="poll-label">
-        <span class="poll-dot" aria-hidden="true"></span>
-        <span id="poll-text">No device poll</span>
-      </div>
-    </div>
-    <div class="auth-panel" id="auth-panel" hidden>
-      <div class="auth-actions" id="signed-out-actions">
-        <input class="auth-input" id="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false">
-        <input class="auth-input" id="password" type="password" placeholder="Password" autocomplete="current-password">
-        <button class="auth-button" id="login-btn" type="button">Sign In</button>
-      </div>
-      <div class="auth-actions" id="signed-in-actions" hidden>
-        <button class="secondary-button" id="logout-btn" type="button">Log Out</button>
-      </div>
-    </div>
-    <div class="install-tip" id="install-tip">
-      On iPhone: Share -> Add to Home Screen
-    </div>
   </section>
 </main>
 <script src="/topbar.js"></script>
@@ -366,18 +220,6 @@
   const TOKEN_KEY = 'auth_token';
   const USER_KEY = 'auth_user';
   const switchBtn = document.getElementById('switch');
-  const stateLabel = document.getElementById('state-label');
-  const accessLabel = document.getElementById('access-label');
-  const pollLabel = document.getElementById('poll-label');
-  const pollText = document.getElementById('poll-text');
-  const authPanel = document.getElementById('auth-panel');
-  const signedOutActions = document.getElementById('signed-out-actions');
-  const signedInActions = document.getElementById('signed-in-actions');
-  const usernameInput = document.getElementById('username');
-  const passwordInput = document.getElementById('password');
-  const loginBtn = document.getElementById('login-btn');
-  const logoutBtn = document.getElementById('logout-btn');
-  const installTip = document.getElementById('install-tip');
   const INVERT_WEBSITE_STATE = true;
 
   let currentOn = false;
@@ -386,7 +228,6 @@
   let eventsConnected = false;
   let lastUpdatedAt = '';
   let hasLoadedState = false;
-  let authPending = false;
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   document.body.classList.toggle('standalone', isStandalone);
@@ -398,16 +239,6 @@
 
   function getToken() {
     return localStorage.getItem(TOKEN_KEY) || '';
-  }
-
-  function setCachedSession(session) {
-    localStorage.setItem(TOKEN_KEY, session.token);
-    localStorage.setItem(USER_KEY, JSON.stringify({ username: session.username, id: session.id || '' }));
-  }
-
-  function clearCachedSession() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
   }
 
   function apiToWebsiteState(on) {
@@ -424,33 +255,14 @@
     currentOn = on === true;
     document.body.classList.toggle('is-on', currentOn);
     switchBtn.setAttribute('aria-checked', String(currentOn));
-    stateLabel.textContent = currentOn ? 'On' : 'Off';
   }
 
+  // Top status dot: green only when the cached session is yannick (can control).
   function updateAccess() {
     const user = getCachedUser();
     canControl = !!user && typeof user.username === 'string' && user.username.toLowerCase() === 'yannick';
     switchBtn.disabled = !canControl || pending;
-    const hasSession = !!getToken() && !!user;
-    authPanel.hidden = !isStandalone && canControl;
-    signedOutActions.hidden = hasSession;
-    signedInActions.hidden = !hasSession;
-    if (isStandalone) {
-      installTip.textContent = hasSession ? 'Installed web app. Sign in as yannick to control the light.' : 'Installed web app. Sign in to control the light.';
-    } else {
-      installTip.textContent = 'On iPhone: Share -> Add to Home Screen';
-    }
-    if (pending) {
-      accessLabel.textContent = 'Saving...';
-    } else if (authPending) {
-      accessLabel.textContent = 'Signing in...';
-    } else if (canControl) {
-      accessLabel.textContent = 'Signed in as yannick';
-    } else if (hasSession) {
-      accessLabel.textContent = 'Signed in read only';
-    } else {
-      accessLabel.textContent = 'Read only';
-    }
+    document.body.classList.toggle('is-authed', canControl);
   }
 
   async function loadState() {
@@ -462,67 +274,21 @@
         setVisual(apiToWebsiteState(data.on), data.updatedAt);
       }
     } catch {
-      if (hasLoadedState || pending) return;
-      stateLabel.textContent = 'Unavailable';
+      // Keep last known visual; nothing to display.
     } finally {
       updateAccess();
     }
   }
 
-  async function login() {
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value;
-    if (!username || !password || authPending) return;
-    authPending = true;
-    updateAccess();
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.token || !data.username) throw new Error(data.error || 'Sign-in failed');
-      setCachedSession(data);
-      passwordInput.value = '';
-      updateAccess();
-    } catch (error) {
-      accessLabel.textContent = error && error.message ? error.message : 'Sign-in failed';
-    } finally {
-      authPending = false;
-      updateAccess();
-    }
-  }
-
-  async function logout() {
-    if (authPending) return;
-    authPending = true;
-    updateAccess();
-    const token = getToken();
-    clearCachedSession();
-    try {
-      if (token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + token },
-        });
-      }
-    } catch {}
-    authPending = false;
-    updateAccess();
-  }
-
+  // Bottom status dot: green when the relay polled the server within the last 5s.
   async function loadDeviceStatus() {
     try {
       const res = await fetch('/api/lights/device/status', { cache: 'no-store' });
       if (!res.ok) throw new Error('status failed');
       const data = await res.json();
-      const recent = data.recentlyPolled === true;
-      pollLabel.classList.toggle('is-recent', recent);
-      pollText.textContent = recent ? 'Polled in last 5s' : 'No poll in last 5s';
+      document.body.classList.toggle('is-polled', data.recentlyPolled === true);
     } catch {
-      pollLabel.classList.remove('is-recent');
-      pollText.textContent = 'Poll status unavailable';
+      document.body.classList.remove('is-polled');
     }
   }
 
@@ -568,7 +334,6 @@
       setVisual(apiToWebsiteState(data.on), data.updatedAt);
     } catch {
       setVisual(previous);
-      accessLabel.textContent = 'Save failed';
     } finally {
       pending = false;
       switchBtn.setAttribute('aria-busy', 'false');
@@ -584,11 +349,6 @@
   switchBtn.addEventListener('pointerdown', handleSwitchPress);
   switchBtn.addEventListener('keydown', event => {
     if (event.key === ' ' || event.key === 'Enter') handleSwitchPress(event);
-  });
-  loginBtn.addEventListener('click', login);
-  logoutBtn.addEventListener('click', logout);
-  passwordInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') login();
   });
   window.addEventListener('storage', updateAccess);
 
