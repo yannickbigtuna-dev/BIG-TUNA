@@ -3,18 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Eco AI - BIG TUNA</title>
+  <title>Emma - BIG TUNA</title>
   <link rel="stylesheet" href="/styles/tokens.css">
+  <!-- KaTeX: render LaTeX math in assistant answers (loaded once, used by renderMarkdown). -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
   <style>
     :root {
       --content-width: 46rem;
       --sidebar-width: 264px;
     }
 
-    html, body { height: 100%; }
+    html { height: 100%; }
     body {
       font-family: var(--font-ui);
-      min-height: 100vh;
+      /* Size to the *visible* viewport (svh) so the topbar, chat composer and the
+         model selectors below it always fit on one screen — on mobile, 100vh is
+         the larger layout viewport and pushed the composer behind the browser UI. */
+      height: 100vh;
+      height: 100svh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -703,6 +710,44 @@
       font-size: 0.72rem;
     }
 
+    /* Capability blurb for the currently selected model, under the controls row. */
+    #model-capability {
+      margin: 7px 4px 0;
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      flex-wrap: wrap;
+      color: var(--text-dim);
+      font-size: 0.74rem;
+      line-height: 1.4;
+    }
+
+    #model-capability .cap-name {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    #model-capability .cap-tag {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+      border-radius: var(--radius-full);
+      padding: 1px 8px;
+    }
+
+    #model-capability:empty { display: none; }
+
+    /* Math: keep wide display equations inside the bubble (scroll instead of clipping). */
+    .bubble .katex-display {
+      margin: 12px 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 2px;
+    }
+
+    .bubble .katex { font-size: 1.02em; }
+
     .mobile-only { display: none; }
 
     /* ---------- Toast (transient, non-persisted notices) ---------- */
@@ -803,7 +848,7 @@
         <div class="sidebar-head">
           <div class="brand">
             <span class="brand-mark"></span>
-            <span class="brand-text">Eco<span>AI</span></span>
+            <span class="brand-text">Emm<span>a</span></span>
           </div>
           <button id="close-drawer-btn" class="icon-btn mobile-only" type="button" aria-label="Close chats">✕</button>
         </div>
@@ -821,7 +866,7 @@
     <main id="main-shell">
       <header id="main-header">
         <button id="open-drawer-btn" class="icon-btn mobile-only" type="button" aria-label="Open chats">☰</button>
-        <div id="active-title" class="header-title">Eco AI</div>
+        <div id="active-title" class="header-title">Emma</div>
         <div class="header-menu-wrap">
           <button id="menu-btn" class="icon-btn" type="button" aria-label="Chat options" aria-haspopup="true">⋯</button>
           <div id="chat-menu" class="menu-pop" role="menu" hidden>
@@ -844,7 +889,7 @@
               <button id="attach-btn" class="icon-btn" type="button" aria-label="Attach file">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               </button>
-              <textarea id="prompt" rows="1" placeholder="Message Eco AI"></textarea>
+              <textarea id="prompt" rows="1" placeholder="Message Emma"></textarea>
               <button id="send-btn" class="send-btn" type="button" aria-label="Send"></button>
             </div>
 
@@ -857,16 +902,18 @@
               </div>
               <input id="file-input" type="file" multiple hidden>
             </div>
+
+            <div id="model-capability" aria-live="polite"></div>
           </div>
 
-          <div id="composer-hint">Eco AI runs locally on this machine · text &amp; code files supported</div>
+          <div id="composer-hint">Emma runs locally on this machine · text &amp; code files supported</div>
         </div>
       </footer>
     </main>
   </div>
 
   <script>
-    Topbar.setTitle('Eco AI');
+    Topbar.setTitle('Emma');
 
     const APP_ID = 'eco-ai';
     const SKILLS = [
@@ -1048,21 +1095,57 @@
       return String(text).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
     }
 
+    // Render one LaTeX fragment to safe HTML. KaTeX escapes its own output, so the
+    // result can be dropped into innerHTML directly. If KaTeX hasn't loaded (or the
+    // expression is malformed) we fall back to the literal source so nothing is lost.
+    function renderTex(tex, displayMode) {
+      const src = String(tex || '').trim();
+      if (window.katex) {
+        try {
+          return window.katex.renderToString(src, {
+            displayMode,
+            throwOnError: false,
+            strict: false,
+            output: 'html',
+          });
+        } catch {}
+      }
+      const wrap = displayMode ? '$$' : '$';
+      return `<code class="inline">${esc(wrap + src + wrap)}</code>`;
+    }
+
     function renderMarkdown(text) {
-      const blocks = [];
-      let html = String(text || '').replace(/```([\s\S]*?)```/g, (_, code) => {
-        blocks.push(code);
-        return `@@CODE_BLOCK_${blocks.length - 1}@@`;
-      });
-      html = esc(html);
-      html = html.replace(/@@CODE_BLOCK_(\d+)@@/g, (_, index) => {
-        const code = blocks[Number(index)] || '';
-        return `<pre><code>${esc(code.trim())}</code></pre>`;
-      });
-      html = html.replace(/`([^`\n]+)`/g, '<code class="inline">$1</code>');
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/\n/g, '<br>');
-      return html;
+      // Code and math are extracted to placeholders BEFORE HTML-escaping so their
+      // contents (which legitimately contain <, >, &, \, {, }) survive intact, then
+      // restored afterwards as already-safe HTML.
+      const stash = [];
+      const keep = html => `@@TUNA${stash.push(html) - 1}@@`;
+      let src = String(text || '');
+
+      // Fenced code blocks first, so $ / backticks inside code are never touched.
+      src = src.replace(/```([\s\S]*?)```/g, (_, code) =>
+        keep(`<pre><code>${esc(code.replace(/^\n/, '').replace(/\s+$/, ''))}</code></pre>`));
+
+      // Display math: $$ … $$ and \[ … \]
+      src = src.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => keep(renderTex(tex, true)));
+      src = src.replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => keep(renderTex(tex, true)));
+
+      // Inline math: \( … \) and $ … $ — the $ form skips prices/whitespace edges
+      // (no space just inside the delimiters, and bare numbers like $5$ are left alone).
+      src = src.replace(/\\\(([\s\S]+?)\\\)/g, (_, tex) => keep(renderTex(tex, false)));
+      src = src.replace(/\$(?=\S)([^\n$]*?\S)\$/g, (m, tex) =>
+        /^\d+(\.\d+)?$/.test(tex.trim()) ? m : keep(renderTex(tex, false)));
+
+      // Inline code spans.
+      src = src.replace(/`([^`\n]+)`/g, (_, code) => keep(`<code class="inline">${esc(code)}</code>`));
+
+      // Whatever remains is plain prose → escape, then apply light markdown.
+      let html = esc(src)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+
+      // Restore the protected (already-safe) HTML fragments.
+      return html.replace(/@@TUNA(\d+)@@/g, (_, i) => stash[Number(i)] || '');
     }
 
     function updatePromptHeight() {
@@ -1157,7 +1240,7 @@
     function renderMessages() {
       const container = document.getElementById('messages');
       const chat = activeChat();
-      document.getElementById('active-title').textContent = chat ? chat.title : 'Eco AI';
+      document.getElementById('active-title').textContent = chat ? chat.title : 'Emma';
       container.innerHTML = '';
 
       if (!chat || !chat.messages.length) {
@@ -1206,7 +1289,7 @@
 
         row.innerHTML = `
           <div class="msg-head">
-            <span class="msg-author">${message.role === 'assistant' ? 'Eco AI' : 'You'}</span>
+            <span class="msg-author">${message.role === 'assistant' ? 'Emma' : 'You'}</span>
             <span>${formatTime(message.createdAt)}</span>
           </div>
           <div class="bubble-wrap">
@@ -1240,6 +1323,47 @@
       wrap.scrollTop = wrap.scrollHeight;
     }
 
+    // Capability profiles keyed by model family — used to explain what each local
+    // model is good at in the selector dropdown and the caption beneath it.
+    const MODEL_PROFILES = [
+      { match: /qwen.*coder|coder.*qwen/, name: 'Qwen Coder',    blurb: 'Tuned for writing, explaining and debugging code.' },
+      { match: /qwen/,                    name: 'Qwen',          blurb: 'Strong all-round reasoning, math and multilingual chat.' },
+      { match: /deepseek.*coder/,         name: 'DeepSeek Coder', blurb: 'Code-focused generation, refactoring and review.' },
+      { match: /deepseek.*r1|(^|[^a-z])r1/, name: 'DeepSeek R1', blurb: 'Shows step-by-step reasoning — great for math and logic.' },
+      { match: /deepseek/,                name: 'DeepSeek',      blurb: 'Capable general reasoning and coding model.' },
+      { match: /codellama|starcoder|codegemma/, name: 'Code model', blurb: 'Specialised for programming tasks.' },
+      { match: /llama/,                   name: 'Llama',         blurb: 'Well-rounded general assistant with broad knowledge.' },
+      { match: /gemma/,                   name: 'Gemma',         blurb: 'Light, fast and concise general-purpose chat.' },
+      { match: /phi/,                     name: 'Phi',           blurb: 'Small and quick — solid everyday Q&A on modest hardware.' },
+      { match: /mixtral/,                 name: 'Mixtral',       blurb: 'Mixture-of-experts model with strong general quality.' },
+      { match: /mistral/,                 name: 'Mistral',       blurb: 'Balanced speed and quality for general tasks.' },
+    ];
+
+    // Build a friendly label + capability summary for one model object from /status.
+    function describeModel(model) {
+      const name = (model && model.name) || '';
+      const profile = MODEL_PROFILES.find(p => p.match.test(name.toLowerCase()));
+      const base = profile ? profile.name : shortModelLabel(name);
+      const size = (model && model.parameterSize) ? String(model.parameterSize).toUpperCase() : '';
+      const params = parseFloat(size);
+      let speed = '';
+      if (Number.isFinite(params)) {
+        if (params <= 4) speed = 'very fast, lightweight';
+        else if (params <= 9) speed = 'fast, balanced quality';
+        else if (params <= 16) speed = 'slower, higher quality';
+        else speed = 'heaviest, top quality';
+      }
+      const blurb = profile ? profile.blurb : 'Local language model.';
+      return {
+        base,
+        size,
+        blurb,
+        speed,
+        label: size ? `${base} · ${size}` : base,
+        title: [blurb, speed && (size ? `${size} — ${speed}` : speed)].filter(Boolean).join(' · '),
+      };
+    }
+
     function renderModelSelect() {
       const select = document.getElementById('model-select');
       const chat = activeChat();
@@ -1247,16 +1371,42 @@
       const models = state.status.models || [];
       const options = [];
       if (state.status.recommendedModel) {
-        options.push(`<option value="">Auto · ${esc(shortModelLabel(state.status.recommendedModel))}</option>`);
+        const rec = models.find(m => m.name === state.status.recommendedModel) || { name: state.status.recommendedModel };
+        const d = describeModel(rec);
+        options.push(`<option value="" title="${esc('Auto-picks the recommended local model · ' + d.title)}">Auto · ${esc(d.label)}</option>`);
       } else {
-        options.push('<option value="">Auto</option>');
+        options.push('<option value="" title="Auto-picks the best available local model.">Auto</option>');
       }
       models.forEach(model => {
-        options.push(`<option value="${esc(model.name)}">${esc(shortModelLabel(model.name))}</option>`);
+        const d = describeModel(model);
+        options.push(`<option value="${esc(model.name)}" title="${esc(d.title)}">${esc(d.label)}</option>`);
       });
       if (!models.length) options.push('<option value="" disabled>No local models</option>');
       select.innerHTML = options.join('');
       select.value = current && models.some(model => model.name === current) ? current : '';
+      updateModelCapability();
+    }
+
+    // Caption under the controls describing the model that will actually answer.
+    function updateModelCapability() {
+      const el = document.getElementById('model-capability');
+      if (!el) return;
+      const models = state.status.models || [];
+      if (!state.status.available || !models.length) { el.innerHTML = ''; return; }
+      const select = document.getElementById('model-select');
+      const selectedName = select && select.value;
+      const model = selectedName
+        ? models.find(m => m.name === selectedName)
+        : (models.find(m => m.name === state.status.recommendedModel) || models[0]);
+      if (!model) { el.innerHTML = ''; return; }
+      const d = describeModel(model);
+      const tags = [];
+      if (d.size) tags.push(`<span class="cap-tag">${esc(d.size)}</span>`);
+      if (model.quantizationLevel) tags.push(`<span class="cap-tag">${esc(model.quantizationLevel)}</span>`);
+      el.innerHTML =
+        `<span class="cap-name">${esc(d.base)}</span>` +
+        tags.join('') +
+        `<span>${esc(d.blurb)}${d.speed ? ' · ' + esc(d.speed) : ''}</span>`;
     }
 
     function renderSkillSelect() {
@@ -1300,7 +1450,7 @@
           available: false,
           models: [],
           recommendedModel: '',
-          setupMessage: 'Could not reach the BIG TUNA server for Eco AI status.',
+          setupMessage: 'Could not reach the BIG TUNA server for Emma status.',
           error: String(error || ''),
         };
         renderStatus();
@@ -1334,7 +1484,7 @@
 
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Eco AI request failed (HTTP ${res.status})`);
+        throw new Error(data.error || `Emma request failed (HTTP ${res.status})`);
       }
 
       const reader = res.body.getReader();
@@ -1446,7 +1596,7 @@
           if (index !== -1) chat.messages.splice(index, 1);
           if (!aborted) {
             showToast(
-              'Eco AI couldn’t respond (' + (lastError || 'unknown error') + '). Your message was kept.',
+              'Emma couldn’t respond (' + (lastError || 'unknown error') + '). Your message was kept.',
               'Retry',
               regenerateLast,
             );
@@ -1636,6 +1786,18 @@
       render();
       refreshStatus();
 
+      // KaTeX is deferred; if the first paint happened before it loaded, re-render
+      // the conversation once it's available so any math typesets immediately.
+      if (!window.katex) {
+        let tries = 0;
+        const katexWatch = setInterval(() => {
+          if (window.katex || tries++ > 40) {
+            clearInterval(katexWatch);
+            if (window.katex) renderMessages();
+          }
+        }, 100);
+      }
+
       document.getElementById('new-chat-btn').onclick = createAndSelectChat;
       document.getElementById('rename-chat-btn').onclick = renameActiveChat;
       document.getElementById('delete-chat-btn').onclick = deleteActiveChat;
@@ -1649,6 +1811,7 @@
         updateActiveChat(chat => { chat.model = event.target.value; });
         state.settings.preferredModel = event.target.value;
         renderSidebar();
+        updateModelCapability();
         scheduleSave();
       });
       document.getElementById('skill-select').addEventListener('change', event => {

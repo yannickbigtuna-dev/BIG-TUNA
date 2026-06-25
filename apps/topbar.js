@@ -15,7 +15,7 @@ const Topbar = (() => {
     { name: 'Psych Sheet',     href: '/psych-sheet/',     icon: '🏊', color: 'var(--c-green)' },
     { name: 'Lists',           href: '/list-maker/',      icon: '📋', color: 'var(--c-teal)' },
     { name: 'Weather',         href: '/weather/',         icon: '☀', color: 'var(--c-cyan)' },
-    { name: 'Eco AI',          href: '/eco-ai/',          icon: '🌱', color: 'var(--c-cyan)' },
+    { name: 'Emma',            href: '/eco-ai/',          icon: '✨', color: 'var(--c-cyan)' },
     { name: 'Assignments',     href: '/assignments/',     icon: '✓', color: 'var(--c-blue)' },
     { name: 'World Map',       href: '/world-map/',       icon: '🌍', color: 'var(--c-indigo)' },
     { name: 'Pace Calculator', href: '/pace-calculator/', icon: '🏃', color: 'var(--c-purple)' },
