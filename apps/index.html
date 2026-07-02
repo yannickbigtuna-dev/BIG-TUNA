@@ -46,9 +46,15 @@
     -webkit-backdrop-filter: var(--blur);
     border-bottom: 1px solid var(--glass-border);
   }
-  [data-auth-widget] { display: flex; }
+  /* Account pill sits on the left; let it shrink (and truncate a long username)
+     instead of pushing into / overlapping the temperature widget on the right. */
+  [data-auth-widget] { display: flex; min-width: 0; flex: 0 1 auto; }
+  #topnav #auth-widget { min-width: 0; max-width: 100%; }
+  #topnav #auth-widget-btn { min-width: 0; max-width: 100%; }
+  #topnav #auth-widget-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
   #temp-widget {
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -461,24 +467,62 @@
   // ── Fit-to-screen: scale the stage so the homepage never needs scrolling ──
   // The clock, Ask Emma bar and app tiles shrink together to match whatever
   // viewport they land in, on any screen size or orientation.
+  //
+  // IMPORTANT: measure the *same* box the layout actually uses. The body is
+  // sized with `height: 100svh`, so its padded content area is exactly the
+  // space the stage is centered in. We must NOT use `window.innerHeight` here:
+  // on iOS Safari that reports the large (toolbar-hidden) viewport, which is
+  // taller than the `svh` box — the stage would be under-scaled and its top /
+  // bottom would bleed past the padding into the fixed topnav and corner-tools
+  // (the mobile "overlap" bug). `document.body.clientHeight` tracks svh/vh and
+  // is stable across the address-bar showing/hiding, so the fit stays correct.
   const stage = document.querySelector('.stage');
+  const topnavEl = document.getElementById('topnav');
+  const cornerEl = document.querySelector('.corner-tools');
+
+  // Reserve exactly as much room as the fixed bars actually occupy. Measuring
+  // offsetHeight (rather than hardcoding padding) keeps the reserve correct on
+  // any device: it already includes each bar's safe-area-inset padding, font
+  // metrics, and any wrapped content — so the stage can never sit under a bar.
+  const GAP = 12; // breathing room between a bar and the stage
+  function reserveBars() {
+    if (topnavEl) document.body.style.paddingTop = (topnavEl.offsetHeight + GAP) + 'px';
+    if (cornerEl) {
+      const cornerBottom = parseFloat(getComputedStyle(cornerEl).bottom) || 0;
+      document.body.style.paddingBottom = (cornerEl.offsetHeight + cornerBottom + GAP) + 'px';
+    }
+  }
+
   function fitStage() {
     if (!stage) return;
+    reserveBars();
     stage.style.transform = 'none';
     const cs = getComputedStyle(document.body);
-    const availH = window.innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const availW = document.body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    // Measure the SAME box the layout uses. The body is `height: 100svh`, so its
+    // padded content area is exactly the space the stage is centered in. Using
+    // document.body.clientHeight (not window.innerHeight) keeps the fit correct
+    // on iOS Safari, where innerHeight reports the taller toolbar-hidden viewport
+    // and would otherwise leave the stage bleeding past the padding into the bars.
+    const availH = document.body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const availW = document.body.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const needH = stage.offsetHeight;
     const needW = stage.offsetWidth;
     if (!needH || !needW) return;
-    let scale = Math.min(availH / needH, availW / needW, 1);
+    // Shrink to fit height AND width; the 0.5px trim absorbs sub-pixel rounding
+    // so a scaled edge never spills 1px into the reserved zones.
+    let scale = Math.min((availH - 0.5) / needH, (availW - 0.5) / needW, 1);
     if (!isFinite(scale) || scale <= 0) scale = 1;
     stage.style.transform = `scale(${scale})`;
   }
-  fitStage();
-  window.addEventListener('resize', fitStage);
-  window.addEventListener('orientationchange', fitStage);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitStage);
+  const refit = () => requestAnimationFrame(fitStage);
+  refit();
+  window.addEventListener('resize', refit);
+  window.addEventListener('orientationchange', refit);
+  window.addEventListener('load', refit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+  // Expose so the post-auth script (below, after /auth.js) can re-fit once the
+  // account pill is injected.
+  window.__refitStage = refit;
 
   // ── Temperature: Open-Meteo "feels like" ──
   const HALIFAX_WEATHER = { lat: 44.6488, lon: -63.5752 };
@@ -525,6 +569,10 @@
 
 <script src="/auth.js"></script>
 <script>
+  // The account pill is injected by /auth.js after the main script ran; re-fit
+  // the stage once it lands so its width is accounted for in the scaling.
+  if (window.Auth && Auth.onReady && window.__refitStage) Auth.onReady(window.__refitStage);
+
   // ── Downloads menu ──
   const downloadsMenu = document.getElementById('downloads-menu');
   const downloadsBtn = document.getElementById('downloads-btn');
