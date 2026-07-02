@@ -46,6 +46,13 @@ const ECO_AI_DEFAULT_OPTIONS = Object.freeze({
   temperature: 0.5,
   num_ctx: 8192,
 });
+// Trivia generator (Lumina Trivia app): uses the same local Ollama install as
+// Eco AI to produce multiple-choice questions. Higher temperature + a random
+// seed per request keeps banks varied; generation is bounded so a slow local
+// model can't hang a request forever.
+const TRIVIA_GEN_TIMEOUT_MS = 90 * 1000;
+const TRIVIA_MAX_COUNT = 10;
+const TRIVIA_MAX_TOPIC_LEN = 100;
 const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.6392425, lon: -63.5944923, radiusKm: 100 });
 const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.5944923/dist/55';
 const YHZ_RADAR_CACHE_MS = 12000;
@@ -706,6 +713,114 @@ function buildEcoAiOllamaMessages(messages, skillId) {
     out.push({
       role: message.role,
       content: message.content + ecoAiFilesToPrompt(message.attachments),
+    });
+  }
+  return out;
+}
+
+// ── Trivia question generation (Lumina Trivia) ────────────────────────────────
+
+// Build the chat messages sent to Ollama. `topic` may be empty (=> random,
+// varied general-knowledge questions) or any user-supplied subject. The prompt
+// is engineered so the model MUST return strict JSON we can parse and validate.
+function buildTriviaMessages(topic, count) {
+  const subject = topic
+    ? `about the topic: "${topic}"`
+    : 'spanning a wide, random mix of general-knowledge categories (history, science, geography, sport, music, film, art, literature, technology, nature, food, and pop culture)';
+
+  const system = [
+    'You are a trivia question generator for a fast-paced quiz game.',
+    'You output ONLY a single JSON object. No prose, no markdown, no code fences.',
+    'The JSON must match exactly: {"questions":[{"question":string,"answers":[string,string,string,string],"correct":number,"category":string,"difficulty":string}]}.',
+    'Rules for every question:',
+    '- "answers" MUST contain EXACTLY four distinct options.',
+    '- Exactly ONE answer is correct; "correct" is its 0-based index (0,1,2,3).',
+    '- The three wrong answers must be plausible but clearly incorrect.',
+    '- "question" is a single self-contained sentence ending in a question mark.',
+    '- "difficulty" is one of "easy","medium","hard". "category" is a short label.',
+    '- Do not repeat questions. Vary the position of the correct answer.',
+    '- Keep every string concise and factually accurate.',
+  ].join('\n');
+
+  const user = `Generate ${count} multiple-choice trivia questions ${subject}. Return the JSON object now.`;
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+}
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Pull a questions array out of whatever shape the model returned (object with
+// `.questions`, a bare array, or an object of numbered keys).
+function extractTriviaArray(parsed) {
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && Array.isArray(parsed.questions)) return parsed.questions;
+  if (parsed && typeof parsed === 'object') {
+    const values = Object.values(parsed);
+    if (values.length && values.every(v => v && typeof v === 'object' && 'question' in v)) {
+      return values;
+    }
+  }
+  return [];
+}
+
+// Validate + normalise raw model output into safe trivia records. Any malformed
+// item is dropped rather than aborting the batch. Answers are shuffled so the
+// correct option's position is randomised regardless of what the model chose.
+function validateTriviaQuestions(rawList, limit) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(rawList) ? rawList : []) {
+    if (out.length >= limit) break;
+    if (!raw || typeof raw !== 'object') continue;
+
+    const question = typeof raw.question === 'string' ? raw.question.trim().slice(0, 500) : '';
+    if (!question) continue;
+
+    const answersRaw = Array.isArray(raw.answers) ? raw.answers
+      : Array.isArray(raw.options) ? raw.options : [];
+    const answers = answersRaw
+      .map(a => (typeof a === 'string' ? a.trim().slice(0, 240) : (a == null ? '' : String(a).trim().slice(0, 240))))
+      .filter(a => a.length > 0);
+    if (answers.length !== 4) continue;
+    if (new Set(answers.map(a => a.toLowerCase())).size !== 4) continue; // must be distinct
+
+    let correct = Number(raw.correct);
+    if (!Number.isInteger(correct) || correct < 0 || correct > 3) {
+      // Some models return the correct answer text instead of an index.
+      const byText = answers.findIndex(a => a.toLowerCase() === String(raw.answer || raw.correctAnswer || '').trim().toLowerCase());
+      if (byText < 0) continue;
+      correct = byText;
+    }
+
+    const dedupeKey = question.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    // Shuffle answer order and track where the correct one lands.
+    const correctText = answers[correct];
+    shuffleInPlace(answers);
+    const newCorrect = answers.indexOf(correctText);
+
+    const difficulty = ['easy', 'medium', 'hard'].includes(String(raw.difficulty || '').toLowerCase())
+      ? String(raw.difficulty).toLowerCase() : 'medium';
+    const category = typeof raw.category === 'string' && raw.category.trim()
+      ? raw.category.trim().slice(0, 40) : 'General';
+
+    out.push({
+      id: crypto.randomUUID(),
+      question,
+      answers,
+      correct: newCorrect,
+      category,
+      difficulty,
     });
   }
   return out;
@@ -1553,6 +1668,74 @@ async function handleAPI(req, res, urlPath) {
       try { reader.releaseLock(); } catch {}
     }
     return;
+  }
+
+  // POST /api/trivia/generate - authenticated local-Ollama trivia generator.
+  // Body: { topic?: string, count?: number, model?: string }. Returns a batch of
+  // validated multiple-choice questions the Lumina Trivia app banks for instant play.
+  if (req.method === 'POST' && urlPath === '/api/trivia/generate') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+
+    const body = await parseBody(req);
+    const topic = typeof body?.topic === 'string'
+      ? body.topic.replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, TRIVIA_MAX_TOPIC_LEN)
+      : '';
+    let count = parseInt(body?.count, 10);
+    if (!Number.isInteger(count) || count < 1) count = 5;
+    count = Math.min(count, TRIVIA_MAX_COUNT);
+
+    const status = await getEcoAiStatus();
+    if (!status.available) {
+      return jsonRes(res, 503, {
+        error: status.setupMessage || 'The local AI model is unavailable',
+        details: status.error || '',
+      });
+    }
+
+    const requestedModel = typeof body?.model === 'string' ? body.model.trim() : '';
+    const modelNames = new Set(status.models.map(m => m.name));
+    const model = requestedModel && modelNames.has(requestedModel)
+      ? requestedModel
+      : (status.recommendedModel || status.models[0]?.name || '');
+    if (!model) return jsonRes(res, 503, { error: 'No local AI models are installed yet' });
+
+    let result;
+    try {
+      result = await ollamaFetchJson('/api/chat', {
+        model,
+        stream: false,
+        format: 'json',
+        messages: buildTriviaMessages(topic, count),
+        options: {
+          temperature: 0.9,
+          top_p: 0.95,
+          num_ctx: 8192,
+          seed: crypto.randomInt(2 ** 31),
+        },
+      }, { timeoutMs: TRIVIA_GEN_TIMEOUT_MS });
+    } catch (error) {
+      return jsonRes(res, 503, { error: 'Could not reach the local AI model', details: ecoAiFriendlyError(error) });
+    }
+
+    if (!result.ok) {
+      return jsonRes(res, 502, { error: 'The local AI model failed to generate questions', details: result.data?.error || result.text || `HTTP ${result.status}` });
+    }
+
+    const content = typeof result.data?.message?.content === 'string' ? result.data.message.content : '';
+    let parsed = null;
+    try { parsed = JSON.parse(content); } catch {
+      // Best-effort: pull the first {...} block if the model wrapped it in text.
+      const match = content.match(/\{[\s\S]*\}/);
+      if (match) { try { parsed = JSON.parse(match[0]); } catch {} }
+    }
+
+    const questions = validateTriviaQuestions(extractTriviaArray(parsed), count);
+    if (!questions.length) {
+      return jsonRes(res, 502, { error: 'The local AI model returned no usable questions. Try again.' });
+    }
+
+    return jsonRes(res, 200, { ok: true, model, topic, questions });
   }
 
   // GET /api/assignments - per-user assignment coach dashboard data

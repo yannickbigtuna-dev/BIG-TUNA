@@ -248,7 +248,7 @@ Homepage:
 - The launcher uses a glass top nav, a 3-column rainbow-tinted app grid, bottom-right corner utility buttons, and a pointer-following ambient background on fine-pointer devices.
 - Hero layout (top to bottom): the large glowing coral "BIG TUNA" wordmark, the uppercase date line, then a digit-slot clock (HH:MM:SS) whose seconds digits glow coral and whose digits roll on change. Clock digits use Geist (tabular numerals), not mono.
 - Top nav: left holds the `[data-auth-widget]` account slot (auth.js fills it); right shows only the Open-Meteo "feels like" temperature (no nav clock in this layout).
-- "Ask Emma" prompt bar (the Eco AI assistant): a glass input below the clock with a coral sparkle icon (no keyboard shortcut). Submitting navigates to `/eco-ai/`, passing the typed text as `?q=`; Eco AI then opens a fresh chat and auto-sends that exact prompt (see the `eco-ai` notes below). This bar replaces the former Eco AI grid tile, so the grid has 9 tiles (Climb Tracker, Workout Timer, Quizzes, Psych Sheet, Lists, Assignments, World Map, Pace Calculator, Capitals Quiz) and Eco AI is reached via the bar.
+- "Ask Emma" prompt bar (the Eco AI assistant): a glass input below the clock with a coral sparkle icon (no keyboard shortcut). Submitting navigates to `/eco-ai/`, passing the typed text as `?q=`; Eco AI then opens a fresh chat and auto-sends that exact prompt (see the `eco-ai` notes below). This bar replaces the former Eco AI grid tile, so the grid has 9 tiles (Climb Tracker, Workout Timer, Trivia, Psych Sheet, Lists, Assignments, World Map, Pace Calculator, Capitals Quiz) and Eco AI is reached via the bar. The Trivia tile replaced the former Quizzes tile; the `quiz-app` still exists and is reachable via the topbar APPS dropdown.
 - The homepage never scrolls: `body` is locked to the viewport height (`100svh`, `overflow: hidden`) and a `fitStage()` routine measures the `.stage` and applies a uniform `transform: scale(...)` (≤1) so the clock, Ask Emma bar, and app tiles shrink together to fit any screen size/orientation. It re-runs on `resize`, `orientationchange`, `load`, `document.fonts.ready`, and once the auth account pill is injected (`Auth.onReady`).
   - Mobile-overlap correctness: `fitStage()` measures available height from `document.body.clientHeight` (the padded `100svh` box) — **not** `window.innerHeight`, which on iOS Safari reports the taller toolbar-hidden viewport and would leave the scaled stage bleeding past the padding into the fixed bars. A companion `reserveBars()` sets `body` top/bottom padding to the *measured* `#topnav`/`.corner-tools` heights (which already include their safe-area-inset padding) plus a 12px gap, so the stage can never sit under a bar on any device. The scale also trims 0.5px to absorb sub-pixel rounding.
   - The top-nav account pill (left) is allowed to shrink and truncate a long username with an ellipsis (`min-width:0` + `text-overflow: ellipsis`) so it never overlaps the temperature widget on the right.
@@ -271,6 +271,7 @@ Current app folders:
 - `apps/psych-sheet/`
 - `apps/quiz-app/`
 - `apps/terminal/`
+- `apps/trivia/`
 - `apps/weather/`
 - `apps/workout-timer/`
 - `apps/world-map/`
@@ -503,6 +504,14 @@ GET  /api/eco-ai/status
 POST /api/eco-ai/chat
 ```
 
+Trivia:
+
+```text
+POST /api/trivia/generate
+```
+
+`POST /api/trivia/generate` is authenticated and powers the Lumina Trivia game. Body is `{ topic?: string, count?: number, model?: string }`. `topic` is trimmed/clamped to 100 chars (blank => a random mix of general-knowledge categories); `count` is clamped to 1–10 (default 5). It reuses the Eco AI Ollama helpers (`getEcoAiStatus`, `ollamaFetchJson`) to call the local model non-streaming with `format:"json"`, a high temperature and a random `seed` for variety. The model output is parsed and passed through `validateTriviaQuestions()`, which drops any item that is not exactly four distinct answers with one valid correct index (accepting either a numeric `correct` index or a `correct`/`answer` answer-text fallback), then shuffles each question's answers and recomputes the correct index. Returns `{ ok, model, topic, questions:[{ id, question, answers:[4], correct, category, difficulty }] }`, `503` when Ollama is offline, or `502` when no usable questions were produced. It does not persist anything server-side.
+
 `eco-ai` is an authenticated local-first chat app at `/eco-ai/`. It proxies chat requests from the BIG TUNA Node server to a local Ollama HTTP server on the same machine, using `OLLAMA_BASE_URL` when set or `http://127.0.0.1:11434` by default. `GET /api/eco-ai/status` reports Ollama availability, installed models, a recommended installed model, and file/message limits for the UI. `POST /api/eco-ai/chat` streams newline-delimited JSON events (`meta`, `delta`, `error`, `done`) back to the browser while forwarding the conversation to Ollama `/api/chat`. While the model is still processing it also emits periodic `{"type":"ping"}` keepalive lines (every 15s) so the Cloudflare Tunnel does not idle-drop long generations on large/old chats; clients must ignore unknown event types. The app persists per-user chats in `data/appdata/eco-ai/{userId}.json` and settings in `data/settings/{userId}/eco-ai.json`. File attachments are browser-read text/code snippets included in prompt context; binary and vision features are intentionally not supported yet.
 
 Only username `yannick` is allowed to open terminal WebSocket sessions. The server caps terminal sessions at 5. Each session forks `pty-worker.js`, so a PTY crash should not crash the main server.
@@ -521,6 +530,14 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 
 - Uses `/api/quizzes`.
 - List endpoints return metadata; individual quiz endpoint returns questions.
+
+`trivia`:
+
+- Authenticated static app at `/trivia/` (Lumina Trivia). Native rebuild of the Stitch "Sleek Minimalist Trivia" design on `/styles/tokens.css`; route accent is `--c-purple` (set in `topbar.js`).
+- All questions are AI-generated by the local Ollama model through `POST /api/trivia/generate`. There is an optional **Topic** text box: leave blank for a random mix, or type any subject to theme the run.
+- Questions are always four-answer multiple choice with the correct option shuffled server-side. Play modes are 10 / 25 / 50 questions or Endless, with a 20s per-question timer and speed-weighted scoring.
+- **Banking:** the client pre-generates a couple of batches of random questions on load (`bank['']`) so a blank-topic run starts instantly, and it refills the pool in the background during play (batches of 5, kept ~6 ahead) so later questions are ready without waiting. Typed-topic runs generate the first batch on demand (loading state) then prefetch ahead.
+- Per-user stats/history persist via `Auth.saveSettings('trivia', …)` (best score, games, totals, last 25 runs) with a `localStorage` fallback; the in-app Rankings tab ranks the user's own completed runs by points. If Ollama is offline the home screen shows an offline notice and generation returns 503.
 
 `psych-sheet`:
 

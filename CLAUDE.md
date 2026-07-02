@@ -73,7 +73,7 @@ Both are managed by pm2 and exposed publicly via Cloudflare Tunnel.
 
 Each app lives in `apps/{app-name}/index.html`. Adding a new app is just dropping a folder with an `index.html` — it auto-appears on the homepage and in the topbar APPS dropdown.
 
-Current apps: `workout-timer`, `quiz-app`, `psych-sheet`, `list-maker`, `world-map`, `pace-calculator`.
+Current apps: `workout-timer`, `quiz-app`, `trivia`, `psych-sheet`, `list-maker`, `world-map`, `pace-calculator`.
 
 ### Shared frontend libraries (served at root)
 
@@ -117,6 +117,7 @@ Data APIs (all require `Authorization: Bearer <token>`):
 - Climbs v1: `GET/POST /api/climbs`
 - Climbs v2: `GET/POST /api/climbs2`, `POST/GET/DELETE /api/climbs2/photo/:id`
 - Quizzes: `GET/POST /api/quizzes`, `GET/PUT/DELETE /api/quizzes/:id`
+- Trivia (AI-generated): `POST /api/trivia/generate` (local Ollama; `{ topic?, count?, model? }` → validated 4-answer questions)
 - Psych-sheet meets: `GET/POST /api/meets/psych-sheet`, `GET/PATCH/DELETE /api/meets/psych-sheet/:id`
 - Shared lists: `GET/POST /api/shared-lists`, `GET/POST/DELETE /api/shared-lists/:id`, `GET /api/shared-lists/:id/events` (SSE)
 - World Aquatics proxy: `GET /api/waquatics/search`, `GET /api/waquatics/athlete`
