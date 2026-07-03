@@ -53,6 +53,7 @@ const ECO_AI_DEFAULT_OPTIONS = Object.freeze({
 const TRIVIA_GEN_TIMEOUT_MS = 90 * 1000;
 const TRIVIA_MAX_COUNT = 10;
 const TRIVIA_MAX_TOPIC_LEN = 100;
+const TRIVIA_MAX_EXCLUDE = 60;   // most-recent already-asked questions sent to avoid duplicates
 const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.6392425, lon: -63.5944923, radiusKm: 100 });
 const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.5944923/dist/55';
 const YHZ_RADAR_CACHE_MS = 12000;
@@ -723,26 +724,43 @@ function buildEcoAiOllamaMessages(messages, skillId) {
 // Build the chat messages sent to Ollama. `topic` may be empty (=> random,
 // varied general-knowledge questions) or any user-supplied subject. The prompt
 // is engineered so the model MUST return strict JSON we can parse and validate.
-function buildTriviaMessages(topic, count) {
+function buildTriviaMessages(topic, count, difficulty, exclude) {
   const subject = topic
     ? `about the topic: "${topic}"`
     : 'spanning a wide, random mix of general-knowledge categories (history, science, geography, sport, music, film, art, literature, technology, nature, food, and pop culture)';
 
+  const DIFF = {
+    easy:   'Make EVERY question EASY: well-known, commonly-taught facts that most casual players would recognise.',
+    medium: 'Make EVERY question MEDIUM difficulty: moderately challenging, requiring some specific knowledge beyond the obvious.',
+    hard:   'Make EVERY question HARD: obscure, expert-level, or highly specific facts that are genuinely difficult, with tempting near-miss wrong answers.',
+  };
+  const difficultyClause = DIFF[difficulty]
+    ? `${DIFF[difficulty]} Set each question's "difficulty" field to "${difficulty}".`
+    : 'Use a natural mix of easy, medium, and hard questions.';
+
   const system = [
     'You are a trivia question generator for a fast-paced quiz game.',
     'You output ONLY a single JSON object. No prose, no markdown, no code fences.',
-    'The JSON must match exactly: {"questions":[{"question":string,"answers":[string,string,string,string],"correct":number,"category":string,"difficulty":string}]}.',
+    'The JSON must match exactly: {"questions":[{"question":string,"answers":[string,string,string,string],"correct":number,"category":string,"difficulty":string,"explanation":string}]}.',
     'Rules for every question:',
     '- "answers" MUST contain EXACTLY four distinct options.',
     '- Exactly ONE answer is correct; "correct" is its 0-based index (0,1,2,3).',
     '- The three wrong answers must be plausible but clearly incorrect.',
     '- "question" is a single self-contained sentence ending in a question mark.',
+    '- "explanation" is ONE short sentence (max ~160 chars) that explains why the correct answer is right and gives a memorable hook or fact to help the player remember it.',
     '- "difficulty" is one of "easy","medium","hard". "category" is a short label.',
-    '- Do not repeat questions. Vary the position of the correct answer.',
+    '- NEVER repeat, reuse, or paraphrase a question the player has already been asked. Every question must be brand new and distinct. Vary the position of the correct answer.',
     '- Keep every string concise and factually accurate.',
   ].join('\n');
 
-  const user = `Generate ${count} multiple-choice trivia questions ${subject}. Return the JSON object now.`;
+  // The client remembers every question already served this session and passes
+  // them here so the model can avoid duplicates (it is otherwise stateless).
+  const avoid = Array.isArray(exclude) ? exclude.filter(s => typeof s === 'string' && s.trim()) : [];
+  const avoidClause = avoid.length
+    ? ` Do NOT repeat or rephrase any of these ${avoid.length} already-asked questions:\n${avoid.map(q => '- ' + q).join('\n')}\nGenerate completely different question(s).`
+    : '';
+
+  const user = `Generate ${count} multiple-choice trivia question${count === 1 ? '' : 's'} ${subject}. ${difficultyClause}${avoidClause} Return the JSON object now.`;
   return [
     { role: 'system', content: system },
     { role: 'user', content: user },
@@ -774,9 +792,15 @@ function extractTriviaArray(parsed) {
 // Validate + normalise raw model output into safe trivia records. Any malformed
 // item is dropped rather than aborting the batch. Answers are shuffled so the
 // correct option's position is randomised regardless of what the model chose.
-function validateTriviaQuestions(rawList, limit) {
+function normalizeQuestionText(q) {
+  return String(q || '').toLowerCase().replace(/\s+/g, ' ').replace(/[?.!]+$/, '').trim();
+}
+
+function validateTriviaQuestions(rawList, limit, excludeSet) {
   const out = [];
-  const seen = new Set();
+  // Seed the dedupe set with the questions the player has already seen so any
+  // duplicate the model slips through is dropped server-side too.
+  const seen = new Set(excludeSet instanceof Set ? excludeSet : []);
   for (const raw of Array.isArray(rawList) ? rawList : []) {
     if (out.length >= limit) break;
     if (!raw || typeof raw !== 'object') continue;
@@ -800,7 +824,7 @@ function validateTriviaQuestions(rawList, limit) {
       correct = byText;
     }
 
-    const dedupeKey = question.toLowerCase();
+    const dedupeKey = normalizeQuestionText(question);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
@@ -813,6 +837,8 @@ function validateTriviaQuestions(rawList, limit) {
       ? String(raw.difficulty).toLowerCase() : 'medium';
     const category = typeof raw.category === 'string' && raw.category.trim()
       ? raw.category.trim().slice(0, 40) : 'General';
+    const explanation = typeof raw.explanation === 'string' ? raw.explanation.trim().slice(0, 300)
+      : (typeof raw.explain === 'string' ? raw.explain.trim().slice(0, 300) : '');
 
     out.push({
       id: crypto.randomUUID(),
@@ -821,6 +847,7 @@ function validateTriviaQuestions(rawList, limit) {
       correct: newCorrect,
       category,
       difficulty,
+      explanation,
     });
   }
   return out;
@@ -1671,8 +1698,9 @@ async function handleAPI(req, res, urlPath) {
   }
 
   // POST /api/trivia/generate - authenticated local-Ollama trivia generator.
-  // Body: { topic?: string, count?: number, model?: string }. Returns a batch of
-  // validated multiple-choice questions the Lumina Trivia app banks for instant play.
+  // Body: { topic?, count?, model?, difficulty?, exclude?: string[] }. `exclude`
+  // is the list of already-asked questions so the (stateless) model avoids
+  // duplicates. Returns validated multiple-choice questions for the Trivia app.
   if (req.method === 'POST' && urlPath === '/api/trivia/generate') {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
@@ -1684,6 +1712,19 @@ async function handleAPI(req, res, urlPath) {
     let count = parseInt(body?.count, 10);
     if (!Number.isInteger(count) || count < 1) count = 5;
     count = Math.min(count, TRIVIA_MAX_COUNT);
+
+    // 'easy' | 'medium' | 'hard' pin the whole batch; anything else = mixed.
+    const reqDifficulty = typeof body?.difficulty === 'string' ? body.difficulty.toLowerCase() : '';
+    const difficulty = ['easy', 'medium', 'hard'].includes(reqDifficulty) ? reqDifficulty : 'any';
+
+    // Already-asked questions to avoid repeating (capped to bound the prompt).
+    const exclude = Array.isArray(body?.exclude)
+      ? body.exclude
+          .filter(s => typeof s === 'string' && s.trim())
+          .map(s => s.replace(/\s+/g, ' ').trim().slice(0, 240))
+          .slice(0, TRIVIA_MAX_EXCLUDE)
+      : [];
+    const excludeSet = new Set(exclude.map(normalizeQuestionText));
 
     const status = await getEcoAiStatus();
     if (!status.available) {
@@ -1706,7 +1747,7 @@ async function handleAPI(req, res, urlPath) {
         model,
         stream: false,
         format: 'json',
-        messages: buildTriviaMessages(topic, count),
+        messages: buildTriviaMessages(topic, count, difficulty, exclude),
         options: {
           temperature: 0.9,
           top_p: 0.95,
@@ -1730,12 +1771,12 @@ async function handleAPI(req, res, urlPath) {
       if (match) { try { parsed = JSON.parse(match[0]); } catch {} }
     }
 
-    const questions = validateTriviaQuestions(extractTriviaArray(parsed), count);
+    const questions = validateTriviaQuestions(extractTriviaArray(parsed), count, excludeSet);
     if (!questions.length) {
       return jsonRes(res, 502, { error: 'The local AI model returned no usable questions. Try again.' });
     }
 
-    return jsonRes(res, 200, { ok: true, model, topic, questions });
+    return jsonRes(res, 200, { ok: true, model, topic, difficulty, questions });
   }
 
   // GET /api/assignments - per-user assignment coach dashboard data

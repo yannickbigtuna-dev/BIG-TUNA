@@ -110,6 +110,23 @@
   .mode-card.selected .num { color: var(--accent); }
   .mode-card .inf { font-size: var(--text-2xl); color: var(--accent); line-height: 1; font-weight: 300; }
 
+  /* Difficulty segmented control */
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+  .seg-btn {
+    padding: 11px var(--space-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  }
+  .seg-btn:hover { border-color: var(--border-strong); color: var(--text); }
+  .seg-btn.selected { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 18px -8px var(--accent-glow); }
+
   .start-btn {
     align-self: center;
     display: inline-flex;
@@ -193,6 +210,25 @@
   .q-loading { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); padding: var(--space-12) 0; color: var(--text-muted); }
   .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--surface-3); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Explanation / memory-aid card (shown after answering) ── */
+  .explain {
+    margin-top: var(--space-5);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    animation: fade 0.3s var(--ease);
+  }
+  .explain[hidden] { display: none; }
+  .explain-head { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
+  .explain-head svg { width: 18px; height: 18px; }
+  .explain-head span { font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; }
+  .explain-text { color: var(--text); font-size: var(--text-base); line-height: 1.5; }
+  .explain-next { align-self: stretch; justify-content: center; margin-top: var(--space-1); }
 
   /* ── Results ── */
   .result-top { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); text-align: center; }
@@ -307,6 +343,14 @@
       <span class="topic-hint">e.g. “space exploration”, “90s hip hop”, “Greek mythology”, “Formula 1”.</span>
     </div>
 
+    <div class="section-h"><span class="label-mono">Difficulty</span></div>
+    <div class="seg" id="difficulty">
+      <button class="seg-btn selected" data-diff="any">Mixed</button>
+      <button class="seg-btn" data-diff="easy">Easy</button>
+      <button class="seg-btn" data-diff="medium">Medium</button>
+      <button class="seg-btn" data-diff="hard">Hard</button>
+    </div>
+
     <div class="section-h"><span class="label-mono">Select Mode</span></div>
     <div class="modes" id="modes">
       <button class="mode-card" data-count="10"><span class="num">10</span><span class="cap">Questions</span></button>
@@ -339,6 +383,18 @@
       <p class="label-mono q-cat" id="q-cat" style="margin:var(--space-4) 0 var(--space-3)">General</p>
       <h1 class="q-text" id="q-text">…</h1>
       <div class="answers" id="answers" style="margin-top:var(--space-8)"></div>
+
+      <div class="explain" id="explain" hidden>
+        <div class="explain-head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg>
+          <span id="explain-label">Remember this</span>
+        </div>
+        <p class="explain-text" id="explain-text"></p>
+        <button class="start-btn explain-next" id="next-btn">
+          Next
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="q-loading" id="q-loading" style="display:none">
@@ -405,10 +461,16 @@
   Topbar.setTitle('Trivia');
 
   // ── Config ──────────────────────────────────────────────────────────────
+  // Questions are generated ONE AT A TIME: the first one is shown as soon as it
+  // arrives, then each following question is prepared in the background while the
+  // player is answering the current one, always keeping a small buffer ready.
   const APP_ID = 'trivia';
-  const BATCH = 5;                 // questions requested per generate call
   const QUESTION_TIME = 20;        // seconds per question
-  const AHEAD = 6;                 // keep this many questions loaded ahead of the player
+  const PREFETCH = 2;              // questions to keep ready ahead of the current one
+  const PREBANK = 3;               // questions pre-generated on load for an instant first game
+  const GEN_RETRY = 4;             // attempts when a single-question request yields nothing
+  const STUCK_LIMIT = 8;           // give up (end run) after this many consecutive fruitless generations
+  const EXCLUDE_MAX = 60;          // most-recent asked questions sent to the AI to avoid repeats
   const HISTORY_MAX = 25;
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -416,9 +478,10 @@
   let stats = { bestScore: 0, gamesPlayed: 0, totalPoints: 0, totalCorrect: 0, totalQuestions: 0, history: [] };
   let aiAvailable = true;
 
-  // A "bank" of pre-generated questions keyed by lowercased topic ('' = random).
+  // A "bank" of pre-generated questions keyed by topic+difficulty.
   const bank = {};                 // { key: [questions] }
-  const fetching = {};             // { key: Promise } — de-dupes in-flight requests
+  const bankSeen = {};             // { key: Set<normalized question text> } — bank-level dedupe
+  const fetching = {};             // { key: true } — de-dupes in-flight prebank requests
 
   let run = null;                  // active game state
 
@@ -426,7 +489,29 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtTime = ms => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-  const keyFor = topic => (topic || '').trim().toLowerCase();
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // Bank/run keys are scoped to both topic and difficulty so questions never
+  // leak between, say, an "easy space" run and a "hard space" run.
+  const keyFor = (topic, difficulty) => (difficulty || 'any') + '::' + (topic || '').trim().toLowerCase();
+
+  // Canonical form used to detect duplicate questions (matches the server).
+  const normQ = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').replace(/[?.!]+$/, '').trim();
+
+  // Append questions to `list`, skipping any whose text is already in `seen`.
+  // Returns how many were actually added. This is the single choke-point that
+  // guarantees a question is never shown twice.
+  function addUnique(list, seen, questions) {
+    let added = 0;
+    for (const q of (questions || [])) {
+      if (!q || !q.question) continue;
+      const n = normQ(q.question);
+      if (seen.has(n)) continue;
+      seen.add(n);
+      list.push(q);
+      added++;
+    }
+    return added;
+  }
 
   function showView(id) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -434,12 +519,19 @@
     window.scrollTo(0, 0);
   }
 
-  // ── Question generation / banking ───────────────────────────────────────
-  async function generateBatch(topic, count) {
+  // ── Question generation ─────────────────────────────────────────────────
+  // Request a single question (default) from the local AI. Returns 0..count
+  // validated questions; throws on a real failure (offline / server error).
+  async function generateOne(topic, difficulty, count, exclude) {
     const res = await fetch('/api/trivia/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.token },
-      body: JSON.stringify({ topic: topic || '', count: count || BATCH }),
+      body: JSON.stringify({
+        topic: topic || '',
+        count: count || 1,
+        difficulty: difficulty || 'any',
+        exclude: Array.isArray(exclude) ? exclude.slice(-EXCLUDE_MAX) : [],
+      }),
     });
     if (!res.ok) {
       let msg = 'Question generation failed';
@@ -452,24 +544,29 @@
     return Array.isArray(data.questions) ? data.questions : [];
   }
 
-  // Refill the bank for a topic key up to `target`. De-duped per key so we never
-  // fire two overlapping requests for the same topic.
-  function refillBank(topic, target) {
-    const key = keyFor(topic);
-    if (fetching[key]) return fetching[key];
-    const have = (bank[key] || []).length;
-    if (have >= target) return Promise.resolve();
-    const p = generateBatch(topic, BATCH)
-      .then(qs => { bank[key] = (bank[key] || []).concat(qs); })
-      .catch(() => {})   // background refills fail silently; foreground paths surface errors
-      .finally(() => { delete fetching[key]; });
-    fetching[key] = p;
-    return p;
+  // Pre-generate a few questions on load (one at a time) so the first game of a
+  // blank/selected difficulty starts instantly. De-duped per key; the bank's
+  // seen-set is passed as the exclude list so pre-banked questions are unique.
+  async function prebank(topic, difficulty, n) {
+    const key = keyFor(topic, difficulty);
+    if (fetching[key]) return;
+    fetching[key] = true;
+    bank[key] = bank[key] || [];
+    bankSeen[key] = bankSeen[key] || new Set();
+    try {
+      let misses = 0;
+      while (aiAvailable && bank[key].length < n && misses < GEN_RETRY) {
+        const qs = await generateOne(topic, difficulty, 1, Array.from(bankSeen[key]));
+        if (!qs.length) { misses++; continue; }
+        if (!addUnique(bank[key], bankSeen[key], qs)) misses++;  // model returned only dupes
+      }
+    } catch { /* silent: foreground start-of-run surfaces errors */ }
+    finally { fetching[key] = false; }
   }
 
-  // Pull up to `n` banked questions for a topic (removing them from the bank).
-  function takeFromBank(topic, n) {
-    const key = keyFor(topic);
+  // Pull up to `n` banked questions (removing them from the bank).
+  function takeFromBank(topic, difficulty, n) {
+    const key = keyFor(topic, difficulty);
     const arr = bank[key] || [];
     const taken = arr.splice(0, n);
     bank[key] = arr;
@@ -478,6 +575,7 @@
 
   // ── Home ────────────────────────────────────────────────────────────────
   let selectedCount = 25;
+  let selectedDifficulty = 'any';   // 'any' | 'easy' | 'medium' | 'hard'
 
   function initModes() {
     els.modes.querySelectorAll('.mode-card').forEach(card => {
@@ -485,6 +583,19 @@
         els.modes.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
         selectedCount = parseInt(card.dataset.count, 10);
+      });
+    });
+  }
+
+  function initDifficulty() {
+    const wrap = $('difficulty');
+    wrap.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        wrap.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedDifficulty = btn.dataset.diff;
+        // Warm the bank for the newly chosen difficulty (blank topic).
+        if (aiAvailable) prebank('', selectedDifficulty, PREBANK);
       });
     });
   }
@@ -502,14 +613,15 @@
   // ── Start a run ─────────────────────────────────────────────────────────
   async function startRun() {
     const topic = els.topicInput.value.trim().slice(0, 100);
+    const difficulty = selectedDifficulty;
     const total = selectedCount;           // 0 => endless
     const endless = total === 0;
-    const firstNeeded = endless ? BATCH : Math.min(total, BATCH);
 
     run = {
-      topic, endless,
+      topic, difficulty, endless,
       target: endless ? Infinity : total,
       pool: [],
+      seen: new Set(),                     // normalized text of every question served this run
       index: 0,
       answered: [],                        // { q, picked, correct, ms }
       correct: 0,
@@ -517,34 +629,36 @@
       startTime: 0,
       timer: null,
       awaitingNext: false,
+      fetching: false,
+      genFails: 0,
     };
 
-    // Seed the pool from the bank first (instant when pre-banked).
-    run.pool = takeFromBank(topic, endless ? BATCH * 2 : total);
+    // Seed the pool from the pre-banked questions (instant first game if warm),
+    // recording each in `seen` so it can never be asked again this run.
+    addUnique(run.pool, run.seen, takeFromBank(topic, difficulty, endless ? PREFETCH + 1 : total));
 
     showView('game');
     els.qBody.style.display = 'none';
     els.qLoading.style.display = 'flex';
-    $('q-loading-text').textContent = topic ? `Writing trivia about “${topic}”…` : 'Shuffling the question deck…';
+    $('q-loading-text').textContent = topic ? `Writing your first question about “${topic}”…` : 'Writing your first question…';
 
-    // Make sure we have enough to begin.
-    if (run.pool.length < firstNeeded) {
+    // Only ONE question is needed to begin — generate it now if the bank was cold.
+    if (!run.pool.length) {
       try {
-        while (run.pool.length < firstNeeded) {
-          const qs = await generateBatch(topic, BATCH);
-          if (!qs.length) break;
-          run.pool = run.pool.concat(qs);
+        for (let tries = 0; tries < GEN_RETRY && run && !run.pool.length; tries++) {
+          const qs = await generateOne(topic, difficulty, 1, Array.from(run.seen));
+          if (!run) return;                  // player quit during the await
+          addUnique(run.pool, run.seen, qs);
         }
-      } catch (e) {
-        if (!run.pool.length) { failRun(e); return; }
-      }
+      } catch (e) { failRun(e); return; }
     }
+    if (!run) return;                       // player quit during the wait
     if (!run.pool.length) { failRun(new Error('No questions available')); return; }
 
     run.startTime = Date.now();
     els.qBody.style.display = 'block';
     els.qLoading.style.display = 'none';
-    ensureAhead();
+    ensureBuffer();                         // start preparing the next question(s)
     renderQuestion();
   }
 
@@ -559,25 +673,45 @@
       : ('Could not build this run: ' + (err && err.message ? err.message : 'unknown error') + '. Please try again.');
   }
 
-  // Keep the pool filled ahead of the player (background).
-  function ensureAhead() {
-    if (!run) return;
-    const want = run.endless ? run.index + AHEAD : Math.min(run.target, run.index + AHEAD);
-    if (run.pool.length >= want) return;
-    const key = keyFor(run.topic);
-    if (fetching['run:' + key]) return;
-    fetching['run:' + key] = generateBatch(run.topic, BATCH)
+  // Prepare the next question(s) in the background — one request at a time —
+  // keeping PREFETCH questions ready ahead of the one being answered. Chains
+  // itself until the buffer target is met, and backs off if the model is down.
+  function ensureBuffer() {
+    if (!run || run.fetching) return;
+    const target = Math.min(run.target, run.index + 1 + PREFETCH);
+    if (run.pool.length >= target) return;
+
+    run.fetching = true;
+    generateOne(run.topic, run.difficulty, 1, Array.from(run.seen))
       .then(qs => {
         if (!run) return;
-        // Cap non-endless runs at their target length.
-        const room = run.endless ? qs.length : Math.max(0, run.target - run.pool.length);
-        run.pool = run.pool.concat(qs.slice(0, room));
+        // addUnique drops any question already seen this run, so duplicates
+        // never enter the pool even if the model slips one through.
+        const added = addUnique(run.pool, run.seen, qs);
+        if (added) {
+          run.genFails = 0;
+          if (run.awaitingNext) renderQuestion();   // player was waiting — show it now
+        } else {
+          run.genFails++;
+        }
       })
-      .catch(() => {})
+      .catch(() => { if (run) run.genFails++; })
       .finally(() => {
-        delete fetching['run:' + key];
-        // If the player is waiting on a not-yet-loaded question, show it now.
-        if (run && run.awaitingNext) renderQuestion();
+        if (!run) return;
+        run.fetching = false;
+        // If the player is stuck waiting and the model can't produce any more
+        // unique questions (topic exhausted / offline), end the run gracefully
+        // with what they've answered instead of spinning forever.
+        if (run.awaitingNext && run.genFails >= STUCK_LIMIT) {
+          if (run.answered.length) return finishRun();
+          return failRun(new Error('Ran out of new questions'));
+        }
+        const t = Math.min(run.target, run.index + 1 + PREFETCH);
+        if (run.pool.length < t) {
+          // Back off on repeated empty/offline responses so we don't hammer the model.
+          const delay = run.genFails > 1 ? Math.min(4000, 500 * run.genFails) : 0;
+          setTimeout(() => { if (run) ensureBuffer(); }, delay);
+        }
       });
   }
 
@@ -589,17 +723,19 @@
 
     const q = run.pool[run.index];
     if (!q) {
-      // Not generated yet — show loader and wait for ensureAhead to deliver.
+      // Next question isn't ready yet — show the loader; ensureBuffer will
+      // re-render as soon as the background generation delivers it.
       run.awaitingNext = true;
       els.qBody.style.display = 'none';
       els.qLoading.style.display = 'flex';
-      $('q-loading-text').textContent = 'Summoning the next question…';
-      ensureAhead();
+      $('q-loading-text').textContent = 'Preparing the next question…';
+      ensureBuffer();
       return;
     }
     run.awaitingNext = false;
     els.qBody.style.display = 'block';
     els.qLoading.style.display = 'none';
+    els.explain.hidden = true;
 
     const totalLabel = run.endless ? '∞' : run.target;
     $('q-counter').textContent = `Question ${run.index + 1}/${totalLabel}`;
@@ -618,7 +754,7 @@
     });
 
     startTimer(q);
-    ensureAhead();
+    ensureBuffer();
   }
 
   // ── Timer ───────────────────────────────────────────────────────────────
@@ -664,13 +800,37 @@
       else b.classList.add('dim');
     });
 
-    setTimeout(() => {
-      if (!run) return;
-      run.locked = false;
-      run.index++;
-      // Endless mode: allow a graceful stop if generation stalls after answering.
-      renderQuestion();
-    }, 1100);
+    // Show a short explanation / memory aid. The player advances at their own
+    // pace with "Next", which also gives the background generator time to
+    // prepare the next question.
+    showExplanation(q, isCorrect, picked === -1);
+  }
+
+  function showExplanation(q, isCorrect, timedOut) {
+    const correctText = q.answers[q.correct];
+    els.explainLabel.textContent = timedOut ? 'Time’s up — remember this'
+      : (isCorrect ? 'Correct — remember this' : 'Not quite — remember this');
+    const base = q.explanation && q.explanation.trim()
+      ? q.explanation.trim()
+      : `The correct answer is “${correctText}”.`;
+    // Always reinforce the correct answer alongside the memory hook.
+    const lead = (!isCorrect || timedOut) ? `Answer: “${correctText}”. ` : '';
+    els.explainText.textContent = lead + base;
+
+    const last = !run.endless && run.index + 1 >= run.target;
+    els.nextBtn.firstChild.textContent = last ? 'See Results ' : 'Next ';
+
+    els.explain.hidden = false;
+    els.nextBtn.focus({ preventScroll: true });
+    els.explain.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function advanceQuestion() {
+    if (!run || !run.locked) return;   // only advance from the answered/explanation state
+    run.locked = false;
+    els.explain.hidden = true;
+    run.index++;
+    renderQuestion();
   }
 
   // ── Finish ──────────────────────────────────────────────────────────────
@@ -695,6 +855,7 @@
     stats.history.unshift({
       date: Date.now(),
       topic: run.topic || '',
+      difficulty: run.difficulty || 'any',
       correct, total, points, accuracy, timeMs,
     });
     stats.history = stats.history.slice(0, HISTORY_MAX);
@@ -749,9 +910,10 @@
       row.className = 'lb-row' + (i < 3 ? ' top' + (i + 1) : '');
       const label = h.topic ? esc(h.topic) : 'Random Mix';
       const when = new Date(h.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const diff = h.difficulty && h.difficulty !== 'any' ? ' · ' + h.difficulty : '';
       row.innerHTML =
         `<span class="rank">${i + 1}</span>
-         <span class="who">${label}<small>${h.correct}/${h.total} · ${when}</small></span>
+         <span class="who">${label}<small>${h.correct}/${h.total}${diff} · ${when}</small></span>
          <span class="lvl">${h.accuracy}%</span>
          <span class="pts">${h.points.toLocaleString()}</span>`;
       rows.appendChild(row);
@@ -785,6 +947,10 @@
     els.answers = $('answers');
     els.timer = $('timer');
     els.timerVal = $('timer-val');
+    els.explain = $('explain');
+    els.explainLabel = $('explain-label');
+    els.explainText = $('explain-text');
+    els.nextBtn = $('next-btn');
   }
 
   function bindEvents() {
@@ -799,6 +965,7 @@
       run = null;
       showView('home');
     });
+    els.nextBtn.addEventListener('click', advanceQuestion);
     $('again-btn').addEventListener('click', startRun);
     $('home-btn').addEventListener('click', () => showView('home'));
     $('results-board-btn').addEventListener('click', () => { renderBoard(); showView('board'); });
@@ -824,14 +991,15 @@
   Auth.onReady(async user => {
     cacheEls();
     initModes();
+    initDifficulty();
     bindEvents();
     $('home-name').textContent = user && user.username ? user.username : 'Player One';
     await loadStats();
     renderStats();
     await checkAi();
-    // Pre-bank a couple of batches of random questions so a blank-topic run
-    // starts instantly, then keep the bank topped up in the background.
-    if (aiAvailable) { refillBank('', BATCH * 2); }
+    // Pre-generate a few random questions (one at a time) so the first blank-topic
+    // game starts instantly; the rest are prepared in the background during play.
+    if (aiAvailable) { prebank('', selectedDifficulty, PREBANK); }
   });
 })();
 </script>
