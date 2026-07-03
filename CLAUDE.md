@@ -73,6 +73,8 @@ Both are managed by pm2 and exposed publicly via Cloudflare Tunnel.
 
 Each app lives in `apps/{app-name}/index.html`. Adding a new app is just dropping a folder with an `index.html` — it auto-appears on the homepage and in the topbar APPS dropdown.
 
+**App accent color convention:** every app is themed to a single rainbow token from `tokens.css` (`--c-red` … `--c-pink`). An app's in-app accent — the `color` set for it in `topbar.js`, which becomes `--accent` on that route — **must be the same rainbow token as its icon/tile on the homepage grid** (`apps/index.html`, the `--tile` on its `.card`). Set the same token in both places so the launcher tile and the app's interior share one identity. (Example: Trivia is `--c-yellow` on the homepage tile and as its route accent.)
+
 Current apps: `workout-timer`, `quiz-app`, `trivia`, `psych-sheet`, `list-maker`, `world-map`, `pace-calculator`.
 
 ### Shared frontend libraries (served at root)

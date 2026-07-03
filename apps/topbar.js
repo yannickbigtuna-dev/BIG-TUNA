@@ -11,7 +11,7 @@ const Topbar = (() => {
   const APPS = [
     { name: 'Climb Tracker',   href: '/climb-tracker/',   icon: '⛰', color: 'var(--c-red)' },
     { name: 'Workout Timer',   href: '/workout-timer/',   icon: '⏱', color: 'var(--c-orange)' },
-    { name: 'Trivia',          href: '/trivia/',          icon: '🧠', color: 'var(--c-purple)' },
+    { name: 'Trivia',          href: '/trivia/',          icon: '🧠', color: 'var(--c-yellow)' },
     { name: 'Quizzes',         href: '/quiz-app/',        icon: '❓', color: 'var(--c-yellow)' },
     { name: 'Psych Sheet',     href: '/psych-sheet/',     icon: '🏊', color: 'var(--c-green)' },
     { name: 'Lists',           href: '/list-maker/',      icon: '📋', color: 'var(--c-teal)' },
