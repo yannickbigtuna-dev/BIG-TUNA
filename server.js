@@ -21,6 +21,8 @@ const RADAR_DIR         = path.join(DATA, 'radar');
 const ASSIGNMENTS_DIR   = path.join(DATA, 'assignments');
 const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
+const PASSWORD_RESETS_FILE = path.join(DATA, 'password-resets.json');
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
 const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
@@ -66,6 +68,7 @@ for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMB
 
 if (!fs.existsSync(USERS_FILE))    fs.writeFileSync(USERS_FILE,    '[]');
 if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '[]');
+if (!fs.existsSync(PASSWORD_RESETS_FILE)) fs.writeFileSync(PASSWORD_RESETS_FILE, '[]');
 if (!fs.existsSync(LIGHTS_STATE_FILE)) {
   fs.writeFileSync(LIGHTS_STATE_FILE, JSON.stringify({
     on: false,
@@ -247,6 +250,7 @@ function startLightsScheduler() {
 function isValidId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(id);
 }
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 function readUsers() {
@@ -272,6 +276,16 @@ function getSessionUser(token) {
   const session  = sessions.find(s => s.token === token && new Date(s.expiresAt) > new Date());
   if (!session) return null;
   return readUsers().find(u => u.id === session.userId) || null;
+}
+
+// ── Password resets ──────────────────────────────────────────────────────────
+function readPasswordResets() {
+  try { return JSON.parse(fs.readFileSync(PASSWORD_RESETS_FILE, 'utf8')); }
+  catch { return []; }
+}
+function writePasswordResets(resets) {
+  const now = Date.now();
+  atomicWrite(PASSWORD_RESETS_FILE, resets.filter(r => new Date(r.expiresAt).getTime() > now));
 }
 
 // ── Settings (per-user, per-app files) ───────────────────────────────────────
@@ -1442,7 +1456,7 @@ async function handleAPI(req, res, urlPath) {
     sessions.push({ token, userId: user.id, createdAt: new Date().toISOString(),
                     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() });
     writeSessions(sessions);
-    return jsonRes(res, 200, { token, username: user.username, id: user.id });
+    return jsonRes(res, 200, { token, username: user.username, id: user.id, email: user.email || null });
   }
 
   // POST /api/auth/login
@@ -1461,7 +1475,7 @@ async function handleAPI(req, res, urlPath) {
     sessions.push({ token, userId: user.id, createdAt: new Date().toISOString(),
                     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() });
     writeSessions(sessions);   // prunes expired automatically
-    return jsonRes(res, 200, { token, username: user.username, id: user.id });
+    return jsonRes(res, 200, { token, username: user.username, id: user.id, email: user.email || null });
   }
 
   // POST /api/auth/logout
@@ -1475,7 +1489,95 @@ async function handleAPI(req, res, urlPath) {
   if (req.method === 'GET' && urlPath === '/api/auth/me') {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
-    return jsonRes(res, 200, { username: user.username, id: user.id });
+    return jsonRes(res, 200, { username: user.username, id: user.id, email: user.email || null });
+  }
+
+  // POST /api/auth/set-email — set/update the current user's recovery email
+  if (req.method === 'POST' && urlPath === '/api/auth/set-email') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+
+    const { email } = await parseBody(req);
+    const trimmed = String(email || '').trim().toLowerCase();
+    if (trimmed && !EMAIL_RE.test(trimmed))
+      return jsonRes(res, 400, { error: 'Enter a valid email address' });
+
+    const users = readUsers();
+    const target = users.find(u => u.id === user.id);
+    target.email = trimmed || null;
+    writeUsers(users);
+    return jsonRes(res, 200, { ok: true, email: target.email });
+  }
+
+  // POST /api/auth/forgot-password — email a reset link if the username has a recovery email on file
+  if (req.method === 'POST' && urlPath === '/api/auth/forgot-password') {
+    const { username } = await parseBody(req);
+    const uname = String(username || '').trim().toLowerCase();
+    const user = uname ? readUsers().find(u => u.username.toLowerCase() === uname) : null;
+
+    if (user && user.email) {
+      const token = generateToken();
+      const resets = readPasswordResets();
+      resets.push({
+        token, userId: user.id, createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS).toISOString(),
+      });
+      writePasswordResets(resets);
+
+      const resetUrl = `${(process.env.PUBLIC_BASE_URL || 'https://yannickmorgans.ca').replace(/\/+$/, '')}/?resetToken=${token}`;
+      assignmentCoach.sendEmail(user.email, {
+        subject: 'BIG TUNA password reset',
+        text: `Reset your password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.`,
+        html: `<p>Reset your BIG TUNA password:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>`,
+      }).catch(() => {});
+    }
+
+    // Always the same response, whether or not the account/email exists — avoids username enumeration.
+    return jsonRes(res, 200, { ok: true });
+  }
+
+  // POST /api/auth/reset-password — consume a reset token and set a new password
+  if (req.method === 'POST' && urlPath === '/api/auth/reset-password') {
+    const { token, password } = await parseBody(req);
+    if (!token || !password)
+      return jsonRes(res, 400, { error: 'Token and new password required' });
+    if (String(password).length < 4)
+      return jsonRes(res, 400, { error: 'Password must be at least 4 characters' });
+
+    const resets = readPasswordResets();
+    const reset = resets.find(r => r.token === token && new Date(r.expiresAt) > new Date());
+    if (!reset) return jsonRes(res, 400, { error: 'Invalid or expired reset link' });
+
+    const users = readUsers();
+    const user = users.find(u => u.id === reset.userId);
+    if (!user) return jsonRes(res, 400, { error: 'Invalid or expired reset link' });
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    user.salt = salt;
+    user.passwordHash = hashPassword(String(password), salt);
+    writeUsers(users);
+
+    // Token is single-use; also drop any other outstanding reset tokens for this user.
+    writePasswordResets(resets.filter(r => r.token !== token && r.userId !== user.id));
+    // A password reset invalidates existing sessions — force re-login everywhere.
+    writeSessions(readSessions().filter(s => s.userId !== user.id));
+
+    return jsonRes(res, 200, { ok: true });
+  }
+
+  // POST /api/account/test-email — TEMP: confirms Resend delivery works; remove once verified.
+  if (req.method === 'POST' && urlPath === '/api/account/test-email') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (!user.email) return jsonRes(res, 400, { error: 'Set a recovery email first' });
+
+    const result = await assignmentCoach.sendEmail(user.email, {
+      subject: 'BIG TUNA test email',
+      text: 'This is a test email from BIG TUNA to confirm outgoing mail is working.',
+      html: '<p>This is a test email from BIG TUNA to confirm outgoing mail is working.</p>',
+    });
+    if (result && result.skipped) return jsonRes(res, 503, { error: result.reason || 'Email not sent' });
+    return jsonRes(res, 200, { ok: true });
   }
 
   // GET /api/eco-ai/status - authenticated Ollama availability and model list

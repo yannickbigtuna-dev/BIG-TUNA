@@ -73,6 +73,13 @@ const Auth = (() => {
       color: var(--accent); cursor: pointer; font-weight: 600;
     }
     #auth-toggle-link:hover { color: var(--accent-hover); }
+    #auth-forgot { text-align: center; font-size: 0.75rem; margin-top: 10px; }
+    #auth-forgot-link { color: var(--text-dim); cursor: pointer; }
+    #auth-forgot-link:hover { color: var(--accent); }
+    #auth-info {
+      color: var(--text-dim); font-size: 0.8rem; margin-bottom: 14px;
+      min-height: 1.2em; line-height: 1.4;
+    }
 
     /* ── Account widget ── */
     #auth-widget { position: relative; }
@@ -112,6 +119,20 @@ const Auth = (() => {
     .auth-dd-btn:hover { background: var(--surface-3); color: var(--text); }
     .auth-dd-btn.danger { color: var(--danger); }
     .auth-dd-btn.danger:hover { background: var(--accent-soft); }
+    .auth-dd-email-row { display: flex; gap: 6px; padding: 4px 12px 6px; }
+    .auth-dd-email-row input {
+      flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm); padding: 6px 8px; color: var(--text); font-size: 0.75rem;
+      outline: none; font-family: inherit;
+    }
+    .auth-dd-email-row input:focus { border-color: var(--accent); }
+    .auth-dd-email-row button {
+      background: var(--accent); color: var(--on-accent); border: none; border-radius: var(--radius-sm);
+      padding: 6px 10px; font-size: 0.7rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+      font-family: inherit;
+    }
+    .auth-dd-email-row button:hover { background: var(--accent-hover); }
+    .auth-dd-email-status { padding: 0 12px 6px; font-size: 0.65rem; color: var(--text-dim); min-height: 1em; }
 
     /* Fixed corner fallback (when no data-auth-widget host) */
     #auth-widget-fixed {
@@ -149,7 +170,7 @@ const Auth = (() => {
   // ── Modal ────────────────────────────────────────────────────────────────────
   let _modal = null;
 
-  function showModal() {
+  function showModal(initialMode) {
     _modal = document.createElement('div');
     _modal.id = 'auth-modal-overlay';
     _modal.innerHTML = `
@@ -162,49 +183,96 @@ const Auth = (() => {
           <input type="text" id="auth-username"
                  autocomplete="username" autocapitalize="none" spellcheck="false" />
         </div>
-        <div class="auth-field">
+        <div class="auth-field" id="auth-password-field">
           <label>Password</label>
           <input type="password" id="auth-password" autocomplete="current-password" />
         </div>
         <div id="auth-error"></div>
+        <div id="auth-info"></div>
         <button id="auth-submit">LOG IN</button>
         <div id="auth-toggle">No account? <span id="auth-toggle-link">Create one</span></div>
+        <div id="auth-forgot"><span id="auth-forgot-link">Forgot password?</span></div>
       </div>
     `;
     document.body.appendChild(_modal);
 
-    let isRegister = false;
+    let mode = initialMode || 'login'; // 'login' | 'register' | 'forgot'
     const titleEl    = _modal.querySelector('#auth-title');
     const submitBtn  = _modal.querySelector('#auth-submit');
     const errorDiv   = _modal.querySelector('#auth-error');
+    const infoDiv    = _modal.querySelector('#auth-info');
     const toggleDiv  = _modal.querySelector('#auth-toggle');
+    const forgotDiv  = _modal.querySelector('#auth-forgot');
+    const pwField    = _modal.querySelector('#auth-password-field');
     const unameInput = _modal.querySelector('#auth-username');
     const passInput  = _modal.querySelector('#auth-password');
 
-    function setMode(reg) {
-      isRegister = reg;
-      titleEl.textContent  = reg ? 'Create account' : 'Welcome back';
-      submitBtn.textContent = reg ? 'CREATE ACCOUNT' : 'LOG IN';
-      toggleDiv.innerHTML  = reg
-        ? `Have an account? <span id="auth-toggle-link">Log in</span>`
-        : `No account? <span id="auth-toggle-link">Create one</span>`;
-      _modal.querySelector('#auth-toggle-link').onclick = () => setMode(!isRegister);
-      errorDiv.textContent = '';
+    function bindToggle() {
+      toggleDiv.querySelector('#auth-toggle-link').onclick =
+        () => setMode(mode === 'register' ? 'login' : 'register');
     }
 
-    _modal.querySelector('#auth-toggle-link').onclick = () => setMode(!isRegister);
+    function setMode(next) {
+      mode = next;
+      errorDiv.textContent = '';
+      infoDiv.textContent = '';
+      passInput.value = '';
+      if (mode === 'register') {
+        titleEl.textContent   = 'Create account';
+        submitBtn.textContent = 'CREATE ACCOUNT';
+        pwField.style.display   = '';
+        forgotDiv.style.display = 'none';
+        toggleDiv.innerHTML = `Have an account? <span id="auth-toggle-link">Log in</span>`;
+        bindToggle();
+      } else if (mode === 'forgot') {
+        titleEl.textContent   = 'Reset password';
+        submitBtn.textContent = 'SEND RESET LINK';
+        pwField.style.display   = 'none';
+        forgotDiv.style.display = 'none';
+        toggleDiv.innerHTML = `<span id="auth-toggle-link">Back to log in</span>`;
+        toggleDiv.querySelector('#auth-toggle-link').onclick = () => setMode('login');
+      } else {
+        titleEl.textContent   = 'Welcome back';
+        submitBtn.textContent = 'LOG IN';
+        pwField.style.display   = '';
+        forgotDiv.style.display = '';
+        toggleDiv.innerHTML = `No account? <span id="auth-toggle-link">Create one</span>`;
+        bindToggle();
+      }
+      setTimeout(() => unameInput.focus(), 30);
+    }
+
+    forgotDiv.querySelector('#auth-forgot-link').onclick = () => setMode('forgot');
 
     async function doSubmit() {
       const username = unameInput.value.trim();
+      if (!username) { errorDiv.textContent = 'Please enter a username.'; return; }
+
+      if (mode === 'forgot') {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '...';
+        try {
+          await fetch('/api/auth/forgot-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username }),
+          });
+        } catch {}
+        infoDiv.textContent = 'If that account has a recovery email on file, a reset link has been sent.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'SEND RESET LINK';
+        return;
+      }
+
       const password = passInput.value;
-      if (!username || !password) { errorDiv.textContent = 'Please fill in all fields.'; return; }
+      if (!password) { errorDiv.textContent = 'Please fill in all fields.'; return; }
 
       submitBtn.disabled = true;
       submitBtn.textContent = '...';
       errorDiv.textContent = '';
 
       try {
-        const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+        const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -214,11 +282,11 @@ const Auth = (() => {
         if (!res.ok) {
           errorDiv.textContent = data.error || 'Something went wrong.';
           submitBtn.disabled = false;
-          submitBtn.textContent = isRegister ? 'CREATE ACCOUNT' : 'LOG IN';
+          submitBtn.textContent = mode === 'register' ? 'CREATE ACCOUNT' : 'LOG IN';
           return;
         }
         _token = data.token;
-        _user  = { username: data.username, id: data.id };
+        _user  = { username: data.username, id: data.id, email: data.email || null };
         localStorage.setItem(TOKEN_KEY, _token);
         localStorage.setItem(USER_KEY, JSON.stringify(_user));
         _modal.remove();
@@ -228,14 +296,78 @@ const Auth = (() => {
       } catch {
         errorDiv.textContent = 'Connection error. Please try again.';
         submitBtn.disabled = false;
-        submitBtn.textContent = isRegister ? 'CREATE ACCOUNT' : 'LOG IN';
+        submitBtn.textContent = mode === 'register' ? 'CREATE ACCOUNT' : 'LOG IN';
       }
     }
 
     submitBtn.onclick = doSubmit;
     passInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSubmit(); });
-    unameInput.addEventListener('keydown', e => { if (e.key === 'Enter') passInput.focus(); });
-    setTimeout(() => unameInput.focus(), 80);
+    unameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { mode === 'forgot' ? doSubmit() : passInput.focus(); }
+    });
+    setMode(mode);
+  }
+
+  // ── Reset-password modal (reached via emailed ?resetToken= link) ─────────────
+  function showResetModal(token) {
+    _modal = document.createElement('div');
+    _modal.id = 'auth-modal-overlay';
+    _modal.innerHTML = `
+      <div id="auth-card">
+        <span class="auth-logo">BIG TUNA</span>
+        <span class="auth-subtitle">yannickmorgans.ca</span>
+        <h2>Set a new password</h2>
+        <div class="auth-field">
+          <label>New password</label>
+          <input type="password" id="auth-new-password" autocomplete="new-password" />
+        </div>
+        <div id="auth-error"></div>
+        <div id="auth-info"></div>
+        <button id="auth-submit">SET PASSWORD</button>
+      </div>
+    `;
+    document.body.appendChild(_modal);
+
+    const submitBtn = _modal.querySelector('#auth-submit');
+    const errorDiv  = _modal.querySelector('#auth-error');
+    const infoDiv   = _modal.querySelector('#auth-info');
+    const pwInput   = _modal.querySelector('#auth-new-password');
+
+    async function doSubmit() {
+      const password = pwInput.value;
+      if (!password || password.length < 4) {
+        errorDiv.textContent = 'Password must be at least 4 characters.';
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = '...';
+      errorDiv.textContent = '';
+      try {
+        const res = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errorDiv.textContent = data.error || 'Something went wrong.';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'SET PASSWORD';
+          return;
+        }
+        infoDiv.textContent = 'Password updated. You can now log in.';
+        submitBtn.style.display = 'none';
+        setTimeout(() => { _modal.remove(); _modal = null; showModal('login'); }, 1500);
+      } catch {
+        errorDiv.textContent = 'Connection error. Please try again.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'SET PASSWORD';
+      }
+    }
+
+    submitBtn.onclick = doSubmit;
+    pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSubmit(); });
+    setTimeout(() => pwInput.focus(), 80);
   }
 
   // ── Account widget ───────────────────────────────────────────────────────────
@@ -256,6 +388,11 @@ const Auth = (() => {
       </button>
       <div id="auth-dropdown">
         <div class="auth-dd-username" id="auth-dd-uname"></div>
+        <div class="auth-dd-email-row">
+          <input type="email" id="auth-dd-email-input" placeholder="Recovery email" autocomplete="email" />
+          <button id="auth-dd-email-save" type="button">Save</button>
+        </div>
+        <div class="auth-dd-email-status" id="auth-dd-email-status"></div>
         <div class="auth-dd-divider"></div>
         <button class="auth-dd-btn danger" id="auth-logout-btn">Log Out</button>
       </div>
@@ -276,6 +413,7 @@ const Auth = (() => {
 
     document.getElementById('auth-widget-name').textContent = _user.username.toUpperCase();
     document.getElementById('auth-dd-uname').textContent    = _user.username;
+    document.getElementById('auth-dd-email-input').value    = _user.email || '';
 
     const btn      = document.getElementById('auth-widget-btn');
     const dropdown = document.getElementById('auth-dropdown');
@@ -285,7 +423,29 @@ const Auth = (() => {
       dropdown.classList.toggle('open');
     };
     document.addEventListener('click', () => dropdown.classList.remove('open'));
+    dropdown.addEventListener('click', e => e.stopPropagation()); // keep dropdown open while using the email field
     document.getElementById('auth-logout-btn').onclick = () => logout();
+
+    document.getElementById('auth-dd-email-save').onclick = async () => {
+      const input    = document.getElementById('auth-dd-email-input');
+      const statusEl = document.getElementById('auth-dd-email-status');
+      const email    = input.value.trim();
+      statusEl.textContent = 'Saving…';
+      try {
+        const res = await fetch('/api/auth/set-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (!res.ok) { statusEl.textContent = data.error || 'Could not save.'; return; }
+        _user.email = data.email;
+        localStorage.setItem(USER_KEY, JSON.stringify(_user));
+        statusEl.textContent = data.email ? 'Recovery email saved.' : 'Recovery email removed.';
+      } catch {
+        statusEl.textContent = 'Connection error.';
+      }
+    };
   }
 
   // ── Ready callbacks ──────────────────────────────────────────────────────────
@@ -334,6 +494,17 @@ const Auth = (() => {
   }
 
   async function init() {
+    // A password-reset email link takes priority over the normal login/app flow.
+    const params = new URLSearchParams(location.search);
+    const resetToken = params.get('resetToken');
+    if (resetToken) {
+      params.delete('resetToken');
+      const rest = params.toString();
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+      showResetModal(resetToken);
+      return;
+    }
+
     if (_token) {
       // If we have a cached user, load the app immediately — no waiting, no flash.
       // Token validity is checked in the background; a genuine 401 forces re-login.
@@ -349,7 +520,7 @@ const Auth = (() => {
               window.location.reload();
             } else if (res.ok) {
               res.json().then(data => {
-                _user = { username: data.username, id: data.id };
+                _user = { username: data.username, id: data.id, email: data.email || null };
                 localStorage.setItem(USER_KEY, JSON.stringify(_user));
               }).catch(() => {});
             }
@@ -366,7 +537,7 @@ const Auth = (() => {
         });
         if (res.ok) {
           const data = await res.json();
-          _user = { username: data.username, id: data.id };
+          _user = { username: data.username, id: data.id, email: data.email || null };
           localStorage.setItem(USER_KEY, JSON.stringify(_user));
           injectWidget();
           fireReady();

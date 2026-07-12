@@ -166,22 +166,27 @@ Static serving:
 
 Auth is custom and file-backed.
 
-- Users live in `data/users.json`.
+- Users live in `data/users.json`. Each user optionally carries an `email` field (nullable) used only for password-reset delivery — it is not required at registration and is not shown to other users.
 - Sessions live in `data/sessions.json`.
 - Sessions are bearer tokens with 30-day expiry.
 - Passwords are SHA-256 with per-user random salt, not bcrypt.
 - `writeSessions()` prunes expired sessions on write.
-- Frontend token and user cache are in `localStorage` keys `auth_token` and `auth_user`.
+- Password-reset tokens live in `data/password-resets.json`: `{ token, userId, createdAt, expiresAt }`, 1-hour TTL, pruned on write via `writePasswordResets()` (same prune-on-write pattern as sessions). A reset token is single-use and is deleted the moment it's redeemed; redeeming one also invalidates every existing session for that user (`writeSessions(sessions.filter(s => s.userId !== user.id))`), forcing re-login everywhere.
+- Frontend token and user cache are in `localStorage` keys `auth_token` and `auth_user` (the cached user object now also carries `email`).
+- 2026-07: `data/users.json` was accidentally emptied on the live server after it was removed from git tracking (commit "Stop tracking data/..."); 4 accounts were restored from the last git-tracked snapshot (exact id/username/passwordHash/salt reinstated so original passwords still work), and one account's orphaned app data was merged into the current active account by user id. A 6th account's data is still orphaned under its old user id (no username/password was ever recoverable) — do not delete that orphaned data without checking with the user first, in case its owner is later identified.
 
 Shared auth client:
 
 - File: `apps/auth.js`
 - Include with `<script src="/auth.js"></script>`.
 - Use `Auth.onReady(callback)` before starting app behavior that needs a user.
-- `Auth.token` and `Auth.user` expose current auth state.
+- `Auth.token` and `Auth.user` expose current auth state (`Auth.user.email` may be `null`).
 - `Auth.saveSettings(appId, data)` and `Auth.loadSettings(appId)` use `/api/settings/:appId`.
 - `Auth.autoSync(appId, getDataFn, options)` periodically saves settings, retries failures, saves before logout, and attempts `keepalive` before unload.
 - `Auth.beforeLogout(fn)` lets apps flush state.
+- The login modal has a "Forgot password?" link (login mode only) that switches the same modal into a username-only "forgot" mode and posts to `/api/auth/forgot-password`; the response is always `{ok:true}` regardless of whether the account/email exists, to avoid username enumeration.
+- The account dropdown (in `injectWidget()`) has an inline recovery-email row (`#auth-dd-email-input` + `#auth-dd-email-save`) that calls `/api/auth/set-email`; the dropdown's own click handler calls `stopPropagation()` so interacting with the input doesn't close the dropdown via the document-level close handler.
+- `init()` checks `location.search` for `?resetToken=` before anything else; if present it strips the param (`history.replaceState`) and shows a dedicated `showResetModal(token)` new-password form that posts to `/api/auth/reset-password`, taking priority over the normal cached-login/app-ready flow.
 
 Auth routes:
 
@@ -190,7 +195,15 @@ POST /api/auth/register
 POST /api/auth/login
 POST /api/auth/logout
 GET  /api/auth/me
+POST /api/auth/set-email        { email }              (authenticated; email:'' clears it)
+POST /api/auth/forgot-password  { username }            (public; always returns {ok:true})
+POST /api/auth/reset-password   { token, password }     (public; single-use token, invalidates existing sessions)
+POST /api/account/test-email                            (authenticated; TEMP — sends a test email to the caller's own address to confirm Resend delivery, remove once confirmed)
 ```
+
+Password-reset/test emails reuse the Resend `sendEmail(to, {subject, text, html})` helper from `lib/assignment-coach.js` (now exported), which no-ops with `{skipped:true, reason}` when `RESEND_API_KEY`/`ASSIGNMENTS_FROM_EMAIL` aren't configured — the same env vars used by the Assignment Coach digest emails, no new service/credentials needed. The reset link is built from `PUBLIC_BASE_URL` (or `https://yannickmorgans.ca`) plus `/?resetToken=<token>`, handled entirely client-side by `auth.js` on any page since every app loads it.
+
+A temporary "send test email" button (`#test-email-btn`, `apps/index.html`) sits in the homepage corner-tools next to the Lights button; it's hidden until `Auth.onReady` fires for a logged-in user, calls `POST /api/account/test-email`, and flashes the icon `--success`/`--danger` based on the result. It's marked `TEMP` in both the HTML and script and is meant to be deleted once Resend delivery is confirmed working in production.
 
 Most app data routes require:
 
