@@ -23,6 +23,7 @@ const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const PASSWORD_RESETS_FILE = path.join(DATA, 'password-resets.json');
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
+const ACCOUNT_EMAIL_FROM = 'no-reply@yannickmorgans.ca'; // sender for reset/test emails (Assignment Coach keeps its own ASSIGNMENTS_FROM_EMAIL)
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
 const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
@@ -1526,6 +1527,7 @@ async function handleAPI(req, res, urlPath) {
 
       const resetUrl = `${(process.env.PUBLIC_BASE_URL || 'https://yannickmorgans.ca').replace(/\/+$/, '')}/?resetToken=${token}`;
       assignmentCoach.sendEmail(user.email, {
+        from: ACCOUNT_EMAIL_FROM,
         subject: 'BIG TUNA password reset',
         text: `Reset your password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.`,
         html: `<p>Reset your BIG TUNA password:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>`,
@@ -1572,6 +1574,7 @@ async function handleAPI(req, res, urlPath) {
     if (!user.email) return jsonRes(res, 400, { error: 'Set a recovery email first' });
 
     const result = await assignmentCoach.sendEmail(user.email, {
+      from: ACCOUNT_EMAIL_FROM,
       subject: 'BIG TUNA test email',
       text: 'This is a test email from BIG TUNA to confirm outgoing mail is working.',
       html: '<p>This is a test email from BIG TUNA to confirm outgoing mail is working.</p>',
