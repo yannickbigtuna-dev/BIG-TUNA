@@ -575,11 +575,15 @@
 <script>
   // The account pill is injected by /auth.js after the main script ran; re-fit
   // the stage once it lands so its width is accounted for in the scaling.
-  if (window.Auth && Auth.onReady && window.__refitStage) Auth.onReady(window.__refitStage);
+  // Note: `Auth` is a top-level `const` from /auth.js — it's a global identifier
+  // but never a `window` property, so checks must reference `Auth` directly,
+  // not `window.Auth` (which is always undefined and silently no-ops).
+  if (typeof Auth !== 'undefined' && Auth.onReady && window.__refitStage) Auth.onReady(window.__refitStage);
 
   // TEMP: verifies Resend email delivery works; remove this block + the button once confirmed.
-  if (window.Auth && Auth.onReady) Auth.onReady(user => {
-    if (!user) return;
+  // Only ever shown to the site owner's account (yannick), same convention as the terminal/lights restrictions.
+  if (typeof Auth !== 'undefined' && Auth.onReady) Auth.onReady(user => {
+    if (!user || user.username.toLowerCase() !== 'yannick') return;
     const testEmailBtn = document.getElementById('test-email-btn');
     testEmailBtn.style.display = '';
     testEmailBtn.onclick = async () => {

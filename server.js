@@ -1571,6 +1571,7 @@ async function handleAPI(req, res, urlPath) {
   if (req.method === 'POST' && urlPath === '/api/account/test-email') {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
     if (!user.email) return jsonRes(res, 400, { error: 'Set a recovery email first' });
 
     const result = await assignmentCoach.sendEmail(user.email, {
