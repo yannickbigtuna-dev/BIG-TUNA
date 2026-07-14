@@ -52,6 +52,112 @@ const Topbar = (() => {
   let _titleEl     = null;
   let _initialized = false;
 
+  // ── Site-wide tracking beacon ────────────────────────────────────────────────
+  // Sends anonymous/attributed pageview + heartbeat + click events to
+  // /api/analytics/event so /admin/ (yannick-only) can show real usage. See
+  // CODEX_CONTEXT.md for the full data-shape/privacy notes. Explicitly does NOT
+  // capture keystrokes, form values, or full DOM selectors — only a click
+  // target's tag/id/first-class/trimmed-text plus viewport-relative position.
+  let _sessionId      = null;
+  let _identifiedUser = null; // set via Topbar.identify(user, token)
+  let _identifiedToken = null; // bearer token, carried in-body since sendBeacon can't set headers
+  let _pageviewSent   = false;
+  let _pendingGeo     = null; // {lat, lon} opportunistically attached to the next beacon
+  let _lastClickSent  = 0;
+
+  try {
+    _sessionId = sessionStorage.getItem('bt_session_id');
+    if (!_sessionId) {
+      _sessionId = crypto.randomUUID();
+      sessionStorage.setItem('bt_session_id', _sessionId);
+    }
+  } catch {}
+
+  function sendBtBeacon(payload) {
+    try {
+      const data = Object.assign({
+        sessionId: _sessionId,
+        userId: _identifiedUser ? _identifiedUser.id : null,
+        // Carried in-body (not a header) because sendBeacon can't set custom
+        // headers — the server resolves the real session user from this if
+        // no Authorization header is present, so events still attribute
+        // correctly to a logged-in user. See server.js's /api/analytics/event.
+        token: _identifiedToken || undefined,
+        path: location.pathname,
+        referrer: document.referrer,
+      }, payload);
+      if (_pendingGeo) {
+        data.lat = _pendingGeo.lat;
+        data.lon = _pendingGeo.lon;
+        _pendingGeo = null;
+      }
+      const body = JSON.stringify(data);
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/analytics/event', body);
+      } else {
+        fetch('/api/analytics/event', {
+          method: 'POST',
+          body,
+          keepalive: true,
+          headers: { 'Content-Type': 'text/plain' },
+        }).catch(() => {});
+      }
+    } catch {}
+  }
+
+  // Opportunistic geolocation: never triggers a fresh permission prompt. Only
+  // reads a position when the permission is already 'granted' (e.g. via the
+  // Weather app), and never blocks/delays sending the beacon it's called for.
+  function tryEnhanceGeo() {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) return;
+      navigator.permissions.query({ name: 'geolocation' }).then(status => {
+        if (status.state === 'granted') {
+          navigator.geolocation.getCurrentPosition(pos => {
+            _pendingGeo = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          }, () => {}, { timeout: 2000 });
+        }
+      }).catch(() => {});
+    } catch {}
+  }
+
+  function sendPageview() {
+    if (_pageviewSent) return;
+    _pageviewSent = true;
+    tryEnhanceGeo();
+    sendBtBeacon({ type: 'pageview' });
+  }
+
+  // Fires on Topbar.identify() or after ~300ms, whichever comes first, so
+  // pages that never load auth.js (e.g. lights, weather) still get an
+  // anonymous pageview instead of losing it.
+  setTimeout(sendPageview, 300);
+
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    tryEnhanceGeo();
+    sendBtBeacon({ type: 'heartbeat' });
+  }, 15000);
+
+  document.addEventListener('click', e => {
+    const now = Date.now();
+    if (now - _lastClickSent < 150) return;
+    _lastClickSent = now;
+    try {
+      const el = e.target.closest('button, a, [role="button"]') || e.target;
+      const target = {
+        tag:  el.tagName ? el.tagName.toLowerCase() : '',
+        id:   el.id || '',
+        cls:  (el.className && typeof el.className === 'string' ? el.className.split(' ')[0] : '') || '',
+        text: (el.textContent || '').trim().slice(0, 40),
+      };
+      const xPct = (e.clientX / window.innerWidth) * 100;
+      const yPct = (e.clientY / window.innerHeight) * 100;
+      tryEnhanceGeo();
+      sendBtBeacon({ type: 'click', target, xPct, yPct });
+    } catch {}
+  }, { capture: true });
+
   const CSS = `
     #topbar {
       position: sticky;
@@ -241,11 +347,20 @@ const Topbar = (() => {
     }
   }
 
+  // Called by auth.js once the current user is known (or confirmed logged
+  // out) so beacon events can be attributed. Idempotent — safe to call more
+  // than once (e.g. once from cache, again after /api/auth/me resolves).
+  function identify(user, token) {
+    _identifiedUser = user || null;
+    _identifiedToken = token || null;
+    sendPageview();
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
 
-  return { setTitle, addLeft };
+  return { setTitle, addLeft, identify };
 })();

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Email Template Library</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary": "#000000",
+                    "on-secondary-container": "#fefcff",
+                    "inverse-primary": "#bec6e0",
+                    "primary-fixed": "#dae2fd",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "outline": "#76777d",
+                    "outline-variant": "#c6c6cd",
+                    "surface-bright": "#f7f9fb",
+                    "on-error-container": "#93000a",
+                    "surface": "#f7f9fb",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "tertiary-fixed": "#d3e4fe",
+                    "on-secondary": "#ffffff",
+                    "surface-container": "#eceef0",
+                    "primary": "#000000",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "on-secondary-fixed": "#001a42",
+                    "on-primary-fixed-variant": "#3f465c",
+                    "tertiary-container": "#0b1c30",
+                    "primary-container": "#131b2e",
+                    "primary-fixed-dim": "#bec6e0",
+                    "surface-tint": "#565e74",
+                    "surface-container-high": "#e6e8ea",
+                    "secondary": "#0058be",
+                    "surface-container-highest": "#e0e3e5",
+                    "surface-dim": "#d8dadc",
+                    "surface-variant": "#e0e3e5",
+                    "inverse-on-surface": "#eff1f3",
+                    "error": "#ba1a1a",
+                    "on-primary-fixed": "#131b2e",
+                    "error-container": "#ffdad6",
+                    "secondary-fixed": "#d8e2ff",
+                    "secondary-container": "#2170e4",
+                    "on-error": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "surface-container-low": "#f2f4f6",
+                    "inverse-surface": "#2d3133",
+                    "on-primary-container": "#7c839b",
+                    "on-surface-variant": "#45464d",
+                    "on-surface": "#191c1e",
+                    "on-secondary-fixed-variant": "#004395",
+                    "surface-container-lowest": "#ffffff",
+                    "on-background": "#191c1e",
+                    "secondary-fixed-dim": "#adc6ff",
+                    "on-primary": "#ffffff",
+                    "background": "#f7f9fb",
+                    "on-tertiary-container": "#75859d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "margin_mobile": "16px",
+                    "margin_desktop": "32px",
+                    "gutter": "24px",
+                    "stack_xs": "4px",
+                    "sidebar_width": "280px",
+                    "stack_lg": "24px",
+                    "stack_sm": "8px",
+                    "sidebar_collapsed": "80px",
+                    "container_max_width": "1440px",
+                    "stack_md": "16px"
+            },
+            "fontFamily": {
+                    "headline-xl": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "label-sm": [
+                            "Inter"
+                    ],
+                    "headline-lg-mobile": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "label-md": [
+                            "Inter"
+                    ],
+                    "headline-md": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "headline-lg": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-lg": [
+                            "Inter"
+                    ],
+                    "body-sm": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {
+                    "headline-xl": [
+                            "36px",
+                            {
+                                    "lineHeight": "44px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "label-sm": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "headline-lg-mobile": [
+                            "20px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "label-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "headline-md": [
+                            "18px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "headline-lg": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "letterSpacing": "-0.01em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-lg": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "body-sm": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "fontWeight": "400"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings:
+          'FILL' 1,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background h-full flex overflow-hidden font-body-md text-body-md antialiased">
+<!-- SideNavBar -->
+<aside class="w-sidebar_width h-screen sticky top-0 left-0 bg-primary-container border-r border-outline-variant flex flex-col h-full py-stack_lg transition-all duration-200 ease-in-out hidden md:flex shrink-0 z-40">
+<!-- Header -->
+<div class="px-6 mb-8 flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-secondary" data-icon="email">email</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-on-primary-fixed">AdminPro</h1>
+<p class="font-body-sm text-body-sm text-on-primary-container">Marketing Suite</p>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex-1 px-2 space-y-1 overflow-y-auto">
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+                Users
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container border-l-4 border-secondary rounded-r-lg" href="#">
+<span class="material-symbols-outlined" data-icon="email">email</span>
+                Email Marketing
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+</nav>
+<!-- Footer -->
+<div class="px-2 mt-auto pt-4 border-t border-outline-variant/30">
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+                Support
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Sign Out
+            </a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col h-screen overflow-hidden">
+<!-- TopAppBar (Mobile Only in this context, or simplified for Desktop) -->
+<header class="w-full sticky top-0 z-50 bg-surface border-b border-outline-variant shadow-sm flex justify-between items-center h-16 px-margin_desktop md:px-8">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-on-surface-variant hover:text-secondary transition-colors">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h2 class="font-headline-lg text-headline-lg hidden md:block text-primary">Template Library</h2>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile md:hidden text-primary">Templates</h2>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 border border-outline-variant rounded-lg bg-surface-bright focus:ring-2 focus:ring-secondary/20 focus:border-secondary outline-none font-body-sm text-body-sm w-64 text-on-surface" placeholder="Search templates..." type="text"/>
+</div>
+<button class="text-on-surface-variant hover:text-secondary hover:bg-surface-container-low p-2 rounded-full transition-colors cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center cursor-pointer border border-outline-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A close up, professional headshot of a person looking directly at the camera. The lighting is soft and flattering, creating a bright, modern corporate aesthetic. The background is a clean, minimal light gray, ensuring the focus remains on the individual's face. The mood is approachable yet highly professional, suitable for a corporate enterprise platform avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuABrNsdZb2p-BzY-lXs0ul_JOWeYos1HQ5CLkG1V6xoilkBZqDyn3hTC_byoJN0zULhZLkpGq3eXtEYwn7ySPi9zMkzDJdVabM2ipzvVmdLyEJnwt-QQ_PdZbBW_xbA59FXbrz-jP_XNJ_aH9ds8wYCYI5evVaKzWCjdgNvCrcmm1mSz8scGJ8fvf3bWdOxtlXyHXjwHZB7NZFjjlVM0E3rjEIfwgZLXGYymm1lI1F2SFF4J_CrhVa1vW45UPxypGDx6DyXQ3LAMeyu"/>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<main class="flex-1 overflow-y-auto bg-background p-margin_mobile md:p-margin_desktop">
+<div class="max-w-container_max_width mx-auto flex flex-col lg:flex-row gap-gutter">
+<!-- Filters Sidebar -->
+<aside class="w-full lg:w-64 shrink-0 space-y-6">
+<!-- Categories -->
+<div class="bg-surface rounded-xl border border-outline-variant p-4 shadow-sm">
+<h3 class="font-label-md text-label-md text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary" data-icon="category">category</span>
+                            Categories
+                        </h3>
+<div class="space-y-1">
+<label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low cursor-pointer group transition-colors">
+<input checked="" class="text-secondary focus:ring-secondary" name="category" type="radio"/>
+<span class="font-body-md text-body-md text-on-surface group-hover:text-secondary">All Templates</span>
+<span class="ml-auto font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">24</span>
+</label>
+<label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low cursor-pointer group transition-colors">
+<input class="text-secondary focus:ring-secondary" name="category" type="radio"/>
+<span class="font-body-md text-body-md text-on-surface-variant group-hover:text-secondary">E-commerce</span>
+<span class="ml-auto font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">8</span>
+</label>
+<label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low cursor-pointer group transition-colors">
+<input class="text-secondary focus:ring-secondary" name="category" type="radio"/>
+<span class="font-body-md text-body-md text-on-surface-variant group-hover:text-secondary">Newsletters</span>
+<span class="ml-auto font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">12</span>
+</label>
+<label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low cursor-pointer group transition-colors">
+<input class="text-secondary focus:ring-secondary" name="category" type="radio"/>
+<span class="font-body-md text-body-md text-on-surface-variant group-hover:text-secondary">Transactional</span>
+<span class="ml-auto font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">4</span>
+</label>
+</div>
+</div>
+</aside>
+<!-- Template Grid -->
+<div class="flex-1">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Card 1 -->
+<div class="bg-surface rounded-xl border border-outline-variant overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] group hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] transition-all duration-300 flex flex-col">
+<div class="aspect-[4/3] bg-surface-container-low relative overflow-hidden">
+<img class="w-full h-full object-cover object-top border-b border-outline-variant/50 transition-transform duration-500 group-hover:scale-105" data-alt="A clean, modern email template design preview featuring a bright 'Welcome to our community' hero section. The layout uses high-key lighting, soft white backgrounds, and a professional enterprise color palette of deep blues and crisp whites. The aesthetic is minimalist, corporate, and highly structured, suitable for a SaaS product onboarding email." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVH-FrRhAItZ48ebl_wS5KAtIuXoYj5dBogBNodoZnpe8Rkk8XlAkqf17ODixGaAtP0WTh3ZITsj5EPi5pSP694fYR1CiTIC2jsROskQly64o9LD_qSbvDW482nOD5BCL4M0RGMhWUE4amaiOhryFIMyvNLAskQ4kD_ElnnOQLiFZP33gQxrPSDgZGT6ZSuzP54VNmgWmYBQYSAKWIrfEPM8dNPCR7Y-T_aeiE21wCaDiYw16T4ieHD7h3Nd1MZt5oMORxSsbz_wQ3"/>
+<div class="absolute inset-0 bg-primary-container/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 backdrop-blur-sm">
+<button class="bg-secondary text-on-secondary font-label-md text-label-md px-4 py-2 rounded-lg hover:bg-secondary/90 transition-colors shadow-sm">Use Template</button>
+</div>
+<div class="absolute top-2 right-2 bg-surface/90 backdrop-blur px-2 py-1 rounded text-on-surface font-label-sm text-label-sm border border-outline-variant shadow-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="star">star</span> Popular
+                                </div>
+</div>
+<div class="p-stack_md flex flex-col flex-1">
+<div class="flex justify-between items-start mb-2">
+<h4 class="font-headline-md text-headline-md text-on-surface group-hover:text-secondary transition-colors">Welcome Series v2</h4>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4 flex-1">A multi-step onboarding sequence designed for new SaaS signups.</p>
+<div class="flex items-center justify-between border-t border-outline-variant/50 pt-3 mt-auto">
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-1 rounded">E-commerce</span>
+<button class="text-secondary font-label-md text-label-md hover:underline flex items-center gap-1">
+                                        Preview <span class="material-symbols-outlined text-[16px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface rounded-xl border border-outline-variant overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] group hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] transition-all duration-300 flex flex-col">
+<div class="aspect-[4/3] bg-surface-container-low relative overflow-hidden">
+<img class="w-full h-full object-cover object-top border-b border-outline-variant/50 transition-transform duration-500 group-hover:scale-105" data-alt="A sleek, minimalist monthly newsletter email template preview. The design features a structured grid layout with clean typography, ample whitespace, and high-contrast corporate imagery. The color scheme relies on neutral slates and whites, accented with professional blue tones. The lighting is even and flat, typical of high-end digital interface design." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsUU1ON6kUF44e7O09bVyNVUSw_QsbQUj0WDSKAPiZSP3rsn-g1lu79Tb1F7XM8jy2pXoh5lpq9GH7bzu6iR6BV2orDAmE_m7PvsE2RFUhsEGHy06zV1VqB6sykta8xPyr63deJ_cTm6INHl90x4_7dkTruRD_vMeuL3BohlJODpHIqJMyOSl2TPar42pQnqPiw-CBpxbua5dl_KlCST8MCTX6Y3_UgWk67ebzi5FdItU9xM3vc6lHJ2IUAVyS8x2T6YCBQXgmOHRf"/>
+<div class="absolute inset-0 bg-primary-container/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 backdrop-blur-sm">
+<button class="bg-secondary text-on-secondary font-label-md text-label-md px-4 py-2 rounded-lg hover:bg-secondary/90 transition-colors shadow-sm">Use Template</button>
+</div>
+</div>
+<div class="p-stack_md flex flex-col flex-1">
+<div class="flex justify-between items-start mb-2">
+<h4 class="font-headline-md text-headline-md text-on-surface group-hover:text-secondary transition-colors">Monthly Digest</h4>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4 flex-1">Standard newsletter layout with featured articles and product updates.</p>
+<div class="flex items-center justify-between border-t border-outline-variant/50 pt-3 mt-auto">
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-1 rounded">Newsletter</span>
+<button class="text-secondary font-label-md text-label-md hover:underline flex items-center gap-1">
+                                        Preview <span class="material-symbols-outlined text-[16px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface rounded-xl border border-outline-variant overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] group hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] transition-all duration-300 flex flex-col">
+<div class="aspect-[4/3] bg-surface-container-low relative overflow-hidden">
+<img class="w-full h-full object-cover object-top border-b border-outline-variant/50 transition-transform duration-500 group-hover:scale-105" data-alt="A modern, high-impact product launch email template preview. The design highlights a large central product hero image with bold, sans-serif typography. The aesthetic is clean, utilizing a stark white background with sharp, precise layout lines. The mood is exciting yet corporate, designed for a professional B2B software release." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsHGtwbcTX66I_XBpwnPrnPYttRmH3b_mPja4oKSotpKnNkAEys1NeSumn8e5IOCH75_DikXXUXq5F6isL8ywBpCzEtJAS_9G0apaDCZk8QZ9YQNOGO8E8-ifPLJoln2TTsB8w6s0q7ir4kg-s5jU8EF2iI3fumifLZ61FkoiJk59bltwQ_X_t2apAI8o70BCnIQNqraKx_rf6JYNIIVJmFvPMwXee7dkkOzyUyNMtrpN4ofynwjRRDgLfbb7Sf7L8p8OYb38quxyR"/>
+<div class="absolute inset-0 bg-primary-container/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 backdrop-blur-sm">
+<button class="bg-secondary text-on-secondary font-label-md text-label-md px-4 py-2 rounded-lg hover:bg-secondary/90 transition-colors shadow-sm">Use Template</button>
+</div>
+</div>
+<div class="p-stack_md flex flex-col flex-1">
+<div class="flex justify-between items-start mb-2">
+<h4 class="font-headline-md text-headline-md text-on-surface group-hover:text-secondary transition-colors">Product Launch Pro</h4>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4 flex-1">High-impact layout designed for major feature releases and new products.</p>
+<div class="flex items-center justify-between border-t border-outline-variant/50 pt-3 mt-auto">
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-1 rounded">E-commerce</span>
+<button class="text-secondary font-label-md text-label-md hover:underline flex items-center gap-1">
+                                        Preview <span class="material-symbols-outlined text-[16px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

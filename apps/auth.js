@@ -292,6 +292,7 @@ const Auth = (() => {
         _modal.remove();
         _modal = null;
         injectWidget();
+        identifyTopbar();
         fireReady();
       } catch {
         errorDiv.textContent = 'Connection error. Please try again.';
@@ -393,6 +394,7 @@ const Auth = (() => {
           <button id="auth-dd-email-save" type="button">Save</button>
         </div>
         <div class="auth-dd-email-status" id="auth-dd-email-status"></div>
+        <a href="/admin/" class="auth-dd-btn" id="auth-dd-admin-link" style="display:none">Admin Dashboard</a>
         <div class="auth-dd-divider"></div>
         <button class="auth-dd-btn danger" id="auth-logout-btn">Log Out</button>
       </div>
@@ -414,6 +416,15 @@ const Auth = (() => {
     document.getElementById('auth-widget-name').textContent = _user.username.toUpperCase();
     document.getElementById('auth-dd-uname').textContent    = _user.username;
     document.getElementById('auth-dd-email-input').value    = _user.email || '';
+
+    // Admin Dashboard link: only ever shown to the site owner's account
+    // (yannick), same convention as apps/index.html's #test-email-btn. The
+    // real security boundary is server-side (/api/admin/* 403s for everyone
+    // else) — this is just a UX nicety to keep the link out of sight.
+    if (_user.username.toLowerCase() === 'yannick') {
+      const adminLink = document.getElementById('auth-dd-admin-link');
+      if (adminLink) adminLink.style.display = '';
+    }
 
     const btn      = document.getElementById('auth-widget-btn');
     const dropdown = document.getElementById('auth-dropdown');
@@ -446,6 +457,13 @@ const Auth = (() => {
         statusEl.textContent = 'Connection error.';
       }
     };
+  }
+
+  // Tells topbar.js's tracking beacon which user to attribute events to (or
+  // null if logged out). Safe/idempotent to call more than once as _user gets
+  // set/refreshed at various points below.
+  function identifyTopbar() {
+    if (typeof Topbar !== 'undefined' && Topbar.identify) Topbar.identify(_user, _token);
   }
 
   // ── Ready callbacks ──────────────────────────────────────────────────────────
@@ -510,6 +528,7 @@ const Auth = (() => {
       // Token validity is checked in the background; a genuine 401 forces re-login.
       if (_user) {
         injectWidget();
+        identifyTopbar();
         fireReady();
         fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${_token}` } })
           .then(res => {
@@ -522,6 +541,7 @@ const Auth = (() => {
               res.json().then(data => {
                 _user = { username: data.username, id: data.id, email: data.email || null };
                 localStorage.setItem(USER_KEY, JSON.stringify(_user));
+                identifyTopbar();
               }).catch(() => {});
             }
             // Any other status (5xx, network) — stay logged in with cached creds
@@ -540,6 +560,7 @@ const Auth = (() => {
           _user = { username: data.username, id: data.id, email: data.email || null };
           localStorage.setItem(USER_KEY, JSON.stringify(_user));
           injectWidget();
+          identifyTopbar();
           fireReady();
           return;
         }

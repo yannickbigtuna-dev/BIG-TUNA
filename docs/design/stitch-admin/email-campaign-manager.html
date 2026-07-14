@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Email Campaign Manager - AdminPro</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary": "#000000",
+                        "on-secondary-container": "#fefcff",
+                        "inverse-primary": "#bec6e0",
+                        "primary-fixed": "#dae2fd",
+                        "tertiary-fixed-dim": "#b7c8e1",
+                        "outline": "#76777d",
+                        "outline-variant": "#c6c6cd",
+                        "surface-bright": "#f7f9fb",
+                        "on-error-container": "#93000a",
+                        "surface": "#f7f9fb",
+                        "on-tertiary-fixed-variant": "#38485d",
+                        "tertiary-fixed": "#d3e4fe",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#eceef0",
+                        "primary": "#000000",
+                        "on-tertiary-fixed": "#0b1c30",
+                        "on-secondary-fixed": "#001a42",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "tertiary-container": "#0b1c30",
+                        "primary-container": "#131b2e",
+                        "primary-fixed-dim": "#bec6e0",
+                        "surface-tint": "#565e74",
+                        "surface-container-high": "#e6e8ea",
+                        "secondary": "#0058be",
+                        "surface-container-highest": "#e0e3e5",
+                        "surface-dim": "#d8dadc",
+                        "surface-variant": "#e0e3e5",
+                        "inverse-on-surface": "#eff1f3",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed": "#131b2e",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#d8e2ff",
+                        "secondary-container": "#2170e4",
+                        "on-error": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f2f4f6",
+                        "inverse-surface": "#2d3133",
+                        "on-primary-container": "#7c839b",
+                        "on-surface-variant": "#45464d",
+                        "on-surface": "#191c1e",
+                        "on-secondary-fixed-variant": "#004395",
+                        "surface-container-lowest": "#ffffff",
+                        "on-background": "#191c1e",
+                        "secondary-fixed-dim": "#adc6ff",
+                        "on-primary": "#ffffff",
+                        "background": "#f7f9fb",
+                        "on-tertiary-container": "#75859d"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin_mobile": "16px",
+                        "margin_desktop": "32px",
+                        "gutter": "24px",
+                        "stack_xs": "4px",
+                        "sidebar_width": "280px",
+                        "stack_lg": "24px",
+                        "stack_sm": "8px",
+                        "sidebar_collapsed": "80px",
+                        "container_max_width": "1440px",
+                        "stack_md": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-xl": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "label-md": ["Inter"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "body-lg": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-xl": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #F8FAFC; } /* Level 0 Background */
+        .card-shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); } /* Level 1 */
+    </style>
+</head>
+<body class="text-on-surface antialiased flex h-screen overflow-hidden font-body-md">
+<!-- SideNavBar (Hidden on Mobile, Visible on Desktop) -->
+<nav class="hidden md:flex flex-col h-screen sticky top-0 left-0 bg-primary-container dark:bg-primary-container border-r border-outline-variant w-sidebar_width py-stack_lg transition-all duration-200 ease-in-out font-body-md text-body-md">
+<!-- Header -->
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-secondary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-secondary-container" style="font-variation-settings: 'FILL' 1;">dataset</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-on-primary-fixed dark:text-primary-fixed">AdminPro</h1>
+<p class="font-body-sm text-body-sm text-on-primary-container">Marketing Suite</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<div class="flex-1 flex flex-col gap-1 px-4">
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-r-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+<span class="group-hover:text-primary transition-colors">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-r-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">group</span>
+<span class="group-hover:text-primary transition-colors">Users</span>
+</a>
+<!-- ACTIVE TAB -->
+<a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container border-l-4 border-secondary rounded-r-lg" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">email</span>
+<span class="font-label-md text-label-md">Email Marketing</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-r-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">settings</span>
+<span class="group-hover:text-primary transition-colors">Settings</span>
+</a>
+</div>
+<!-- Footer Links -->
+<div class="px-4 mt-auto border-t border-outline-variant/20 pt-4 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-r-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">help</span>
+<span class="group-hover:text-primary transition-colors">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-container-high transition-colors rounded-r-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">logout</span>
+<span class="group-hover:text-primary transition-colors">Sign Out</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-screen overflow-y-auto w-full">
+<!-- TopAppBar (Visible on Mobile, replaces SideNav) -->
+<header class="md:hidden w-full sticky top-0 z-50 bg-surface dark:bg-surface-dim border-b border-outline-variant shadow-sm flex justify-between items-center h-16 px-margin_mobile">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined cursor-pointer active:opacity-80 text-primary">menu</span>
+<h1 class="font-headline-md text-headline-md font-bold text-primary">AdminPro</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined cursor-pointer active:opacity-80 text-on-surface-variant hover:text-secondary hover:bg-surface-container-low rounded-full p-1 transition-colors">notifications</span>
+<img alt="User Profile Menu" class="w-8 h-8 rounded-full cursor-pointer active:opacity-80 border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvgxu9qAS2H7M3sW5FCKXBvZLJBQlCoVdwNzjgIDxNVHT_QellzXq7W-qxIw5G0rgDGiLzuGud957awYo2evVI7WXBiRx7NNj_LWDf2YYG1sQ0m_7xjpmXAcZkcCT1Ye0C7bCe-DzJO3fsNy5EnThn9IfP-SD-M1njsLkPJN0GrmI1BDoXBrVZcl-9Z_IdxG3VHzwGyMfeoMqE6Eul764BPIzVtWqXgzCaAAgg3pqv9EtTiOvnJP3Z4mll493TVOvqahMY2R7Mrbe4"/>
+</div>
+</header>
+<!-- Top Header Area (Desktop context) -->
+<div class="hidden md:flex justify-between items-center px-margin_desktop py-6 border-b border-outline-variant bg-surface/50 backdrop-blur-sm sticky top-0 z-40">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-primary">Email Campaigns</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Manage and track your marketing outreach.</p>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all w-64" placeholder="Search campaigns..." type="text"/>
+</div>
+<button class="bg-secondary text-on-secondary px-4 py-2 rounded-lg font-label-md text-label-md hover:bg-secondary-container transition-colors shadow-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                     Create New Campaign
+                 </button>
+</div>
+</div>
+<!-- Page Content Canvas -->
+<div class="p-margin_mobile md:p-margin_desktop flex flex-col lg:flex-row gap-gutter max-w-container_max_width mx-auto w-full pb-24 md:pb-margin_desktop">
+<!-- Left Column: Primary Content (Tables) -->
+<div class="flex-1 flex flex-col gap-gutter">
+<!-- Recent Campaigns Table Card -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant card-shadow overflow-hidden flex flex-col">
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+<h3 class="font-label-md text-label-md text-primary">Recent Campaigns</h3>
+<button class="text-secondary font-label-md text-label-md hover:underline flex items-center gap-1">
+                            View All <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-outline-variant bg-surface-container-low font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+<th class="px-6 py-3 font-medium">Campaign Name</th>
+<th class="px-6 py-3 font-medium">Status</th>
+<th class="px-6 py-3 font-medium">Recipients</th>
+<th class="px-6 py-3 font-medium">Open Rate</th>
+<th class="px-6 py-3 font-medium">CTR</th>
+<th class="px-6 py-3 font-medium text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-body-md divide-y divide-outline-variant/50">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="px-6 py-4">
+<div class="font-label-md text-label-md text-primary">Q3 Product Update</div>
+<div class="text-body-sm text-on-surface-variant">Sent on Oct 12, 2023</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Sent
+                                        </span>
+</td>
+<td class="px-6 py-4 text-on-surface">12,450</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="text-on-surface">42.8%</span>
+<div class="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 42.8%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-on-surface">14.2%</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1 rounded hover:bg-surface-container-high transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="px-6 py-4">
+<div class="font-label-md text-label-md text-primary">Black Friday Promo</div>
+<div class="text-body-sm text-on-surface-variant">Scheduled for Nov 24, 2023</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Scheduled
+                                        </span>
+</td>
+<td class="px-6 py-4 text-on-surface">45,100</td>
+<td class="px-6 py-4 text-on-surface-variant italic">--</td>
+<td class="px-6 py-4 text-on-surface-variant italic">--</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1 rounded hover:bg-surface-container-high transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="px-6 py-4">
+<div class="font-label-md text-label-md text-primary">Welcome Series - New Signups</div>
+<div class="text-body-sm text-on-surface-variant">Last edited 2 hrs ago</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+<span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Draft
+                                        </span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">Dynamic</td>
+<td class="px-6 py-4 text-on-surface-variant italic">--</td>
+<td class="px-6 py-4 text-on-surface-variant italic">--</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1 rounded hover:bg-surface-container-high transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="px-6 py-4">
+<div class="font-label-md text-label-md text-primary">Monthly Newsletter - September</div>
+<div class="text-body-sm text-on-surface-variant">Sent on Sep 01, 2023</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Sent
+                                        </span>
+</td>
+<td class="px-6 py-4 text-on-surface">38,920</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="text-on-surface">35.1%</span>
+<div class="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 35.1%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-on-surface">8.4%</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1 rounded hover:bg-surface-container-high transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Right Column: Sidebar Widgets -->
+<div class="w-full lg:w-80 flex flex-col gap-gutter shrink-0">
+<!-- Mailing List Management Bento Card -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant card-shadow p-6 flex flex-col gap-4">
+<div class="flex justify-between items-center mb-2">
+<h3 class="font-headline-md text-headline-md text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[22px]">group</span>
+                            Audience Segments
+                        </h3>
+</div>
+<!-- Total Subscribers Metric -->
+<div class="bg-surface-bright rounded-lg p-4 border border-outline-variant/50">
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-1">Total Subscribers</p>
+<div class="flex items-end gap-2">
+<span class="text-3xl font-bold font-headline-xl text-primary leading-none">142,890</span>
+<span class="font-label-sm text-label-sm text-green-600 bg-green-50 px-1.5 py-0.5 rounded flex items-center mb-1">
+<span class="material-symbols-outlined text-[12px]">trending_up</span> +2.4%
+                            </span>
+</div>
+</div>
+<div class="w-full h-px bg-outline-variant/30 my-2"></div>
+<!-- Active Segments List -->
+<div class="flex flex-col gap-3">
+<div class="flex justify-between items-center p-3 rounded-lg hover:bg-surface-container-low transition-colors border border-transparent hover:border-outline-variant/30 cursor-pointer">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-primary">All Active Customers</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Last 90 days</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface">45.2k</span>
+</div>
+<div class="flex justify-between items-center p-3 rounded-lg hover:bg-surface-container-low transition-colors border border-transparent hover:border-outline-variant/30 cursor-pointer">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-primary">VIP Members</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">High LTV</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface">8.4k</span>
+</div>
+<div class="flex justify-between items-center p-3 rounded-lg hover:bg-surface-container-low transition-colors border border-transparent hover:border-outline-variant/30 cursor-pointer">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-primary">Churn Risk</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">No activity &gt;30d</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface">12.1k</span>
+</div>
+</div>
+<button class="w-full mt-2 py-2 border border-outline-variant rounded-lg font-label-md text-label-md text-primary hover:bg-surface-container-low transition-colors bg-surface-bright">
+                        Manage Segments
+                    </button>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Visible only on Mobile) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-surface dark:bg-surface-dim border-t border-outline-variant flex justify-around items-center h-16 px-2 pb-safe z-50">
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">dashboard</span>
+<span class="text-[10px] font-medium mt-1">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">group</span>
+<span class="text-[10px] font-medium mt-1">Users</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-secondary" href="#">
+<span class="material-symbols-outlined text-[24px] bg-secondary-container text-on-secondary-container rounded-full px-4 py-1" style="font-variation-settings: 'FILL' 1;">email</span>
+<span class="text-[10px] font-medium mt-1 font-bold">Email</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+<span class="text-[10px] font-medium mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

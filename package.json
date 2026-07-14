@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "geoip-lite": "^1.4.10",
     "node-pty": "^1.1.0",
     "puppeteer": "^24.40.0",
     "puppeteer-extra": "^3.3.6",

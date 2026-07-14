@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Admin - BIG TUNA</title>
+<link rel="stylesheet" href="/styles/tokens.css">
+<style>
+  /* Private accent override — /admin/ never appears in the shared APPS
+     dropdown or homepage tile grid, so reusing blue (already public on
+     Assignments) here is safe. */
+  body { --accent: var(--c-blue); min-height: 100vh; }
+
+  .admin-app { width: 100%; }
+
+  /* ── Layout: shared topbar (unchanged) + our own left sidebar ────── */
+  .admin-shell { display: flex; align-items: flex-start; }
+  .sidebar {
+    flex: none;
+    width: 220px;
+    min-height: calc(100vh - 53px);
+    padding: 22px 12px;
+    border-right: 1px solid var(--border);
+    background: var(--bg-raised);
+    position: sticky;
+    top: calc(52px + env(safe-area-inset-top, 0px));
+  }
+  .side-title {
+    font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--text-dim);
+    padding: 4px 12px 14px;
+  }
+  .side-nav { display: flex; flex-direction: column; gap: 3px; }
+  .nav-item {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; width: 100%; text-align: left;
+    border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--text-muted);
+    font-weight: 700; font-size: 0.9rem;
+    padding: 11px 12px; cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .nav-item:hover { background: var(--surface-2); color: var(--text); }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); }
+  .nav-item:focus-visible { outline: none; box-shadow: var(--ring); }
+  .soon-tag {
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-dim); background: var(--surface-3);
+    padding: 2px 6px; border-radius: var(--radius-full);
+  }
+
+  .content { flex: 1; min-width: 0; padding: 22px clamp(14px, 3vw, 32px) 48px; }
+  .view-section.hidden { display: none; }
+
+  .page-title { font-size: clamp(1.5rem, 3.5vw, 1.9rem); margin-bottom: 4px; }
+  .page-sub { color: var(--text-muted); margin-bottom: 20px; }
+
+  /* ── Cards (local primitive, per convention — not tokens.css's .card) ── */
+  .card {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: clamp(16px, 2.2vw, 22px);
+    box-shadow: var(--shadow-1);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    margin-bottom: 18px;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .card-head h3 { margin: 0; font-size: 1.05rem; }
+  .caption { color: var(--text-dim); font-size: 0.78rem; margin: -6px 0 12px; }
+
+  .label {
+    font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-dim);
+  }
+
+  /* ── KPI tiles ─────────────────────────────────────────────────── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .kpi-tile {
+    padding: 16px 18px; border-radius: var(--radius-lg);
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .kpi-label { margin-bottom: 8px; }
+  .kpi-value { font-size: 1.9rem; font-weight: 850; line-height: 1; color: var(--text); }
+  .kpi-value-sm { font-size: 1.3rem; font-weight: 800; line-height: 1; }
+  .kpi-value-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .spark { display: block; opacity: 0.9; }
+
+  /* ── Charts (scoped chart-series palette — validated, do not change) ── */
+  .chart-scope {
+    --series-1: #3987e5; /* blue — primary metric */
+    --series-2: #199e70; /* aqua — secondary / device:desktop */
+    --series-3: #9085e9; /* violet — tertiary / device:tablet */
+  }
+  .chart-legend { display: flex; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text-muted); font-weight: 700; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+
+  .range-toggle { display: flex; gap: 4px; padding: 3px; background: var(--surface-2); border-radius: var(--radius-full); }
+  .range-btn {
+    border: 0; background: transparent; color: var(--text-muted);
+    font-weight: 800; font-size: 0.74rem; letter-spacing: 0.04em;
+    padding: 7px 14px; border-radius: var(--radius-full); cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .range-btn:hover { color: var(--text); }
+  .range-btn.active { background: var(--accent); color: var(--on-accent); }
+  .range-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+
+  .chart-canvas-wrap { position: relative; width: 100%; }
+  .chart-svg { display: block; width: 100%; height: 220px; }
+  .gridline { stroke: var(--border); stroke-width: 1; }
+  .axis-label { fill: var(--text-faint); font-size: 10px; font-family: var(--font-ui); }
+  .end-label { font-size: 11px; font-weight: 700; font-family: var(--font-mono); }
+  .crosshair { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 3 3; }
+  .chart-empty {
+    color: var(--text-dim); font-size: 0.85rem; text-align: center;
+    padding: 28px 10px;
+  }
+
+  /* Geo distribution bars */
+  .geo-bars { display: flex; flex-direction: column; gap: 8px; }
+  .geo-row { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+  .geo-label { flex: 0 0 100px; font-size: 0.82rem; color: var(--text-muted); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .geo-track { flex: 1; height: 10px; border-radius: var(--radius-full); background: var(--surface-2); overflow: hidden; }
+  .geo-fill { height: 100%; border-radius: var(--radius-full); background: var(--series-1); transition: width var(--dur-slow) var(--ease); }
+  .geo-count { flex: 0 0 32px; text-align: right; font-size: 0.8rem; font-weight: 800; font-family: var(--font-mono); color: var(--text); }
+
+  /* Device usage bars (fixed mobile/desktop/tablet order + colors) */
+  .device-chart { display: flex; flex-direction: column; gap: 10px; }
+  .device-row { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+  .device-label { flex: 0 0 70px; font-size: 0.82rem; color: var(--text-muted); font-weight: 700; text-transform: capitalize; }
+  .device-track { flex: 1; height: 12px; border-radius: var(--radius-full); background: var(--surface-2); overflow: hidden; }
+  .device-fill { height: 100%; border-radius: var(--radius-full); transition: width var(--dur-slow) var(--ease); }
+  .device-pct { flex: 0 0 40px; text-align: right; font-size: 0.8rem; font-weight: 800; font-family: var(--font-mono); }
+
+  /* Recent activity */
+  .activity-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+  .activity-item {
+    padding: 9px 12px; border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.025); font-size: 0.84rem; color: var(--text-muted);
+  }
+
+  /* ── Tooltip (shared across all charts) ───────────────────────────── */
+  .tooltip {
+    position: fixed; z-index: 900; pointer-events: none;
+    background: var(--bg-raised); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); padding: 7px 10px;
+    font-size: 0.76rem; line-height: 1.5; color: var(--text);
+    box-shadow: var(--shadow-2); white-space: nowrap;
+  }
+
+  /* ── Overview grid ─────────────────────────────────────────────── */
+  .grid { display: grid; gap: 16px; }
+  .grid.cols2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+  /* ── Users view ────────────────────────────────────────────────── */
+  .search-row { margin-bottom: 16px; }
+  .input {
+    width: 100%; max-width: 340px; min-height: 42px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 10px 13px; color: var(--text); background: var(--surface-2);
+    outline: none; font-size: 0.9rem;
+  }
+  .input::placeholder { color: var(--text-dim); }
+  .input:focus { border-color: var(--accent); box-shadow: var(--ring); }
+
+  .table-wrap { overflow-x: auto; }
+  table.users-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  .users-table th {
+    text-align: left; padding: 10px 12px; color: var(--text-dim);
+    font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .users-table td {
+    padding: 12px; border-bottom: 1px solid var(--border);
+    color: var(--text-muted); white-space: nowrap;
+  }
+  .users-table tr.user-row { cursor: pointer; transition: background var(--dur) var(--ease); }
+  .users-table tr.user-row:hover { background: var(--surface-2); }
+  .users-table td:first-child { color: var(--text); font-weight: 700; }
+
+  /* ── User detail slide-over ────────────────────────────────────── */
+  .overlay {
+    position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+    display: flex; justify-content: flex-end;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur) var(--ease);
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .detail-sheet {
+    width: min(460px, 100%); height: 100%; overflow-y: auto;
+    background: var(--bg-raised); border-left: 1px solid var(--border);
+    padding: 22px clamp(16px, 3vw, 26px) 40px;
+    transform: translateX(30px);
+    transition: transform var(--dur) var(--ease);
+  }
+  .overlay.show .detail-sheet { transform: translateX(0); }
+  .detail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .detail-head h2 { margin: 0; font-size: 1.25rem; }
+  .icon-btn {
+    width: 36px; height: 36px; display: grid; place-items: center;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+  }
+  .icon-btn:hover { color: var(--text); background: var(--surface-3); }
+  .detail-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+  .detail-section { margin-bottom: 22px; }
+  .detail-section h4 { font-size: 0.9rem; margin-bottom: 10px; }
+  .points-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .point-chip {
+    font-family: var(--font-mono); font-size: 0.72rem;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 4px 8px; color: var(--text-muted);
+  }
+
+  /* ── Templates gallery ────────────────────────────────────────────── */
+  .templates-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text-muted);
+    font-weight: 700; font-size: 0.76rem; padding: 6px 12px; border-radius: var(--radius-full); cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .chip:hover { color: var(--text); }
+  .chip.active { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+  .chip.small { cursor: default; padding: 3px 9px; font-size: 0.68rem; background: var(--surface-3); color: var(--text-muted); }
+
+  .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .template-card {
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  }
+  .template-preview-frame { height: 160px; overflow: hidden; background: #fff; border-bottom: 1px solid var(--border); }
+  .template-preview-frame iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+  .template-card-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .template-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .template-card-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; flex-wrap: wrap; }
+
+  /* ── Small button variants (tokens.css .btn/.btn-ghost, scaled down) ── */
+  .btn-sm { min-height: 30px; padding: 4px 10px; font-size: 0.78rem; }
+  .btn-ghost.danger { color: var(--danger); border-color: rgba(255,85,68,0.35); }
+  .btn-ghost.danger:hover { background: rgba(255,85,68,0.12); }
+
+  /* ── Campaign status pills (reuse --success/--warning tokens; the   ── */
+  /* chart --series-* colors are reserved for chart series, not status)  */
+  .status-pill { display: inline-block; padding: 3px 10px; border-radius: var(--radius-full); font-size: 0.72rem; font-weight: 800; text-transform: capitalize; }
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* ── Shared visual block editor (Templates + Campaigns) ───────────── */
+  .editor-sheet { width: min(920px, 100%); }
+  .editor-meta { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+  .editor-meta .label { margin-top: 8px; }
+  .editor-meta .input { max-width: none; }
+  .editor-columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; margin-bottom: 18px; }
+  .editor-block-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; max-height: 480px; overflow-y: auto; padding-right: 4px; }
+  .block-row { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface); }
+  .block-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .block-type-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-dim); }
+  .block-row-actions { display: flex; gap: 4px; }
+  .icon-btn.sm { width: 26px; height: 26px; font-size: 0.8rem; }
+  .icon-btn.sm:disabled { opacity: 0.3; cursor: not-allowed; }
+  .block-fields { display: flex; flex-direction: column; gap: 8px; }
+  .block-fields .input { max-width: none; }
+  .block-textarea { min-height: 70px; resize: vertical; font-family: inherit; }
+  .block-image-preview { max-width: 100%; max-height: 90px; border-radius: var(--radius-sm); border: 1px solid var(--border); display: none; object-fit: contain; }
+  .add-block-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .editor-preview-frame { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: #fff; height: 520px; }
+  .editor-preview-frame iframe { width: 100%; height: 100%; border: 0; }
+  .editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 14px; }
+  .editor-footer-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .recipient-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px; margin-bottom: 4px; }
+  .recipient-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 0.85rem; }
+  .recipient-item:hover { background: var(--surface-2); }
+  .recipient-name { font-weight: 700; color: var(--text); }
+  .recipient-email { color: var(--text-dim); font-size: 0.78rem; margin-left: auto; }
+
+  /* ── Not authorized / loading ──────────────────────────────────── */
+  .state-screen { min-height: calc(100vh - 53px); display: grid; place-items: center; padding: 40px 20px; }
+  .state-screen .card { max-width: 420px; text-align: center; }
+  .state-screen h2 { margin-bottom: 8px; }
+  .state-screen p { color: var(--text-muted); }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 860px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .grid.cols2 { grid-template-columns: 1fr; }
+    .editor-columns { grid-template-columns: 1fr; }
+    .editor-preview-frame { height: 360px; }
+  }
+  @media (max-width: 760px) {
+    .admin-shell { flex-direction: column; }
+    .sidebar {
+      width: 100%; position: static; min-height: 0;
+      display: flex; overflow-x: auto; padding: 10px;
+      border-right: 0; border-bottom: 1px solid var(--border);
+    }
+    .side-title { display: none; }
+    .side-nav { flex-direction: row; }
+    .nav-item { white-space: nowrap; }
+  }
+</style>
+</head>
+<body>
+<main class="admin-app chart-scope">
+
+  <div id="admin-loading" class="state-screen">
+    <div class="card"><h2>Loading…</h2><p>Checking access.</p></div>
+  </div>
+
+  <div id="admin-not-authorized" class="state-screen hidden">
+    <div class="card">
+      <h2>Not authorized</h2>
+      <p>This dashboard is restricted to the site owner. If you believe this is a mistake, contact yannick.</p>
+    </div>
+  </div>
+
+  <div id="admin-shell" class="admin-shell hidden">
+    <aside class="sidebar">
+      <div class="side-title">Admin</div>
+      <nav class="side-nav">
+        <button class="nav-item active" data-view="overview">Overview</button>
+        <button class="nav-item" data-view="users">Users</button>
+        <button class="nav-item" data-view="templates">Email Templates</button>
+        <button class="nav-item" data-view="campaigns">Campaigns</button>
+      </nav>
+    </aside>
+
+    <div class="content">
+
+      <!-- ── OVERVIEW ─────────────────────────────────────────────── -->
+      <section id="view-overview" class="view-section">
+        <h1 class="page-title">Overview</h1>
+        <div class="page-sub">Real usage across the site — computed from actual analytics events, nothing simulated.</div>
+
+        <div class="kpi-grid">
+          <div class="kpi-tile">
+            <div class="label kpi-label">Total Users</div>
+            <div class="kpi-value" id="kpi-total-users">—</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="label kpi-label">Active Sessions</div>
+            <div class="kpi-value" id="kpi-active-sessions">—</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="label kpi-label">Total Pageviews</div>
+            <div class="kpi-value-row">
+              <div class="kpi-value" id="kpi-total-pageviews">—</div>
+              <div id="kpi-pageviews-spark"></div>
+            </div>
+          </div>
+          <div class="kpi-tile">
+            <div class="label kpi-label">Avg Daily Pageviews</div>
+            <div class="kpi-value" id="kpi-avg-daily">—</div>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="card-head">
+            <h3>Daily Activity</h3>
+            <div class="range-toggle">
+              <button class="range-btn" data-range="7">7D</button>
+              <button class="range-btn active" data-range="30">30D</button>
+              <button class="range-btn" data-range="90">90D</button>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="swatch" style="background:var(--series-1)"></span>Pageviews</span>
+            <span class="legend-item"><span class="swatch" style="background:var(--series-3)"></span>Sessions</span>
+          </div>
+          <div class="chart-canvas-wrap" id="daily-chart-wrap"></div>
+        </section>
+
+        <div class="grid cols2">
+          <section class="card">
+            <div class="card-head"><h3>Geographic Distribution</h3></div>
+            <p class="caption">Will look sparse with a small user base — that's expected, not a bug.</p>
+            <div class="geo-bars" id="geo-bars"></div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><h3>Device Usage</h3></div>
+            <div class="chart-legend" id="device-legend"></div>
+            <div class="device-chart" id="device-chart"></div>
+          </section>
+        </div>
+
+        <section class="card">
+          <div class="card-head"><h3>Recent Activity</h3></div>
+          <div class="activity-list" id="activity-list"></div>
+        </section>
+      </section>
+
+      <!-- ── USERS ────────────────────────────────────────────────── -->
+      <section id="view-users" class="view-section hidden">
+        <h1 class="page-title">Users</h1>
+        <div class="page-sub">Every real account on the site and how they use it.</div>
+
+        <div class="search-row">
+          <input class="input" type="text" id="user-search" placeholder="Search username or email…">
+        </div>
+
+        <section class="card">
+          <div class="table-wrap">
+            <table class="users-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Last Seen</th>
+                  <th>Sessions</th>
+                  <th>Pageviews</th>
+                  <th>Avg Session</th>
+                  <th>Top App</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody">
+                <tr><td colspan="7" class="chart-empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ── EMAIL TEMPLATES ──────────────────────────────────────── -->
+      <section id="view-templates" class="view-section hidden">
+        <h1 class="page-title">Email Templates</h1>
+        <div class="page-sub">Reusable block layouts for campaigns — every preview below is the real rendered HTML, not a mockup.</div>
+
+        <div class="templates-toolbar">
+          <div class="chip-row" id="template-category-filter"></div>
+          <button type="button" class="btn btn-primary" id="new-template-btn">+ New Template</button>
+        </div>
+
+        <div class="template-grid" id="template-grid">
+          <div class="chart-empty">Loading…</div>
+        </div>
+      </section>
+
+      <!-- ── CAMPAIGNS ────────────────────────────────────────────── -->
+      <section id="view-campaigns" class="view-section hidden">
+        <h1 class="page-title">Campaigns</h1>
+        <div class="page-sub">Visual email campaigns to real users — sends go through Resend from a verified @yannickmorgans.ca address.</div>
+
+        <section class="card">
+          <div class="card-head">
+            <h3>Recent Campaigns</h3>
+            <button type="button" class="btn btn-primary" id="new-campaign-btn">+ Create New Campaign</button>
+          </div>
+          <div class="table-wrap">
+            <table class="users-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Recipients</th>
+                  <th>Open Rate</th>
+                  <th>Click Rate</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="campaigns-tbody">
+                <tr><td colspan="6" class="chart-empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<!-- ── User detail slide-over ──────────────────────────────────────── -->
+<div class="overlay" id="user-detail-overlay">
+  <aside class="detail-sheet chart-scope">
+    <div class="detail-head">
+      <h2 id="detail-title">User</h2>
+      <button type="button" class="icon-btn" id="close-detail" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="detail-body"></div>
+  </aside>
+</div>
+
+<!-- ── Shared block editor slide-over (Templates + Campaigns) ─────────── -->
+<div class="overlay" id="editor-overlay">
+  <aside class="detail-sheet editor-sheet chart-scope">
+    <div class="detail-head">
+      <h2 id="editor-title">Editor</h2>
+      <button type="button" class="icon-btn" id="close-editor" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="editor-body"></div>
+  </aside>
+</div>
+
+<!-- ── Campaign send-results slide-over ─────────────────────────────── -->
+<div class="overlay" id="results-overlay">
+  <aside class="detail-sheet chart-scope">
+    <div class="detail-head">
+      <h2 id="results-title">Results</h2>
+      <button type="button" class="icon-btn" id="close-results" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="results-body"></div>
+  </aside>
+</div>
+
+<div class="tooltip hidden" id="admin-tooltip"></div>
+
+<script src="/topbar.js"></script>
+<script src="/auth.js"></script>
+<script>
+Topbar.setTitle('Admin');
+
+/* ── small helpers ───────────────────────────────────────────────── */
+function esc(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[ch]));
+}
+function relTime(ts) {
+  if (!ts) return 'never';
+  const diff = Date.now() - new Date(ts).getTime();
+  const sec = Math.floor(diff / 1000);
+  if (sec < 5) return 'just now';
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min${min === 1 ? '' : 's'} ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo} month${mo === 1 ? '' : 's'} ago`;
+  const yr = Math.floor(mo / 12);
+  return `${yr} year${yr === 1 ? '' : 's'} ago`;
+}
+function fmtDuration(ms) {
+  const totalSec = Math.max(0, Math.round((ms || 0) / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}m ${s}s`;
+}
+function appNameFromPath(p) {
+  if (!p) return 'the site';
+  const seg = p.split('/').filter(Boolean)[0];
+  return seg || 'the homepage';
+}
+function activityLine(ev) {
+  const who = ev.userId || 'Anonymous';
+  const verbMap = { pageview: 'viewed', heartbeat: 'was active on', click: 'clicked on' };
+  const verb = verbMap[ev.type] || ev.type;
+  return `${who} ${verb} ${appNameFromPath(ev.path)} — ${relTime(ev.ts)}`;
+}
+function sparklineSvg(values, color) {
+  if (!values || !values.length) return '';
+  const w = 64, h = 24, pad = 2;
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = (max - min) || 1;
+  const stepX = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+  const pts = values.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - ((v - min) / range) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+/* ── shared tooltip ───────────────────────────────────────────────── */
+const tipEl = document.getElementById('admin-tooltip');
+function showTip(x, y, html) {
+  tipEl.innerHTML = html;
+  tipEl.style.left = `${x + 14}px`;
+  tipEl.style.top = `${y + 14}px`;
+  tipEl.classList.remove('hidden');
+}
+function hideTip() { tipEl.classList.add('hidden'); }
+
+/* ── api wrapper ──────────────────────────────────────────────────── */
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { ...(options.headers || {}), Authorization: `Bearer ${Auth.token}` },
+  });
+  if (res.status === 401 || res.status === 403) {
+    const err = new Error(res.status === 401 ? 'Not authenticated' : 'Forbidden');
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+function handleApiError(err) {
+  if (err && (err.status === 401 || err.status === 403)) {
+    showNotAuthorized();
+  } else {
+    console.error('[admin]', err);
+  }
+}
+
+/* ── auth gate: client-side nicety only. The real boundary is every  ── */
+/* /api/admin/* call 403ing server-side — this page must degrade      */
+/* gracefully rather than assume the client check alone is enough.     */
+function showNotAuthorized() {
+  document.getElementById('admin-loading').classList.add('hidden');
+  document.getElementById('admin-shell').classList.add('hidden');
+  document.getElementById('admin-not-authorized').classList.remove('hidden');
+}
+function showAuthorized() {
+  document.getElementById('admin-loading').classList.add('hidden');
+  document.getElementById('admin-not-authorized').classList.add('hidden');
+  document.getElementById('admin-shell').classList.remove('hidden');
+}
+
+/* ── sidebar nav ──────────────────────────────────────────────────── */
+let usersLoaded = false;
+let templatesLoaded = false;
+let campaignsLoaded = false;
+function showView(name) {
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.view-section').forEach(s => s.classList.toggle('hidden', s.id !== `view-${name}`));
+  if (name === 'users' && !usersLoaded) loadUsers();
+  if (name === 'templates' && !templatesLoaded) loadTemplates();
+  if (name === 'campaigns' && !campaignsLoaded) loadCampaigns();
+}
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => showView(btn.dataset.view));
+});
+document.querySelectorAll('.range-btn').forEach(btn => {
+  btn.addEventListener('click', () => loadOverview(Number(btn.dataset.range)));
+});
+document.getElementById('close-detail').addEventListener('click', closeUserDetail);
+document.getElementById('user-detail-overlay').addEventListener('click', e => {
+  if (e.target.id === 'user-detail-overlay') closeUserDetail();
+});
+
+/* ── Overview ─────────────────────────────────────────────────────── */
+let currentRange = 30;
+
+async function loadOverview(range) {
+  currentRange = range;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.range) === range));
+  try {
+    const data = await api(`/api/admin/overview?range=${encodeURIComponent(range)}`);
+    renderOverview(data);
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+
+function renderOverview(data) {
+  document.getElementById('kpi-total-users').textContent = data.totalUsers;
+  document.getElementById('kpi-active-sessions').textContent = data.activeSessions;
+  document.getElementById('kpi-total-pageviews').textContent = data.totalPageviews;
+  document.getElementById('kpi-avg-daily').textContent = currentRange ? Math.round(data.totalPageviews / currentRange) : data.totalPageviews;
+  document.getElementById('kpi-pageviews-spark').innerHTML =
+    sparklineSvg((data.dailySeries || []).map(d => d.pageviews), '#3987e5');
+
+  renderDailyChart(data.dailySeries || []);
+  renderGeoBars(data.geoDistribution || []);
+  renderDeviceChart(data.deviceBreakdown || { mobile: 0, desktop: 0, tablet: 0 });
+  renderActivity(data.recentActivity || []);
+}
+
+function renderDailyChart(series) {
+  const wrap = document.getElementById('daily-chart-wrap');
+  if (!series.length) {
+    wrap.innerHTML = '<div class="chart-empty">No data yet for this range.</div>';
+    return;
+  }
+  const W = Math.max(320, wrap.clientWidth || 600);
+  const H = 220;
+  const padL = 10, padR = 50, padT = 16, padB = 24;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const maxVal = Math.max(1, ...series.map(d => Math.max(d.pageviews, d.sessions)));
+  const stepX = series.length > 1 ? innerW / (series.length - 1) : 0;
+  const xAt = i => padL + i * stepX;
+  const yAt = v => padT + innerH - (v / maxVal) * innerH;
+  const linePoints = key => series.map((d, i) => `${xAt(i).toFixed(1)},${yAt(d[key]).toFixed(1)}`).join(' ');
+
+  let gridSvg = '';
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + (innerH / 3) * i;
+    gridSvg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${(W - padR).toFixed(1)}" y2="${y.toFixed(1)}" class="gridline"/>`;
+  }
+
+  const tickCount = Math.min(5, series.length);
+  let ticksSvg = '';
+  for (let t = 0; t < tickCount; t++) {
+    const idx = tickCount === 1 ? 0 : Math.round((series.length - 1) * (t / (tickCount - 1)));
+    const d = series[idx];
+    const label = new Date(d.date).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    ticksSvg += `<text x="${xAt(idx).toFixed(1)}" y="${H - 6}" class="axis-label" text-anchor="middle">${esc(label)}</text>`;
+  }
+
+  const last = series[series.length - 1];
+  const lastX = xAt(series.length - 1);
+
+  wrap.innerHTML = `
+    <svg class="chart-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      ${gridSvg}
+      <polyline points="${linePoints('sessions')}" fill="none" stroke="var(--series-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <polyline points="${linePoints('pageviews')}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${lastX.toFixed(1)}" cy="${yAt(last.pageviews).toFixed(1)}" r="3" fill="var(--series-1)"/>
+      <circle cx="${lastX.toFixed(1)}" cy="${yAt(last.sessions).toFixed(1)}" r="3" fill="var(--series-3)"/>
+      <text x="${(lastX + 6).toFixed(1)}" y="${yAt(last.pageviews).toFixed(1)}" class="end-label" fill="var(--series-1)" dominant-baseline="middle">${last.pageviews}</text>
+      <text x="${(lastX + 6).toFixed(1)}" y="${yAt(last.sessions).toFixed(1)}" class="end-label" fill="var(--series-3)" dominant-baseline="middle">${last.sessions}</text>
+      ${ticksSvg}
+      <rect x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="transparent" id="daily-hit-rect" style="cursor:crosshair"/>
+      <line id="daily-crosshair" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" class="crosshair" style="display:none"/>
+    </svg>
+  `;
+
+  const svg = wrap.querySelector('.chart-svg');
+  const hitRect = wrap.querySelector('#daily-hit-rect');
+  const crosshair = wrap.querySelector('#daily-crosshair');
+
+  hitRect.addEventListener('mousemove', e => {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const mx = (e.clientX - rect.left) * scaleX;
+    let idx = Math.round((mx - padL) / (stepX || 1));
+    idx = Math.max(0, Math.min(series.length - 1, idx));
+    const d = series[idx];
+    crosshair.style.display = '';
+    crosshair.setAttribute('x1', xAt(idx).toFixed(1));
+    crosshair.setAttribute('x2', xAt(idx).toFixed(1));
+    const dateLabel = new Date(d.date).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    showTip(e.clientX, e.clientY,
+      `<strong>${esc(dateLabel)}</strong><br><span style="color:var(--series-1)">Pageviews: ${d.pageviews}</span><br><span style="color:var(--series-3)">Sessions: ${d.sessions}</span>`);
+  });
+  hitRect.addEventListener('mouseleave', () => {
+    crosshair.style.display = 'none';
+    hideTip();
+  });
+}
+
+function renderGeoBars(geoDistribution) {
+  const wrap = document.getElementById('geo-bars');
+  if (!geoDistribution.length) {
+    wrap.innerHTML = '<div class="chart-empty">No geo data yet.</div>';
+    return;
+  }
+  const max = Math.max(...geoDistribution.map(g => g.count));
+  wrap.innerHTML = geoDistribution.map(g => {
+    const pct = Math.max(2, Math.round((g.count / max) * 100));
+    return `
+      <div class="geo-row" data-country="${esc(g.country || 'Unknown')}" data-count="${g.count}">
+        <div class="geo-label">${esc(g.country || 'Unknown')}</div>
+        <div class="geo-track"><div class="geo-fill" style="width:${pct}%"></div></div>
+        <div class="geo-count">${g.count}</div>
+      </div>`;
+  }).join('');
+  wrap.querySelectorAll('.geo-row').forEach(row => {
+    row.addEventListener('mousemove', e => showTip(e.clientX, e.clientY, `${esc(row.dataset.country)}: ${row.dataset.count}`));
+    row.addEventListener('mouseleave', hideTip);
+  });
+}
+
+const DEVICE_ORDER = [['mobile', '--series-1'], ['desktop', '--series-2'], ['tablet', '--series-3']];
+
+function renderDeviceChart(deviceBreakdown) {
+  const legend = document.getElementById('device-legend');
+  const wrap = document.getElementById('device-chart');
+  const total = Object.values(deviceBreakdown).reduce((a, b) => a + b, 0) || 1;
+  legend.innerHTML = DEVICE_ORDER.map(([key, color]) =>
+    `<span class="legend-item"><span class="swatch" style="background:var(${color})"></span>${key[0].toUpperCase()}${key.slice(1)}</span>`
+  ).join('');
+  wrap.innerHTML = DEVICE_ORDER.map(([key, color]) => {
+    const count = deviceBreakdown[key] || 0;
+    const pct = Math.round((count / total) * 100);
+    return `
+      <div class="device-row" data-key="${key}" data-count="${count}" data-pct="${pct}">
+        <div class="device-label">${key}</div>
+        <div class="device-track"><div class="device-fill" style="width:${pct}%;background:var(${color})"></div></div>
+        <div class="device-pct">${pct}%</div>
+      </div>`;
+  }).join('');
+  wrap.querySelectorAll('.device-row').forEach(row => {
+    row.addEventListener('mousemove', e => showTip(e.clientX, e.clientY, `${esc(row.dataset.key)}: ${row.dataset.count} (${row.dataset.pct}%)`));
+    row.addEventListener('mouseleave', hideTip);
+  });
+}
+
+function renderActivity(recentActivity) {
+  const wrap = document.getElementById('activity-list');
+  if (!recentActivity.length) {
+    wrap.innerHTML = '<div class="chart-empty">No activity yet.</div>';
+    return;
+  }
+  wrap.innerHTML = recentActivity.map(ev => `<div class="activity-item">${esc(activityLine(ev))}</div>`).join('');
+}
+
+/* ── Users ────────────────────────────────────────────────────────── */
+let allUsers = [];
+
+async function loadUsers() {
+  usersLoaded = true;
+  try {
+    allUsers = await api('/api/admin/users');
+    renderUsersTable(allUsers);
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+
+function renderUsersTable(list) {
+  const tbody = document.getElementById('users-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="chart-empty">No users found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(u => `
+    <tr data-id="${esc(u.id)}" class="user-row">
+      <td>${esc(u.username)}</td>
+      <td>${esc(u.email || '—')}</td>
+      <td>${esc(relTime(u.lastSeen))}</td>
+      <td>${u.sessionCount}</td>
+      <td>${u.totalPageviews}</td>
+      <td>${esc(fmtDuration(u.avgSessionDurationMs))}</td>
+      <td>${esc(u.topApp || '—')}</td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.user-row').forEach(row => {
+    row.addEventListener('click', () => openUserDetail(row.dataset.id));
+  });
+}
+
+document.getElementById('user-search').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  const filtered = !q ? allUsers : allUsers.filter(u =>
+    u.username.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q));
+  renderUsersTable(filtered);
+});
+
+async function openUserDetail(id) {
+  const overlay = document.getElementById('user-detail-overlay');
+  overlay.classList.add('show');
+  document.getElementById('detail-body').innerHTML = '<div class="chart-empty">Loading…</div>';
+  try {
+    const data = await api(`/api/admin/users/${encodeURIComponent(id)}`);
+    renderUserDetail(data);
+  } catch (err) {
+    handleApiError(err);
+    document.getElementById('detail-body').innerHTML = '<div class="chart-empty">Could not load this user.</div>';
+  }
+}
+function closeUserDetail() {
+  document.getElementById('user-detail-overlay').classList.remove('show');
+}
+
+function renderUserDetail(u) {
+  document.getElementById('detail-title').textContent = u.username;
+
+  const totalDev = Object.values(u.deviceBreakdown || {}).reduce((a, b) => a + b, 0) || 1;
+  const deviceHtml = DEVICE_ORDER.map(([key, color]) => {
+    const count = (u.deviceBreakdown && u.deviceBreakdown[key]) || 0;
+    const pct = Math.round((count / totalDev) * 100);
+    return `<div class="device-row"><div class="device-label">${key}</div><div class="device-track"><div class="device-fill" style="width:${pct}%;background:var(${color})"></div></div><div class="device-pct">${pct}%</div></div>`;
+  }).join('');
+
+  const geoHtml = (u.geoLocations && u.geoLocations.length)
+    ? u.geoLocations.map(g => `<div class="geo-row"><div class="geo-label" style="flex:1">${esc([g.city, g.region, g.country].filter(Boolean).join(', ') || 'Unknown')}</div><div class="geo-count">${g.count}</div></div>`).join('')
+    : '<div class="chart-empty">No geo data.</div>';
+
+  const pointsHtml = (u.points && u.points.length)
+    ? `<div class="caption">${u.points.length} precise location ping${u.points.length === 1 ? '' : 's'} on file (not a full map — a lightweight list is sufficient at this scale):</div>
+       <div class="points-list">${u.points.map(p => `<span class="point-chip">${p.lat.toFixed(3)}, ${p.lon.toFixed(3)}</span>`).join('')}</div>`
+    : '<div class="chart-empty">No precise location pings.</div>';
+
+  const eventsHtml = (u.recentEvents && u.recentEvents.length)
+    ? u.recentEvents.map(ev => `<div class="activity-item">${esc(ev.type)} — ${esc(ev.path || '—')} — ${esc(relTime(ev.ts))}</div>`).join('')
+    : '<div class="chart-empty">No recent events.</div>';
+
+  document.getElementById('detail-body').innerHTML = `
+    <div class="detail-stats">
+      <div class="kpi-tile"><div class="label kpi-label">Last Seen</div><div class="kpi-value-sm">${esc(relTime(u.lastSeen))}</div></div>
+      <div class="kpi-tile"><div class="label kpi-label">Sessions</div><div class="kpi-value-sm">${u.sessionCount}</div></div>
+      <div class="kpi-tile"><div class="label kpi-label">Pageviews</div><div class="kpi-value-sm">${u.totalPageviews}</div></div>
+      <div class="kpi-tile"><div class="label kpi-label">Avg Session</div><div class="kpi-value-sm">${esc(fmtDuration(u.avgSessionDurationMs))}</div></div>
+    </div>
+    <div class="detail-section"><h4>Device Breakdown</h4>${deviceHtml}</div>
+    <div class="detail-section"><h4>Geo Locations</h4>${geoHtml}</div>
+    <div class="detail-section"><h4>Precise Location Pings</h4>${pointsHtml}</div>
+    <div class="detail-section"><h4>Recent Events</h4><div class="activity-list">${eventsHtml}</div></div>
+  `;
+}
+
+/* ── client-side block renderer ──────────────────────────────────── */
+/* Mirrors renderBlock()/renderCampaignHtml() in lib/email-campaigns.js  */
+/* (exact same inline-style values) but with no tracking pixel/link      */
+/* rewriting — this is only ever used for an instant local preview,      */
+/* never actually sent, so there is nothing to track.                    */
+function renderBlockPreview(block) {
+  if (!block || typeof block !== 'object') return '';
+  switch (block.type) {
+    case 'heading':
+      return `<h2 style="margin:0 0 12px;font-size:22px;line-height:1.3;font-weight:700;color:#111">${esc(block.text)}</h2>`;
+    case 'text':
+      return `<div style="margin:0 0 16px;font-size:15px;color:#333">${block.html || ''}</div>`;
+    case 'button':
+      return `<p style="margin:0 0 20px"><a href="${esc(block.url || '#')}" style="display:inline-block;padding:11px 22px;border-radius:7px;background:#2457a6;color:#fff;text-decoration:none;font-weight:700;font-size:15px">${esc(block.label || 'Learn more')}</a></p>`;
+    case 'image':
+      return `<img src="${esc(block.src)}" alt="${esc(block.alt || '')}" style="max-width:100%;width:100%;display:block;margin:0 0 16px;border:0" />`;
+    case 'divider':
+      return `<div style="border-top:1px solid #e2e2e2;margin:18px 0;height:0;font-size:0;line-height:0">&nbsp;</div>`;
+    default:
+      return '';
+  }
+}
+function renderBlocksPreviewHtml(blocks) {
+  const body = (Array.isArray(blocks) ? blocks : []).map(renderBlockPreview).join('\n    ');
+  return `<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.45;color:#111;max-width:680px;margin:0 auto;padding:8px">
+    ${body}
+  </body></html>`;
+}
+
+/* ── Email Templates ─────────────────────────────────────────────── */
+let allTemplates = [];
+let activeTemplateCategory = 'All';
+
+async function loadTemplates() {
+  templatesLoaded = true;
+  try {
+    allTemplates = await api('/api/admin/email/templates');
+    renderTemplateCategoryFilter();
+    renderTemplateGrid(currentTemplateList());
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+function currentTemplateList() {
+  return activeTemplateCategory === 'All'
+    ? allTemplates
+    : allTemplates.filter(t => (t.category || '') === activeTemplateCategory);
+}
+function renderTemplateCategoryFilter() {
+  const cats = ['All', ...new Set(allTemplates.map(t => t.category).filter(Boolean))];
+  const wrap = document.getElementById('template-category-filter');
+  wrap.innerHTML = cats.map(c =>
+    `<button type="button" class="chip${c === activeTemplateCategory ? ' active' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`
+  ).join('');
+  wrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeTemplateCategory = btn.dataset.cat;
+      renderTemplateCategoryFilter();
+      renderTemplateGrid(currentTemplateList());
+    });
+  });
+}
+function renderTemplateGrid(list) {
+  const wrap = document.getElementById('template-grid');
+  if (!list.length) {
+    wrap.innerHTML = '<div class="chart-empty">No templates yet — create one to get started.</div>';
+    return;
+  }
+  wrap.innerHTML = list.map(t => `
+    <div class="template-card" data-id="${esc(t.id)}">
+      <div class="template-preview-frame"><iframe srcdoc="${esc(renderBlocksPreviewHtml(t.blocks))}" tabindex="-1"></iframe></div>
+      <div class="template-card-body">
+        <div class="template-card-head">
+          <strong>${esc(t.name)}</strong>
+          ${t.category ? `<span class="chip small">${esc(t.category)}</span>` : ''}
+        </div>
+        <p class="caption" style="margin:0">${esc(t.description || 'No description')}</p>
+        <div class="template-card-actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-act="edit">Edit</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-act="duplicate">Duplicate</button>
+          <button type="button" class="btn btn-ghost btn-sm danger" data-act="delete">Delete</button>
+        </div>
+      </div>
+    </div>`).join('');
+  wrap.querySelectorAll('.template-card').forEach(card => {
+    const t = allTemplates.find(x => x.id === card.dataset.id);
+    if (!t) return;
+    card.querySelector('[data-act="edit"]').addEventListener('click', () => openEditor('template', t));
+    card.querySelector('[data-act="duplicate"]').addEventListener('click', () => duplicateTemplate(t));
+    card.querySelector('[data-act="delete"]').addEventListener('click', () => deleteTemplate(t));
+  });
+}
+document.getElementById('new-template-btn').addEventListener('click', () => openEditor('template', null));
+
+async function deleteTemplate(t) {
+  if (!confirm(`Delete template "${t.name}"? This cannot be undone.`)) return;
+  try {
+    await api(`/api/admin/email/templates/${encodeURIComponent(t.id)}`, { method: 'DELETE' });
+    allTemplates = allTemplates.filter(x => x.id !== t.id);
+    renderTemplateCategoryFilter();
+    renderTemplateGrid(currentTemplateList());
+  } catch (err) {
+    handleApiError(err);
+    alert('Could not delete template.');
+  }
+}
+async function duplicateTemplate(t) {
+  try {
+    const copy = await api('/api/admin/email/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `${t.name} (copy)`, description: t.description, category: t.category, subject: t.subject, blocks: t.blocks }),
+    });
+    allTemplates.push(copy);
+    renderTemplateCategoryFilter();
+    renderTemplateGrid(currentTemplateList());
+  } catch (err) {
+    handleApiError(err);
+    alert('Could not duplicate template.');
+  }
+}
+
+/* ── Campaign Manager ────────────────────────────────────────────── */
+let allCampaigns = [];
+
+async function loadCampaigns() {
+  campaignsLoaded = true;
+  try {
+    allCampaigns = await api('/api/admin/email/campaigns');
+    renderCampaignsTable(allCampaigns);
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+function campaignStats(c) {
+  const results = Array.isArray(c.sendResults) ? c.sendResults : [];
+  const sentCount = results.filter(r => r.status === 'sent').length;
+  const openedCount = results.filter(r => r.opened).length;
+  const clickedCount = results.filter(r => Array.isArray(r.clicks) && r.clicks.length > 0).length;
+  return {
+    sentCount, openedCount, clickedCount,
+    openRate: sentCount ? Math.round((openedCount / sentCount) * 100) : null,
+    clickRate: sentCount ? Math.round((clickedCount / sentCount) * 100) : null,
+  };
+}
+const STATUS_PILL_STYLE = {
+  draft:     { color: 'var(--text-dim)',    bg: 'var(--surface-3)' },
+  scheduled: { color: 'var(--warning)',     bg: 'rgba(245,158,11,0.14)' },
+  sending:   { color: 'var(--warning)',     bg: 'rgba(245,158,11,0.14)' },
+  sent:      { color: 'var(--success)',     bg: 'rgba(34,197,94,0.14)' },
+};
+function statusPillHtml(status) {
+  const st = STATUS_PILL_STYLE[status] || STATUS_PILL_STYLE.draft;
+  return `<span class="status-pill" style="color:${st.color};background:${st.bg}">${esc(status)}</span>`;
+}
+function renderCampaignsTable(list) {
+  const tbody = document.getElementById('campaigns-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="chart-empty">No campaigns yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(c => {
+    const { openRate, clickRate } = campaignStats(c);
+    const actions = [];
+    if (c.status === 'draft' || c.status === 'scheduled') actions.push('<button type="button" class="btn btn-ghost btn-sm" data-act="edit">Edit</button>');
+    if (c.status === 'sent' || c.status === 'sending') actions.push('<button type="button" class="btn btn-ghost btn-sm" data-act="results">Results</button>');
+    actions.push('<button type="button" class="btn btn-ghost btn-sm" data-act="duplicate">Duplicate</button>');
+    actions.push('<button type="button" class="btn btn-ghost btn-sm danger" data-act="delete">Delete</button>');
+    return `
+      <tr data-id="${esc(c.id)}">
+        <td>${esc(c.name)}</td>
+        <td>${statusPillHtml(c.status)}</td>
+        <td>${(c.recipientIds || []).length}</td>
+        <td>${openRate == null ? '—' : openRate + '%'}</td>
+        <td>${clickRate == null ? '—' : clickRate + '%'}</td>
+        <td class="row-actions">${actions.join('')}</td>
+      </tr>`;
+  }).join('');
+  tbody.querySelectorAll('tr[data-id]').forEach(row => {
+    const c = allCampaigns.find(x => x.id === row.dataset.id);
+    if (!c) return;
+    const editBtn = row.querySelector('[data-act="edit"]');
+    if (editBtn) editBtn.addEventListener('click', () => openEditor('campaign', c));
+    const resultsBtn = row.querySelector('[data-act="results"]');
+    if (resultsBtn) resultsBtn.addEventListener('click', () => openResults(c));
+    row.querySelector('[data-act="duplicate"]').addEventListener('click', () => duplicateCampaign(c));
+    row.querySelector('[data-act="delete"]').addEventListener('click', () => deleteCampaign(c));
+  });
+}
+document.getElementById('new-campaign-btn').addEventListener('click', () => openEditor('campaign', null));
+
+async function deleteCampaign(c) {
+  if (!confirm(`Delete campaign "${c.name}"? This cannot be undone.`)) return;
+  try {
+    await api(`/api/admin/email/campaigns/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+    allCampaigns = allCampaigns.filter(x => x.id !== c.id);
+    renderCampaignsTable(allCampaigns);
+  } catch (err) {
+    handleApiError(err);
+    alert('Could not delete campaign.');
+  }
+}
+async function duplicateCampaign(c) {
+  try {
+    // Recipients are deliberately NOT copied — a duplicated campaign starts with
+    // zero recipients so re-sending to the same list always requires a conscious
+    // re-selection, not a fresh copy that could be sent again by habit/mistake.
+    const copy = await api('/api/admin/email/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `${c.name} (copy)`, subject: c.subject, fromEmail: c.fromEmail, blocks: c.blocks, templateId: c.templateId, recipientIds: [] }),
+    });
+    allCampaigns.push(copy);
+    renderCampaignsTable(allCampaigns);
+  } catch (err) {
+    handleApiError(err);
+    alert('Could not duplicate campaign.');
+  }
+}
+
+function openResults(c) {
+  const { sentCount, openRate, clickRate } = campaignStats(c);
+  const results = Array.isArray(c.sendResults) ? c.sendResults : [];
+  document.getElementById('results-title').textContent = `${c.name} — Results`;
+  const rows = results.map(r => `
+    <tr>
+      <td>${esc(r.email || '—')}</td>
+      <td>${esc(r.status)}</td>
+      <td>${r.opened ? esc(relTime(r.openedAt)) : '—'}</td>
+      <td>${(r.clicks || []).length}</td>
+      <td>${esc(r.error || '')}</td>
+    </tr>`).join('');
+  document.getElementById('results-body').innerHTML = `
+    <div class="detail-stats">
+      <div class="kpi-tile"><div class="label kpi-label">Sent</div><div class="kpi-value-sm">${sentCount}</div></div>
+      <div class="kpi-tile"><div class="label kpi-label">Open Rate</div><div class="kpi-value-sm">${openRate == null ? '—' : openRate + '%'}</div></div>
+      <div class="kpi-tile"><div class="label kpi-label">Click Rate</div><div class="kpi-value-sm">${clickRate == null ? '—' : clickRate + '%'}</div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="users-table">
+        <thead><tr><th>Email</th><th>Status</th><th>Opened</th><th>Clicks</th><th>Error</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="chart-empty">No results.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  document.getElementById('results-overlay').classList.add('show');
+}
+document.getElementById('close-results').addEventListener('click', closeResults);
+document.getElementById('results-overlay').addEventListener('click', e => { if (e.target.id === 'results-overlay') closeResults(); });
+function closeResults() { document.getElementById('results-overlay').classList.remove('show'); }
+
+/* ── Shared visual block editor (Templates + Campaigns) ──────────── */
+const BLOCK_LABELS = { heading: 'Heading', text: 'Text', button: 'Button', image: 'Image', divider: 'Divider' };
+const FROM_PRESETS = ['no-reply@yannickmorgans.ca', 'hello@yannickmorgans.ca', 'news@yannickmorgans.ca'];
+
+let editorState = null; // { kind:'template'|'campaign', id, name, subject, description, category, fromEmail, recipientIds, scheduledAt, status, blocks }
+
+function defaultBlock(type) {
+  switch (type) {
+    case 'heading': return { type: 'heading', text: 'New heading' };
+    case 'text':    return { type: 'text', html: 'Some text…' };
+    case 'button':  return { type: 'button', label: 'Click here', url: 'https://yannickmorgans.ca' };
+    case 'image':   return { type: 'image', src: '', alt: '' };
+    case 'divider': return { type: 'divider' };
+    default: return null;
+  }
+}
+
+function openEditor(kind, entity) {
+  editorState = {
+    kind,
+    id: entity ? entity.id : null,
+    name: entity ? (entity.name || '') : '',
+    subject: entity ? (entity.subject || '') : '',
+    description: entity && kind === 'template' ? (entity.description || '') : '',
+    category: entity && kind === 'template' ? (entity.category || '') : '',
+    fromEmail: entity && kind === 'campaign' ? (entity.fromEmail || FROM_PRESETS[0]) : FROM_PRESETS[0],
+    recipientIds: entity && kind === 'campaign' ? (entity.recipientIds || []).slice() : [],
+    scheduledAt: entity && kind === 'campaign' ? (entity.scheduledAt || '') : '',
+    status: entity && kind === 'campaign' ? (entity.status || 'draft') : 'draft',
+    blocks: entity ? JSON.parse(JSON.stringify(entity.blocks || [])) : [],
+  };
+  document.getElementById('editor-title').textContent = (entity ? 'Edit ' : 'New ') + (kind === 'template' ? 'Template' : 'Campaign');
+  renderEditorBody();
+  document.getElementById('editor-overlay').classList.add('show');
+  if (kind === 'campaign') ensureUsersForRecipientPicker();
+}
+function closeEditor() {
+  document.getElementById('editor-overlay').classList.remove('show');
+  editorState = null;
+}
+document.getElementById('close-editor').addEventListener('click', closeEditor);
+document.getElementById('editor-overlay').addEventListener('click', e => { if (e.target.id === 'editor-overlay') closeEditor(); });
+
+function toDatetimeLocal(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderEditorBody() {
+  const s = editorState;
+  const isTemplate = s.kind === 'template';
+  document.getElementById('editor-body').innerHTML = `
+    <div class="editor-meta">
+      <label class="label">Name</label>
+      <input type="text" class="input" id="editor-name" value="${esc(s.name)}" placeholder="${isTemplate ? 'Template name' : 'Campaign name'}">
+      ${isTemplate ? `
+        <label class="label">Description</label>
+        <input type="text" class="input" id="editor-description" value="${esc(s.description)}" placeholder="Short description">
+        <label class="label">Category</label>
+        <input type="text" class="input" id="editor-category" value="${esc(s.category)}" placeholder="e.g. Newsletter">
+      ` : ''}
+      <label class="label">Subject line</label>
+      <input type="text" class="input" id="editor-subject" value="${esc(s.subject)}" placeholder="Email subject">
+      ${!isTemplate ? renderCampaignMetaHtml(s) : ''}
+    </div>
+
+    <div class="editor-columns">
+      <div class="editor-blocks-col">
+        <div class="label" style="margin-bottom:8px">Blocks</div>
+        <div id="editor-block-list" class="editor-block-list"></div>
+        <div class="add-block-row">
+          <button type="button" class="btn btn-ghost btn-sm" data-add="heading">+ Heading</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-add="text">+ Text</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-add="button">+ Button</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-add="image">+ Image</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-add="divider">+ Divider</button>
+        </div>
+      </div>
+      <div class="editor-preview-col">
+        <div class="label" style="margin-bottom:8px">Live Preview</div>
+        <div class="editor-preview-frame"><iframe id="editor-preview-iframe" tabindex="-1"></iframe></div>
+      </div>
+    </div>
+
+    <div class="editor-footer">
+      <span id="editor-msg" class="caption" style="margin:0"></span>
+      <div class="editor-footer-actions">
+        ${!isTemplate ? '<button type="button" class="btn btn-ghost" id="editor-test-btn">Send test to myself</button>' : ''}
+        ${!isTemplate ? '<button type="button" class="btn btn-ghost" id="editor-send-btn">Send now…</button>' : ''}
+        <button type="button" class="btn btn-primary" id="editor-save-btn">Save</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('editor-name').addEventListener('input', e => { editorState.name = e.target.value; });
+  if (isTemplate) {
+    document.getElementById('editor-description').addEventListener('input', e => { editorState.description = e.target.value; });
+    document.getElementById('editor-category').addEventListener('input', e => { editorState.category = e.target.value; });
+  }
+  document.getElementById('editor-subject').addEventListener('input', e => { editorState.subject = e.target.value; });
+  if (!isTemplate) wireCampaignMeta();
+
+  renderBlockList();
+  updateEditorPreview();
+
+  document.querySelectorAll('#editor-body [data-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const b = defaultBlock(btn.dataset.add);
+      if (b) { editorState.blocks.push(b); renderBlockList(); updateEditorPreview(); }
+    });
+  });
+
+  document.getElementById('editor-save-btn').addEventListener('click', () => saveEditor());
+  if (!isTemplate) {
+    document.getElementById('editor-test-btn').addEventListener('click', () => testSendEditorCampaign());
+    document.getElementById('editor-send-btn').addEventListener('click', () => sendEditorCampaign());
+  }
+}
+
+function renderCampaignMetaHtml(s) {
+  const isPreset = FROM_PRESETS.includes(s.fromEmail);
+  return `
+    <label class="label">From address</label>
+    <select class="input" id="editor-from-select">
+      ${FROM_PRESETS.map(f => `<option value="${esc(f)}"${s.fromEmail === f ? ' selected' : ''}>${esc(f)}</option>`).join('')}
+      <option value="__other__"${!isPreset ? ' selected' : ''}>Other…</option>
+    </select>
+    <input type="text" class="input${isPreset ? ' hidden' : ''}" id="editor-from-other" placeholder="you@yannickmorgans.ca" value="${!isPreset ? esc(s.fromEmail) : ''}">
+    <div id="editor-from-error" class="caption" style="margin:0;color:var(--danger)"></div>
+
+    <label class="label">Schedule for later (optional)</label>
+    <input type="datetime-local" class="input" id="editor-schedule" value="${s.scheduledAt ? esc(toDatetimeLocal(s.scheduledAt)) : ''}">
+
+    <label class="label">Recipients</label>
+    <input type="text" class="input" id="recipient-search" placeholder="Search username or email…">
+    <div class="caption" id="recipient-count-caption" style="margin:0">Loading users…</div>
+    <div class="recipient-list" id="recipient-list"></div>
+  `;
+}
+
+function wireCampaignMeta() {
+  const sel = document.getElementById('editor-from-select');
+  const other = document.getElementById('editor-from-other');
+  function syncFrom() {
+    if (sel.value === '__other__') {
+      other.classList.remove('hidden');
+      editorState.fromEmail = other.value.trim();
+    } else {
+      other.classList.add('hidden');
+      editorState.fromEmail = sel.value;
+    }
+    validateFromEmail();
+  }
+  sel.addEventListener('change', syncFrom);
+  other.addEventListener('input', () => { editorState.fromEmail = other.value.trim(); validateFromEmail(); });
+
+  document.getElementById('editor-schedule').addEventListener('input', e => {
+    editorState.scheduledAt = e.target.value ? new Date(e.target.value).toISOString() : '';
+  });
+  document.getElementById('recipient-search').addEventListener('input', () => renderRecipientList());
+  validateFromEmail();
+}
+
+function validateFromEmail() {
+  const errEl = document.getElementById('editor-from-error');
+  const val = (editorState.fromEmail || '').trim();
+  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val) && val.toLowerCase().endsWith('@yannickmorgans.ca');
+  if (errEl) errEl.textContent = (ok || !val) ? '' : 'Must be a @yannickmorgans.ca address.';
+  return ok;
+}
+
+async function ensureUsersForRecipientPicker() {
+  if (!allUsers.length) {
+    try { allUsers = await api('/api/admin/users'); } catch (err) { handleApiError(err); }
+  }
+  renderRecipientList();
+}
+function renderRecipientList() {
+  if (!editorState || editorState.kind !== 'campaign') return;
+  const wrap = document.getElementById('recipient-list');
+  if (!wrap) return;
+  const q = (document.getElementById('recipient-search').value || '').trim().toLowerCase();
+  const list = !q ? allUsers : allUsers.filter(u => u.username.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q));
+  wrap.innerHTML = list.length ? list.map(u => `
+    <label class="recipient-item">
+      <input type="checkbox" data-uid="${esc(u.id)}" ${editorState.recipientIds.includes(u.id) ? 'checked' : ''}>
+      <span class="recipient-name">${esc(u.username)}</span>
+      <span class="recipient-email">${u.email ? esc(u.email) : 'no email on file'}</span>
+    </label>`).join('') : '<div class="chart-empty">No users found.</div>';
+  wrap.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const uid = cb.dataset.uid;
+      if (cb.checked) { if (!editorState.recipientIds.includes(uid)) editorState.recipientIds.push(uid); }
+      else { editorState.recipientIds = editorState.recipientIds.filter(x => x !== uid); }
+      updateRecipientCaption();
+    });
+  });
+  updateRecipientCaption();
+}
+function updateRecipientCaption() {
+  const caption = document.getElementById('recipient-count-caption');
+  if (!caption) return;
+  const selected = editorState.recipientIds;
+  const withEmail = selected.filter(id => { const u = allUsers.find(x => x.id === id); return u && u.email; }).length;
+  const missing = selected.length - withEmail;
+  caption.textContent = selected.length
+    ? `${withEmail} of ${selected.length} selected have an email on file${missing ? ` (${missing} would be skipped)` : ''}.`
+    : 'No recipients selected yet.';
+}
+
+/* ── Block list (add/reorder/remove + inline field editing) ──────── */
+function renderBlockList() {
+  const wrap = document.getElementById('editor-block-list');
+  if (!wrap) return;
+  const blocks = editorState.blocks;
+  if (!blocks.length) {
+    wrap.innerHTML = '<div class="chart-empty">No blocks yet — add one below.</div>';
+    return;
+  }
+  wrap.innerHTML = blocks.map((b, i) => `
+    <div class="block-row" data-idx="${i}">
+      <div class="block-row-head">
+        <span class="block-type-label">${esc(BLOCK_LABELS[b.type] || b.type)}</span>
+        <div class="block-row-actions">
+          <button type="button" class="icon-btn sm" data-act="up" ${i === 0 ? 'disabled' : ''} title="Move up">&uarr;</button>
+          <button type="button" class="icon-btn sm" data-act="down" ${i === blocks.length - 1 ? 'disabled' : ''} title="Move down">&darr;</button>
+          <button type="button" class="icon-btn sm" data-act="remove" title="Remove">&times;</button>
+        </div>
+      </div>
+      <div class="block-fields">${renderBlockFields(b, i)}</div>
+    </div>`).join('');
+
+  wrap.querySelectorAll('.block-row').forEach(row => {
+    const idx = Number(row.dataset.idx);
+    const upBtn = row.querySelector('[data-act="up"]');
+    const downBtn = row.querySelector('[data-act="down"]');
+    if (upBtn) upBtn.addEventListener('click', () => moveBlock(idx, -1));
+    if (downBtn) downBtn.addEventListener('click', () => moveBlock(idx, 1));
+    row.querySelector('[data-act="remove"]').addEventListener('click', () => removeBlock(idx));
+    row.querySelectorAll('[data-field]').forEach(input => {
+      input.addEventListener('input', () => {
+        editorState.blocks[idx][input.dataset.field] = input.value;
+        updateEditorPreview();
+        if (input.dataset.field === 'src') updateImagePreview(idx);
+      });
+    });
+  });
+}
+function renderBlockFields(b, idx) {
+  switch (b.type) {
+    case 'heading':
+      return `<input type="text" class="input" data-field="text" value="${esc(b.text || '')}" placeholder="Heading text">`;
+    case 'text':
+      return `<textarea class="input block-textarea" data-field="html" placeholder="Plain text or simple HTML content">${esc(b.html || '')}</textarea>`;
+    case 'button':
+      return `
+        <input type="text" class="input" data-field="label" value="${esc(b.label || '')}" placeholder="Button label">
+        <input type="text" class="input" data-field="url" value="${esc(b.url || '')}" placeholder="https://…">`;
+    case 'image':
+      return `
+        <input type="text" class="input" data-field="src" value="${esc(b.src || '')}" placeholder="Image URL">
+        <input type="text" class="input" data-field="alt" value="${esc(b.alt || '')}" placeholder="Alt text">
+        <img class="block-image-preview" id="block-img-preview-${idx}" src="${esc(b.src || '')}" alt="" onerror="this.style.display='none'" onload="this.style.display='block'">`;
+    case 'divider':
+      return '<div class="caption" style="margin:0">— divider —</div>';
+    default:
+      return '';
+  }
+}
+function updateImagePreview(idx) {
+  const img = document.getElementById(`block-img-preview-${idx}`);
+  if (img) img.src = editorState.blocks[idx].src || '';
+}
+function moveBlock(idx, dir) {
+  const blocks = editorState.blocks;
+  const j = idx + dir;
+  if (j < 0 || j >= blocks.length) return;
+  [blocks[idx], blocks[j]] = [blocks[j], blocks[idx]];
+  renderBlockList();
+  updateEditorPreview();
+}
+function removeBlock(idx) {
+  editorState.blocks.splice(idx, 1);
+  renderBlockList();
+  updateEditorPreview();
+}
+function updateEditorPreview() {
+  const iframe = document.getElementById('editor-preview-iframe');
+  if (iframe) iframe.srcdoc = renderBlocksPreviewHtml(editorState.blocks);
+}
+
+/* ── Save / test / send ────────────────────────────────────────────── */
+async function saveEditor() {
+  const msgEl = document.getElementById('editor-msg');
+  msgEl.style.color = '';
+  msgEl.textContent = 'Saving…';
+
+  if (editorState.kind === 'campaign' && !validateFromEmail()) {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Fix the from-address before saving.';
+    return null;
+  }
+
+  try {
+    let saved;
+    if (editorState.kind === 'template') {
+      const payload = {
+        name: editorState.name || 'Untitled template',
+        description: editorState.description,
+        category: editorState.category,
+        subject: editorState.subject,
+        blocks: editorState.blocks,
+      };
+      const path = editorState.id ? `/api/admin/email/templates/${encodeURIComponent(editorState.id)}` : '/api/admin/email/templates';
+      saved = await api(path, { method: editorState.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      editorState.id = saved.id;
+      const idx = allTemplates.findIndex(t => t.id === saved.id);
+      if (idx >= 0) allTemplates[idx] = saved; else allTemplates.push(saved);
+      renderTemplateCategoryFilter();
+      renderTemplateGrid(currentTemplateList());
+    } else {
+      const payload = {
+        name: editorState.name || 'Untitled campaign',
+        subject: editorState.subject,
+        fromEmail: editorState.fromEmail,
+        blocks: editorState.blocks,
+        recipientIds: editorState.recipientIds,
+        scheduledAt: editorState.scheduledAt || null,
+        status: editorState.scheduledAt ? 'scheduled' : 'draft',
+      };
+      if (!editorState.id) {
+        // POST /api/admin/email/campaigns always forces status:'draft' server-side
+        // regardless of the body (server.js behavior, out of scope to change here) —
+        // create first to get an id, then PUT so a "schedule for later" pick on a
+        // brand-new campaign is applied correctly in the same save action.
+        const created = await api('/api/admin/email/campaigns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        editorState.id = created.id;
+      }
+      saved = await api(`/api/admin/email/campaigns/${encodeURIComponent(editorState.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const idx = allCampaigns.findIndex(c => c.id === saved.id);
+      if (idx >= 0) allCampaigns[idx] = saved; else allCampaigns.push(saved);
+      renderCampaignsTable(allCampaigns);
+    }
+    msgEl.style.color = 'var(--success)';
+    msgEl.textContent = 'Saved.';
+    return saved;
+  } catch (err) {
+    handleApiError(err);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Save failed.';
+    return null;
+  }
+}
+
+async function testSendEditorCampaign() {
+  const saved = await saveEditor();
+  if (!saved) return;
+  const msgEl = document.getElementById('editor-msg');
+  try {
+    msgEl.textContent = 'Sending test…';
+    await api(`/api/admin/email/campaigns/${encodeURIComponent(saved.id)}/test`, { method: 'POST' });
+    msgEl.style.color = 'var(--success)';
+    msgEl.textContent = 'Test email sent to your own address.';
+  } catch (err) {
+    handleApiError(err);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Test send failed.';
+  }
+}
+
+async function sendEditorCampaign() {
+  const msgEl = document.getElementById('editor-msg');
+  const withEmail = editorState.recipientIds.filter(id => { const u = allUsers.find(x => x.id === id); return u && u.email; }).length;
+  if (!editorState.recipientIds.length) {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Select at least one recipient first.';
+    return;
+  }
+  // Deliberate, explicit, real-count confirmation — no "select all" shortcut exists
+  // anywhere in the recipient picker, and this dialog is the only path to /send.
+  const confirmed = confirm(`Send to ${withEmail} real recipient${withEmail === 1 ? '' : 's'} now? This cannot be undone.`);
+  if (!confirmed) return;
+
+  const saved = await saveEditor();
+  if (!saved) return;
+  try {
+    msgEl.textContent = 'Sending…';
+    const result = await api(`/api/admin/email/campaigns/${encodeURIComponent(saved.id)}/send`, { method: 'POST' });
+    const idx = allCampaigns.findIndex(c => c.id === result.id);
+    if (idx >= 0) allCampaigns[idx] = result; else allCampaigns.push(result);
+    renderCampaignsTable(allCampaigns);
+    msgEl.style.color = 'var(--success)';
+    msgEl.textContent = 'Campaign sent.';
+    closeEditor();
+  } catch (err) {
+    handleApiError(err);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Send failed.';
+  }
+}
+
+/* ── boot ─────────────────────────────────────────────────────────── */
+Auth.onReady(user => {
+  if (!user || !user.username || user.username.toLowerCase() !== 'yannick') {
+    showNotAuthorized();
+    return;
+  }
+  showAuthorized();
+  loadOverview(30);
+});
+</script>
+</body>
+</html>

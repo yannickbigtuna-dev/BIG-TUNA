@@ -58,7 +58,7 @@ Main server:
 - File: `server.js`
 - Port: `3000`
 - Module system: CommonJS
-- Dependencies used directly: Node stdlib, `ws`, `node-pty` through `pty-worker.js`, Puppeteer packages for PDF/parsing-related features and Brightspace browser automation.
+- Dependencies used directly: Node stdlib, `ws`, `node-pty` through `pty-worker.js`, Puppeteer packages for PDF/parsing-related features and Brightspace browser automation, `geoip-lite` (offline IP→country/region/city lookup for the analytics beacon, no external network calls).
 - Responsibilities: static file serving from `apps/`, all `/api/*` routes, auth/session management, local file persistence, shared-list Server-Sent Events, web terminal WebSocket upgrades, and the assignment coach scheduler.
 - The assignment coach workflow is loaded from `lib/assignment-coach.js`. It is multi-user: each user stores encrypted Brightspace credentials and their own scraped state under `data/assignments/users/{userId}/`. It uses Puppeteer (credential-based headless login + scraping), the Anthropic Messages API (Claude Opus 4.8) for coaching, Resend email, AES-256-GCM credential encryption, signed/per-user action links, and a daily morning scheduler. `data/assignments/` is gitignored (credentials and browser profiles must never be committed).
 
@@ -143,6 +143,9 @@ Current `npm test` is a placeholder that exits with failure, so do not treat it 
 - `data/shared-lists/`
 - `data/lights/`
 - `data/assignments/`
+- `data/analytics/events/`
+- `data/email/templates/`
+- `data/email/campaigns/`
 
 It creates `data/users.json` and `data/sessions.json` if missing.
 
@@ -251,8 +254,9 @@ Shared topbar:
 
 - File: `apps/topbar.js`
 - Include before `auth.js`.
-- APIs: `Topbar.setTitle(title)`, `Topbar.addLeft(element)`.
+- APIs: `Topbar.setTitle(title)`, `Topbar.addLeft(element)`, `Topbar.identify(user, token)` (called by `auth.js` whenever `_user` is set/refreshed — feeds the site-wide analytics beacon; see "Admin Dashboard & Email Campaigns").
 - It injects a sticky nav with HOME, APPS dropdown, centered title, and `[data-auth-widget]` slot.
+- It also hosts a lightweight tracking beacon (pageview/heartbeat/click → `POST /api/analytics/event`) since it's the one file loaded on nearly every app — see "Admin Dashboard & Email Campaigns" for the full behavior and privacy notes.
 - It also applies the route-specific accent override early on load so each app can inherit its assigned shared-token tint.
 - **Accent = homepage tile color (required):** the `color` set for an app in `topbar.js` (its in-app `--accent`) MUST be the same rainbow token as that app's tile/icon on the homepage grid (`apps/index.html`, the `--tile` on its `.card`). When adding a new app, pick one rainbow token and use it in both places so the launcher tile and the app's interior share one identity. (Example: Trivia is `--c-yellow` on the homepage tile and as its route accent.)
 - The APPS dropdown list is hardcoded in `topbar.js`; update it when adding/removing visible apps.
@@ -277,6 +281,7 @@ Homepage:
 
 Current app folders:
 
+- `apps/admin/` (yannick-only, not on the homepage grid or topbar APPS dropdown — see "Admin Dashboard & Email Campaigns")
 - `apps/assignments/`
 - `apps/capitals-quiz/`
 - `apps/climb-tracker/`
@@ -361,6 +366,71 @@ iOS app source:
 - Both the app and widget use App Group `group.ca.yannickmorgans.bigtuna.lights` for shared session token and last-known light state.
 - The widget should always display current light status from the public `GET /api/lights` endpoint when online, fall back to the cached last-known state when offline, and only enable toggling when the shared signed-in user is `yannick`.
 
+## Admin Dashboard & Email Campaigns
+
+`/admin/` is a real usage-analytics dashboard and email campaign suite, restricted to the site owner only. There is no general admin role — every gate is the same one-off check already used elsewhere in this codebase: `user.username.toLowerCase() === 'yannick'` (see the `/api/lights` POST gate and the former `/api/account/test-email` gate). It is **not** listed in `topbar.js`'s `APPS` array or on the homepage tile grid — both are hardcoded lists, and simply never adding an entry keeps `/admin/` invisible to every other user; the only discovery path is a hidden "Admin Dashboard" link injected into the account dropdown (`apps/auth.js`, `#auth-dd-admin-link`) that only becomes visible for the `yannick` account, exactly like the account dropdown's existing patterns. The client-side gate (and the hidden link) are UX niceties only — the real security boundary is that every `/api/admin/*` route re-checks the same condition server-side and 403s otherwise, so the page must degrade to a plain "not authorized" state rather than assume the client check is sufficient.
+
+Given this is a ~40-user personal/family site rather than a SaaS product, every number shown is computed from real activity — there is intentionally no revenue, churn, conversion-rate, cohort-retention, or fake audience-segment concept anywhere in this feature.
+
+### Site-wide tracking beacon
+
+`apps/topbar.js` (loaded on nearly every app) hosts a lightweight analytics beacon so no per-app changes were needed. It exposes a new public method, `Topbar.identify(user, token)`, called by `apps/auth.js` every time `_user` is set/refreshed — `token` is carried because `navigator.sendBeacon` cannot set custom headers, so the bearer token rides in the JSON body instead and `POST /api/analytics/event` falls back to a body-supplied `token` when no `Authorization` header is present (`getSessionUser(getToken(req) || body.token)`). Without this fallback every beacon would resolve to `userId: null` regardless of login state.
+
+Behavior:
+- A `sessionStorage`-persisted `bt_session_id` (per-tab, cleared on tab close — matches this codebase's full-page-load reality rather than a real SPA session).
+- A `pageview` beacon fires on `Topbar.identify()` or a ~300ms timeout, whichever comes first (so pages that don't load `auth.js` still get an anonymous pageview instead of losing it).
+- A `heartbeat` every 15s, skipped while `document.visibilityState !== 'visible'`.
+- A capture-phase `click` listener, throttled to ~1/150ms, recording only `{tag, id, first class, text trimmed to 40 chars}` of the nearest `button/a/[role=button]` ancestor plus `xPct`/`yPct` (click position as % of viewport). Explicitly never captures keystrokes, form values, or full DOM selectors.
+- Geo enhancement is opportunistic and never prompts: it calls `navigator.permissions.query({name:'geolocation'})` and only calls `navigator.geolocation.getCurrentPosition` when that already reports `'granted'` (e.g. because the user previously allowed it for the Weather app) — a fresh permission prompt is never triggered purely for analytics. When available, `lat`/`lon` are attached to the next beacon; `country`/`region`/`city` are always resolved server-side from the request IP via `geoip-lite` regardless, so the aggregate dashboard always has geography even without browser geolocation.
+- Transport is `navigator.sendBeacon`, falling back to `fetch(..., {keepalive:true})`.
+- **Coverage gap**: `lights` and `weather` don't load `topbar.js` at all (by design — see their App Notes), so they are not tracked. Acceptable: both are single-purpose, chrome-free micro-apps.
+
+`POST /api/analytics/event` (public, unauthenticated) validates `type` ∈ `{pageview, heartbeat, click}`, caps the body at 4KB, applies a naive in-memory per-IP rate limit (~60/min, self-pruning `Map`), resolves geo (`geoip-lite`) and device (`mobile|tablet|desktop` via UA regex) server-side, and appends one line to `data/analytics/events/{YYYY-MM-DD}.ndjson`. No raw IP is ever persisted — it's resolved to `country`/`region`/`city` at ingest and discarded.
+
+**NDJSON is an intentional, documented deviation from the `atomicWrite` convention** — events are high-frequency, low-value-per-record, so `fs.appendFileSync` (O(1)) is used instead of rewriting a JSON array with `atomicWrite` (O(n) per event). At this site's scale this is a few KB/day; there is no rotation/retention logic and none is needed. Do not "fix" this into a heavier structure without re-litigating the tradeoff.
+
+Admin-only read endpoints aggregate directly from the NDJSON logs at request time (no separate rollup table): `/api/admin/overview` (KPIs, daily pageview/session series, geo distribution, device breakdown, recent activity), `/api/admin/users` (per-user aggregate: last seen, session count, pageviews, avg session duration, top app — computed from events, not stored on the user record), `/api/admin/users/:id` (single-user deep dive: recent events, device breakdown, geo locations, any `lat`/`lon` pings), `/api/admin/clicks` (top clicked targets + a click-position point cloud for a lightweight density view).
+
+### Email campaigns
+
+`lib/email-campaigns.js` is a sibling module to `lib/assignment-coach.js` — it reuses that module's `sendEmail` (unmodified, so the existing password-reset/digest paths can't regress) and its HMAC `signAction`/`verifyAction` pair (note: `signAction` is only exported nested under assignment-coach's `_test` sub-object, not top-level — `email-campaigns.js` imports it from there deliberately, not by mistake) for tamper-proof open/click tracking links.
+
+Both templates and campaigns store a `blocks` array (not just rendered HTML), so the visual editor can re-open and edit them: `{type:'heading',text}`, `{type:'text',html}`, `{type:'button',label,url}`, `{type:'image',src,alt}`, `{type:'divider'}`. `renderCampaignHtml(campaign, recipient)` compiles blocks into email-safe, inline-styled HTML (no external stylesheet — email clients don't load one; mirrors the inline-style conventions already used by `digestHtml()` in `lib/assignment-coach.js`), appends a 1×1 open-tracking pixel, and rewrites every button URL through the signed `/click` redirect endpoint. The admin app's live block editor mirrors this rendering client-side (a lightweight JS equivalent) purely for instant preview — it does not call the server on every keystroke, and preview buttons are not tracking-wrapped since they're never actually sent.
+
+`sendCampaign(campaignId)` resolves `recipientIds` against `data/users.json`, **skips any recipient with no `email` on file** (recorded as `status:'skipped'` in `sendResults`, surfaced in the UI rather than silently under-delivering — email is optional/nullable on this site's user schema), and sends **sequentially** with a ~400ms delay between recipients (fine at this site's scale, avoids Resend rate limits without a concurrency pool). `sendResults[]` is written back incrementally after each send so a mid-send crash doesn't lose progress. A campaign scheduler (`startCampaignScheduler`, wired into `server.listen()` next to `startLightsScheduler()`) copies that same 30s-tick/transition-detection pattern at a 60s interval, picking up `status:'scheduled'` campaigns whose `scheduledAt` has passed, guarded by an in-memory in-flight `Set` so a slow send can't be double-triggered.
+
+**From-address**: `campaign.fromEmail` defaults to `ACCOUNT_EMAIL_FROM` (`no-reply@yannickmorgans.ca`); any value must pass `EMAIL_RE` and end in `@yannickmorgans.ca` — the only Resend-verified sending domain today. This is validated both client-side (immediate feedback) and server-side (the real boundary) on every campaign create/update.
+
+**Test-send safety valve**: `POST /api/admin/email/campaigns/:id/test` always sends exactly one email to the *caller's own* `user.email`, completely ignoring `recipientIds` — this is the only send-adjacent action that's safe to exercise during development/validation. `POST /api/admin/email/campaigns/:id/send` is the real, irreversible bulk send and must never be fired outside of a genuine user-initiated action.
+
+Open/click tracking (`GET /api/admin/email/campaigns/:id/open`, `.../click`) are public routes (hit by the recipient's email client, not a logged-in browser) gated by a signed token (90-day TTL) rather than session auth. `/open` always returns a real 1×1 transparent GIF regardless of signature validity (never a broken image), only recording an open when the signature verifies. `/click` validates the target URL is `http(s)://` only (never `javascript:`/`data:`) and always redirects somewhere safe, only recording a click when the signature verifies.
+
+### Data & API summary
+
+```text
+data/analytics/events/{YYYY-MM-DD}.ndjson   one JSON object per line, append-only (see above)
+data/email/templates/{id}.json              {id,name,description,category,blocks,subject,createdAt,updatedAt}
+data/email/campaigns/{id}.json              {id,name,subject,fromEmail,blocks,templateId,recipientIds,status,
+                                              scheduledAt,createdAt,updatedAt,sentAt,sendResults:[{userId,email,
+                                              status,error,sentAt,opened,openedAt,clicks:[{ts,url}]}]}
+```
+
+```text
+POST /api/analytics/event                                   public
+GET  /api/admin/overview?range=7|30|90                       yannick-only
+GET  /api/admin/users                                        yannick-only
+GET  /api/admin/users/:id                                    yannick-only
+GET  /api/admin/clicks?path=&range=                          yannick-only
+GET/POST        /api/admin/email/templates                   yannick-only
+GET/PUT/DELETE  /api/admin/email/templates/:id                yannick-only
+GET/POST        /api/admin/email/campaigns                   yannick-only
+GET/PUT/DELETE  /api/admin/email/campaigns/:id                 yannick-only
+POST /api/admin/email/campaigns/:id/send                     yannick-only (real, irreversible bulk send)
+POST /api/admin/email/campaigns/:id/test                     yannick-only (always self-only — safe)
+GET  /api/admin/email/campaigns/:id/open?u=&t=                public (signed token)
+GET  /api/admin/email/campaigns/:id/click?u=&t=&url=          public (signed token)
+```
+
 ## Data Storage Map
 
 Treat `data/` as live production state. Do not casually rewrite, reformat, delete, or commit sensitive data. Prefer documenting schemas and paths rather than reading private values unless needed for a task.
@@ -413,6 +483,13 @@ data/assignments/users/{userId}/state.json
   Per-user tracked assignments, attempts/coaching, statuses, and recent run summaries.
 data/assignments/users/{userId}/profile/
   Per-user persistent Brightspace browser profile (session reuse).
+
+data/analytics/events/{YYYY-MM-DD}.ndjson
+  Append-only site-wide tracking beacon log, one JSON object per line. See "Admin Dashboard & Email Campaigns" above for the shape, privacy notes, and why NDJSON (not atomicWrite) is used here on purpose.
+
+data/email/templates/{id}.json
+data/email/campaigns/{id}.json
+  Email campaign suite templates/campaigns. See "Admin Dashboard & Email Campaigns" above for schemas.
 ```
 
 Legacy migrations exist in `server.js` for older `data/settings.json` and single-file climbs. Do not remove migration code unless all production data has been verified and backed up.

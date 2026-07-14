@@ -19,11 +19,20 @@ const SHARED_LISTS_DIR  = path.join(DATA, 'shared-lists');
 const LIGHTS_DIR        = path.join(DATA, 'lights');
 const RADAR_DIR         = path.join(DATA, 'radar');
 const ASSIGNMENTS_DIR   = path.join(DATA, 'assignments');
+const ANALYTICS_DIR         = path.join(DATA, 'analytics');
+const ANALYTICS_EVENTS_DIR  = path.join(ANALYTICS_DIR, 'events');
+const EMAIL_DIR              = path.join(DATA, 'email');
+const EMAIL_TEMPLATES_DIR    = path.join(EMAIL_DIR, 'templates');
+const EMAIL_CAMPAIGNS_DIR    = path.join(EMAIL_DIR, 'campaigns');
 const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const PASSWORD_RESETS_FILE = path.join(DATA, 'password-resets.json');
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const ACCOUNT_EMAIL_FROM = 'no-reply@yannickmorgans.ca'; // sender for reset/test emails (Assignment Coach keeps its own ASSIGNMENTS_FROM_EMAIL)
+// 1x1 transparent GIF served by the email open-tracking pixel — always returned
+// regardless of signature validity so a recipient's email client never shows a
+// broken image icon.
+const TRANSPARENT_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64');
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
 const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
@@ -62,9 +71,11 @@ const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.59449
 const YHZ_RADAR_CACHE_MS = 12000;
 const YHZ_RADAR_TIMEOUT_MS = 8000;
 const assignmentCoach = require('./lib/assignment-coach');
+const emailCampaigns = require('./lib/email-campaigns');
+const geoip = require('geoip-lite');
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
-for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, RADAR_DIR, ASSIGNMENTS_DIR])
+for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, RADAR_DIR, ASSIGNMENTS_DIR, ANALYTICS_EVENTS_DIR, EMAIL_TEMPLATES_DIR, EMAIL_CAMPAIGNS_DIR])
   fs.mkdirSync(dir, { recursive: true });
 
 if (!fs.existsSync(USERS_FILE))    fs.writeFileSync(USERS_FILE,    '[]');
@@ -551,6 +562,93 @@ function radarJsonRes(res, data) {
 
 function hashPassword(password, salt) {
   return crypto.createHash('sha256').update(salt + password).digest('hex');
+}
+
+// ── Analytics: IP / geo / device resolution ──────────────────────────────────
+// No raw IP is ever logged or persisted — resolved geo (country/region/city)
+// is computed at ingest time and the IP itself is discarded immediately after.
+function resolveClientIp(req) {
+  return req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '';
+}
+
+function resolveGeo(ip) {
+  try {
+    const geo = ip ? geoip.lookup(ip) : null;
+    if (!geo) return { country: null, region: null, city: null };
+    return {
+      country: geo.country || null,
+      region: geo.region || null,
+      city: geo.city || null,
+    };
+  } catch {
+    return { country: null, region: null, city: null };
+  }
+}
+
+function resolveDevice(userAgent) {
+  const ua = String(userAgent || '');
+  if (/tablet|ipad/i.test(ua)) return 'tablet';
+  if (/mobile/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+// ── Analytics: naive in-memory per-IP rate limit for the public beacon ──────
+// Fixed 60s windows per IP, capped at ~60 events/minute. The map is bounded by
+// periodically sweeping expired windows so it can't grow unboundedly under a
+// flood of distinct IPs.
+const ANALYTICS_RATE_LIMIT_MAX_PER_MIN = 60;
+const ANALYTICS_RATE_LIMIT_WINDOW_MS   = 60_000;
+const ANALYTICS_RATE_LIMIT_MAP_CAP     = 5000;
+const analyticsRateLimitMap = new Map(); // ip -> { count, windowStart }
+
+function analyticsRateLimitAllows(ip) {
+  const now = Date.now();
+  let entry = analyticsRateLimitMap.get(ip);
+  if (!entry || now - entry.windowStart >= ANALYTICS_RATE_LIMIT_WINDOW_MS) {
+    entry = { count: 0, windowStart: now };
+    analyticsRateLimitMap.set(ip, entry);
+  }
+  entry.count++;
+  if (analyticsRateLimitMap.size > ANALYTICS_RATE_LIMIT_MAP_CAP) {
+    for (const [k, v] of analyticsRateLimitMap) {
+      if (now - v.windowStart >= ANALYTICS_RATE_LIMIT_WINDOW_MS) analyticsRateLimitMap.delete(k);
+    }
+  }
+  return entry.count <= ANALYTICS_RATE_LIMIT_MAX_PER_MIN;
+}
+
+// ── Analytics: event log helpers (append-only NDJSON, one file per day) ────
+function analyticsEventFile(dateStr) {
+  return path.join(ANALYTICS_EVENTS_DIR, dateStr + '.ndjson');
+}
+
+function analyticsDateRange(days) {
+  const dates = [];
+  const now = Date.now();
+  for (let i = 0; i < days; i++) {
+    dates.push(new Date(now - i * 86_400_000).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+// Reads and parses all events within the last `days` days. Corrupt/partial
+// lines are skipped rather than aborting the whole read.
+function readAnalyticsEvents(days) {
+  const events = [];
+  for (const dateStr of analyticsDateRange(days)) {
+    const file = analyticsEventFile(dateStr);
+    let raw;
+    try { raw = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    for (const line of raw.split('\n')) {
+      if (!line) continue;
+      try { events.push(JSON.parse(line)); } catch { /* skip corrupt line */ }
+    }
+  }
+  return events;
+}
+
+function isFiniteNumber(n) {
+  return typeof n === 'number' && Number.isFinite(n);
 }
 
 const ECO_AI_SKILLS = Object.freeze({
@@ -1581,6 +1679,657 @@ async function handleAPI(req, res, urlPath) {
       html: '<p>This is a test email from BIG TUNA to confirm outgoing mail is working.</p>',
     });
     if (result && result.skipped) return jsonRes(res, 503, { error: result.reason || 'Email not sent' });
+    return jsonRes(res, 200, { ok: true });
+  }
+
+  // ── Analytics: public tracking beacon ─────────────────────────────────────
+
+  // POST /api/analytics/event - public, unauthenticated tracking beacon.
+  // Body capped to 4KB, naive per-IP rate limit, geo/device resolved server-side.
+  if (req.method === 'POST' && urlPath === '/api/analytics/event') {
+    const ip = resolveClientIp(req);
+    if (!analyticsRateLimitAllows(ip)) {
+      res.writeHead(429); return res.end();
+    }
+
+    const body = await new Promise(resolve => {
+      let raw = '';
+      let tooBig = false;
+      req.on('data', chunk => {
+        if (tooBig) return;
+        raw += chunk;
+        if (raw.length > 4096) tooBig = true;
+      });
+      req.on('end', () => {
+        if (tooBig) return resolve(null);
+        try { resolve(JSON.parse(raw)); } catch { resolve({}); }
+      });
+      req.on('error', () => resolve(null));
+    });
+    if (body === null) return jsonRes(res, 413, { error: 'Payload too large' });
+
+    const VALID_EVENT_TYPES = ['pageview', 'heartbeat', 'click'];
+    if (!VALID_EVENT_TYPES.includes(body.type)) {
+      return jsonRes(res, 400, { error: 'Invalid event type' });
+    }
+
+    // navigator.sendBeacon can't set an Authorization header, so the tracking
+    // beacon carries the bearer token in the JSON body instead — fall back to
+    // that when the header isn't present, so events still attribute to a
+    // logged-in user regardless of transport (sendBeacon vs fetch keepalive).
+    const bodyToken = typeof body.token === 'string' ? body.token : null;
+    const sessionUser = getSessionUser(getToken(req) || bodyToken);
+    const geo    = resolveGeo(ip);
+    const device = resolveDevice(req.headers['user-agent']);
+
+    const event = {
+      ts: new Date().toISOString(),
+      type: body.type,
+      sessionId: typeof body.sessionId === 'string' ? body.sessionId.slice(0, 100) : null,
+      userId: sessionUser ? sessionUser.id : null,
+      path: typeof body.path === 'string' ? body.path.slice(0, 500) : null,
+      referrer: typeof body.referrer === 'string' ? body.referrer.slice(0, 500) : '',
+      device,
+      country: geo.country,
+      region: geo.region,
+      city: geo.city,
+    };
+
+    if (isFiniteNumber(body.lat) && body.lat >= -90 && body.lat <= 90 &&
+        isFiniteNumber(body.lon) && body.lon >= -180 && body.lon <= 180) {
+      event.lat = body.lat;
+      event.lon = body.lon;
+    }
+
+    if (body.type === 'click') {
+      const t = body.target && typeof body.target === 'object' ? body.target : {};
+      event.target = {
+        tag:  typeof t.tag  === 'string' ? t.tag.slice(0, 30)   : '',
+        id:   typeof t.id   === 'string' ? t.id.slice(0, 100)   : '',
+        cls:  typeof t.cls  === 'string' ? t.cls.slice(0, 100)  : '',
+        text: typeof t.text === 'string' ? t.text.slice(0, 40)  : '',
+      };
+      if (isFiniteNumber(body.xPct)) event.xPct = Math.max(0, Math.min(100, body.xPct));
+      if (isFiniteNumber(body.yPct)) event.yPct = Math.max(0, Math.min(100, body.yPct));
+    }
+
+    try {
+      const dateStr = event.ts.slice(0, 10);
+      fs.appendFileSync(analyticsEventFile(dateStr), JSON.stringify(event) + '\n');
+    } catch (err) {
+      console.error('[analytics] failed to append event:', err.message);
+    }
+
+    res.writeHead(204);
+    return res.end();
+  }
+
+  // ── Analytics: admin-only read endpoints (yannick only) ───────────────────
+
+  // GET /api/admin/overview?range=7|30|90
+  if (req.method === 'GET' && urlPath === '/api/admin/overview') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const qs = new URLSearchParams(req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '');
+    const range = [7, 30, 90].includes(Number(qs.get('range'))) ? Number(qs.get('range')) : 30;
+
+    const events = readAnalyticsEvents(range);
+    const users  = readUsers();
+    const usersById = new Map(users.map(u => [u.id, u]));
+
+    const sessionIds = new Set();
+    const dailyMap = new Map(); // date -> { pageviews, sessions: Set }
+    const geoCounts = new Map();
+    const deviceBreakdown = { mobile: 0, desktop: 0, tablet: 0 };
+    let totalPageviews = 0;
+
+    for (const ev of events) {
+      if (ev.sessionId) sessionIds.add(ev.sessionId);
+      const day = typeof ev.ts === 'string' ? ev.ts.slice(0, 10) : null;
+      if (day) {
+        if (!dailyMap.has(day)) dailyMap.set(day, { pageviews: 0, sessions: new Set() });
+        const d = dailyMap.get(day);
+        if (ev.type === 'pageview') d.pageviews++;
+        if (ev.sessionId) d.sessions.add(ev.sessionId);
+      }
+      if (ev.type === 'pageview') totalPageviews++;
+      if (ev.country) geoCounts.set(ev.country, (geoCounts.get(ev.country) || 0) + 1);
+      if (ev.device && deviceBreakdown[ev.device] !== undefined) deviceBreakdown[ev.device]++;
+    }
+
+    const dailySeries = [...dailyMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, d]) => ({ date, pageviews: d.pageviews, sessions: d.sessions.size }));
+
+    const geoDistribution = [...geoCounts.entries()]
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const recentActivity = events
+      .slice()
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      .slice(0, 20)
+      .map(ev => ({
+        ts: ev.ts,
+        type: ev.type,
+        path: ev.path,
+        userId: ev.userId && usersById.has(ev.userId) ? usersById.get(ev.userId).username : (ev.userId || null),
+      }));
+
+    return jsonRes(res, 200, {
+      totalUsers: users.length,
+      activeSessions: sessionIds.size,
+      totalPageviews,
+      dailySeries,
+      recentActivity,
+      geoDistribution,
+      deviceBreakdown,
+    });
+  }
+
+  // GET /api/admin/users - per-user aggregate stats over the last 30 days
+  if (req.method === 'GET' && urlPath === '/api/admin/users') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const events = readAnalyticsEvents(30); // last 30 days of activity — documented default
+    const users  = readUsers();
+
+    const result = users.map(u => {
+      const userEvents = events.filter(ev => ev.userId === u.id);
+      const sessionIds = new Set(userEvents.map(ev => ev.sessionId).filter(Boolean));
+      const pageviews  = userEvents.filter(ev => ev.type === 'pageview').length;
+
+      let lastSeen = null;
+      for (const ev of userEvents) {
+        if (!ev.ts) continue;
+        if (!lastSeen || new Date(ev.ts) > new Date(lastSeen)) lastSeen = ev.ts;
+      }
+
+      // Mean of (max ts - min ts) per session
+      const sessionSpans = [];
+      for (const sid of sessionIds) {
+        const evs = userEvents.filter(ev => ev.sessionId === sid && ev.ts);
+        if (!evs.length) continue;
+        const times = evs.map(ev => new Date(ev.ts).getTime());
+        sessionSpans.push(Math.max(...times) - Math.min(...times));
+      }
+      const avgSessionDurationMs = sessionSpans.length
+        ? Math.round(sessionSpans.reduce((a, b) => a + b, 0) / sessionSpans.length)
+        : 0;
+
+      // Most-visited path prefix (first path segment)
+      const pathCounts = new Map();
+      for (const ev of userEvents) {
+        if (!ev.path) continue;
+        const prefix = '/' + ev.path.split('/').filter(Boolean)[0] || '/';
+        pathCounts.set(prefix, (pathCounts.get(prefix) || 0) + 1);
+      }
+      let topApp = null, topAppCount = 0;
+      for (const [prefix, count] of pathCounts) {
+        if (count > topAppCount) { topApp = prefix; topAppCount = count; }
+      }
+
+      return {
+        id: u.id,
+        username: u.username,
+        email: u.email || null,
+        createdAt: u.createdAt || null,
+        lastSeen,
+        sessionCount: sessionIds.size,
+        totalPageviews: pageviews,
+        avgSessionDurationMs,
+        topApp,
+      };
+    });
+
+    return jsonRes(res, 200, result);
+  }
+
+  // GET /api/admin/users/:id - single-user deep-dive
+  if (req.method === 'GET' && urlPath.startsWith('/api/admin/users/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const targetId = urlPath.slice('/api/admin/users/'.length);
+    if (!isValidId(targetId)) return jsonRes(res, 400, { error: 'Invalid user ID' });
+
+    const targetUser = readUsers().find(u => u.id === targetId);
+    if (!targetUser) return jsonRes(res, 404, { error: 'User not found' });
+
+    const events = readAnalyticsEvents(30).filter(ev => ev.userId === targetId);
+    const sessionIds = new Set(events.map(ev => ev.sessionId).filter(Boolean));
+    const pageviews  = events.filter(ev => ev.type === 'pageview').length;
+
+    let lastSeen = null;
+    for (const ev of events) {
+      if (!ev.ts) continue;
+      if (!lastSeen || new Date(ev.ts) > new Date(lastSeen)) lastSeen = ev.ts;
+    }
+
+    const sessionSpans = [];
+    for (const sid of sessionIds) {
+      const evs = events.filter(ev => ev.sessionId === sid && ev.ts);
+      if (!evs.length) continue;
+      const times = evs.map(ev => new Date(ev.ts).getTime());
+      sessionSpans.push(Math.max(...times) - Math.min(...times));
+    }
+    const avgSessionDurationMs = sessionSpans.length
+      ? Math.round(sessionSpans.reduce((a, b) => a + b, 0) / sessionSpans.length)
+      : 0;
+
+    const pathCounts = new Map();
+    for (const ev of events) {
+      if (!ev.path) continue;
+      const prefix = '/' + ev.path.split('/').filter(Boolean)[0] || '/';
+      pathCounts.set(prefix, (pathCounts.get(prefix) || 0) + 1);
+    }
+    let topApp = null, topAppCount = 0;
+    for (const [prefix, count] of pathCounts) {
+      if (count > topAppCount) { topApp = prefix; topAppCount = count; }
+    }
+
+    const deviceBreakdown = { mobile: 0, desktop: 0, tablet: 0 };
+    const geoSeen = new Map(); // "country|region|city" -> count
+    const points = [];
+    for (const ev of events) {
+      if (ev.device && deviceBreakdown[ev.device] !== undefined) deviceBreakdown[ev.device]++;
+      if (ev.country) {
+        const key = [ev.country, ev.region, ev.city].filter(Boolean).join('|');
+        geoSeen.set(key, (geoSeen.get(key) || 0) + 1);
+      }
+      if (isFiniteNumber(ev.lat) && isFiniteNumber(ev.lon)) points.push({ lat: ev.lat, lon: ev.lon });
+    }
+
+    const recentEvents = events
+      .slice()
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      .slice(0, 50);
+
+    const geoLocations = [...geoSeen.entries()].map(([key, count]) => {
+      const [country, region, city] = key.split('|');
+      return { country: country || null, region: region || null, city: city || null, count };
+    }).sort((a, b) => b.count - a.count);
+
+    return jsonRes(res, 200, {
+      id: targetUser.id,
+      username: targetUser.username,
+      email: targetUser.email || null,
+      createdAt: targetUser.createdAt || null,
+      lastSeen,
+      sessionCount: sessionIds.size,
+      totalPageviews: pageviews,
+      avgSessionDurationMs,
+      topApp,
+      recentEvents,
+      deviceBreakdown,
+      geoLocations,
+      points,
+    });
+  }
+
+  // GET /api/admin/clicks?path=&range=
+  if (req.method === 'GET' && urlPath === '/api/admin/clicks') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const qs = new URLSearchParams(req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '');
+    const pathFilter = qs.get('path') || '';
+    const range = [7, 30, 90].includes(Number(qs.get('range'))) ? Number(qs.get('range')) : 30;
+
+    let clicks = readAnalyticsEvents(range).filter(ev => ev.type === 'click');
+    if (pathFilter) clicks = clicks.filter(ev => typeof ev.path === 'string' && ev.path.startsWith(pathFilter));
+
+    const targetCounts = new Map(); // "tag|id|cls|text" -> count
+    for (const ev of clicks) {
+      const t = ev.target || {};
+      const key = [t.tag || '', t.id || '', t.cls || '', t.text || ''].join('|');
+      targetCounts.set(key, (targetCounts.get(key) || 0) + 1);
+    }
+    const topTargets = [...targetCounts.entries()]
+      .map(([key, count]) => {
+        const [tag, id, cls, text] = key.split('|');
+        return { tag: tag || null, id: id || null, cls: cls || null, text: text || null, count };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    // Cap to the most recent few thousand points to keep the payload bounded
+    const points = clicks
+      .slice()
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      .slice(0, 3000)
+      .filter(ev => isFiniteNumber(ev.xPct) && isFiniteNumber(ev.yPct))
+      .map(ev => ({ xPct: ev.xPct, yPct: ev.yPct }));
+
+    return jsonRes(res, 200, { topTargets, points });
+  }
+
+  // ── Email campaigns: templates CRUD (admin-only) ──────────────────────────
+
+  // GET /api/admin/email/templates
+  if (req.method === 'GET' && urlPath === '/api/admin/email/templates') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    let files = [];
+    try { files = fs.readdirSync(EMAIL_TEMPLATES_DIR); } catch { /* dir empty/missing */ }
+    const templates = [];
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      try { templates.push(JSON.parse(fs.readFileSync(path.join(EMAIL_TEMPLATES_DIR, f), 'utf8'))); }
+      catch { /* skip corrupt file */ }
+    }
+    return jsonRes(res, 200, templates);
+  }
+
+  // POST /api/admin/email/templates
+  if (req.method === 'POST' && urlPath === '/api/admin/email/templates') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const body = await parseBody(req);
+    const now = new Date().toISOString();
+    const template = {
+      id: crypto.randomUUID(),
+      name: typeof body.name === 'string' ? body.name : 'Untitled template',
+      description: typeof body.description === 'string' ? body.description : '',
+      category: typeof body.category === 'string' ? body.category : '',
+      blocks: Array.isArray(body.blocks) ? body.blocks : [],
+      subject: typeof body.subject === 'string' ? body.subject : '',
+      createdAt: now,
+      updatedAt: now,
+    };
+    atomicWrite(path.join(EMAIL_TEMPLATES_DIR, template.id + '.json'), template);
+    return jsonRes(res, 200, template);
+  }
+
+  // GET /api/admin/email/templates/:id
+  if (req.method === 'GET' && urlPath.startsWith('/api/admin/email/templates/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/email/templates/'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid template ID' });
+    const file = path.join(EMAIL_TEMPLATES_DIR, id + '.json');
+    if (!fs.existsSync(file)) return jsonRes(res, 404, { error: 'Template not found' });
+    try { return jsonRes(res, 200, JSON.parse(fs.readFileSync(file, 'utf8'))); }
+    catch { return jsonRes(res, 500, { error: 'Failed to read template' }); }
+  }
+
+  // PUT /api/admin/email/templates/:id
+  if (req.method === 'PUT' && urlPath.startsWith('/api/admin/email/templates/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/email/templates/'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid template ID' });
+    const file = path.join(EMAIL_TEMPLATES_DIR, id + '.json');
+    if (!fs.existsSync(file)) return jsonRes(res, 404, { error: 'Template not found' });
+    let existing;
+    try { existing = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { return jsonRes(res, 500, { error: 'Failed to read template' }); }
+
+    const body = await parseBody(req);
+    const updated = {
+      ...existing,
+      ...(typeof body.name === 'string' ? { name: body.name } : {}),
+      ...(typeof body.description === 'string' ? { description: body.description } : {}),
+      ...(typeof body.category === 'string' ? { category: body.category } : {}),
+      ...(Array.isArray(body.blocks) ? { blocks: body.blocks } : {}),
+      ...(typeof body.subject === 'string' ? { subject: body.subject } : {}),
+      id: existing.id,
+      updatedAt: new Date().toISOString(),
+    };
+    atomicWrite(file, updated);
+    return jsonRes(res, 200, updated);
+  }
+
+  // DELETE /api/admin/email/templates/:id
+  if (req.method === 'DELETE' && urlPath.startsWith('/api/admin/email/templates/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/email/templates/'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid template ID' });
+    try { fs.unlinkSync(path.join(EMAIL_TEMPLATES_DIR, id + '.json')); }
+    catch { return jsonRes(res, 404, { error: 'Template not found' }); }
+    return jsonRes(res, 200, { ok: true });
+  }
+
+  // ── Email campaigns: campaigns CRUD + send/test (admin-only) ─────────────
+  // ── plus open/click tracking endpoints (public, hit by email clients) ────
+
+  // GET /api/admin/email/campaigns
+  if (req.method === 'GET' && urlPath === '/api/admin/email/campaigns') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    let files = [];
+    try { files = fs.readdirSync(EMAIL_CAMPAIGNS_DIR); } catch { /* dir empty/missing */ }
+    const campaigns = [];
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      try { campaigns.push(JSON.parse(fs.readFileSync(path.join(EMAIL_CAMPAIGNS_DIR, f), 'utf8'))); }
+      catch { /* skip corrupt file */ }
+    }
+    return jsonRes(res, 200, campaigns);
+  }
+
+  // POST /api/admin/email/campaigns
+  if (req.method === 'POST' && urlPath === '/api/admin/email/campaigns') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const body = await parseBody(req);
+    let fromEmail = (typeof body.fromEmail === 'string' && body.fromEmail.trim()) ? body.fromEmail.trim() : ACCOUNT_EMAIL_FROM;
+    if (!EMAIL_RE.test(fromEmail) || !fromEmail.toLowerCase().endsWith('@yannickmorgans.ca')) {
+      return jsonRes(res, 400, { error: 'fromEmail must be a valid @yannickmorgans.ca address (the only verified sending domain)' });
+    }
+
+    const now = new Date().toISOString();
+    const campaign = {
+      id: crypto.randomUUID(),
+      name: typeof body.name === 'string' ? body.name : 'Untitled campaign',
+      subject: typeof body.subject === 'string' ? body.subject : '',
+      fromEmail,
+      blocks: Array.isArray(body.blocks) ? body.blocks : [],
+      templateId: typeof body.templateId === 'string' ? body.templateId : null,
+      recipientIds: Array.isArray(body.recipientIds) ? body.recipientIds.filter(id => typeof id === 'string') : [],
+      status: 'draft',
+      scheduledAt: typeof body.scheduledAt === 'string' ? body.scheduledAt : null,
+      createdAt: now,
+      updatedAt: now,
+      sentAt: null,
+      sendResults: [],
+    };
+    atomicWrite(path.join(EMAIL_CAMPAIGNS_DIR, campaign.id + '.json'), campaign);
+    return jsonRes(res, 200, campaign);
+  }
+
+  // GET /api/admin/email/campaigns/:id/open?u=&t= — public, unauthenticated (email open pixel)
+  if (req.method === 'GET' && urlPath.startsWith('/api/admin/email/campaigns/') && urlPath.endsWith('/open')) {
+    const id = urlPath.slice('/api/admin/email/campaigns/'.length, -'/open'.length);
+    const qs = new URLSearchParams(req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '');
+    const recipientId = qs.get('u') || '';
+    const token = qs.get('t') || '';
+
+    if (isValidId(id) && isValidId(recipientId) && emailCampaigns.verifyTrackingToken(recipientId, id, 'campaign-open', token)) {
+      try {
+        const file = path.join(EMAIL_CAMPAIGNS_DIR, id + '.json');
+        const campaign = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const entry = Array.isArray(campaign.sendResults) ? campaign.sendResults.find(r => r.userId === recipientId) : null;
+        if (entry && !entry.opened) {
+          entry.opened = true;
+          entry.openedAt = new Date().toISOString();
+          atomicWrite(file, campaign);
+        }
+      } catch { /* invalid/missing campaign — still return the pixel below */ }
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'image/gif',
+      'Content-Length': TRANSPARENT_GIF.length,
+      'Cache-Control': 'no-store',
+    });
+    return res.end(TRANSPARENT_GIF);
+  }
+
+  // GET /api/admin/email/campaigns/:id/click?u=&t=&url= — public, unauthenticated (email link redirect)
+  if (req.method === 'GET' && urlPath.startsWith('/api/admin/email/campaigns/') && urlPath.endsWith('/click')) {
+    const id = urlPath.slice('/api/admin/email/campaigns/'.length, -'/click'.length);
+    const qs = new URLSearchParams(req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '');
+    const recipientId = qs.get('u') || '';
+    const token = qs.get('t') || '';
+    const rawUrl = qs.get('url') || '';
+
+    // Only http(s) targets are ever redirected to — no javascript:/data: schemes.
+    const redirectTo = /^https?:\/\//i.test(rawUrl) ? rawUrl : 'https://yannickmorgans.ca/';
+
+    if (isValidId(id) && isValidId(recipientId) && emailCampaigns.verifyTrackingToken(recipientId, id, 'campaign-click', token)) {
+      try {
+        const file = path.join(EMAIL_CAMPAIGNS_DIR, id + '.json');
+        const campaign = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const entry = Array.isArray(campaign.sendResults) ? campaign.sendResults.find(r => r.userId === recipientId) : null;
+        if (entry) {
+          if (!Array.isArray(entry.clicks)) entry.clicks = [];
+          entry.clicks.push({ ts: new Date().toISOString(), url: redirectTo });
+          atomicWrite(file, campaign);
+        }
+      } catch { /* invalid/missing campaign — still redirect below */ }
+    }
+
+    res.writeHead(302, { Location: redirectTo });
+    return res.end();
+  }
+
+  // POST /api/admin/email/campaigns/:id/send
+  if (req.method === 'POST' && urlPath.startsWith('/api/admin/email/campaigns/') && urlPath.endsWith('/send')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/email/campaigns/'.length, -'/send'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid campaign ID' });
+    if (!fs.existsSync(path.join(EMAIL_CAMPAIGNS_DIR, id + '.json'))) return jsonRes(res, 404, { error: 'Campaign not found' });
+
+    try {
+      const updated = await emailCampaigns.sendCampaign(id);
+      return jsonRes(res, 200, updated);
+    } catch (err) {
+      return jsonRes(res, 500, { error: err.message || 'Failed to send campaign' });
+    }
+  }
+
+  // POST /api/admin/email/campaigns/:id/test — ALWAYS sends only to the caller's
+  // own recovery email, ignoring campaign.recipientIds. Safety valve so campaigns
+  // can be validated without ever emailing a real user.
+  if (req.method === 'POST' && urlPath.startsWith('/api/admin/email/campaigns/') && urlPath.endsWith('/test')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+    if (!user.email) return jsonRes(res, 400, { error: 'Set a recovery email first' });
+
+    const id = urlPath.slice('/api/admin/email/campaigns/'.length, -'/test'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid campaign ID' });
+    const file = path.join(EMAIL_CAMPAIGNS_DIR, id + '.json');
+    if (!fs.existsSync(file)) return jsonRes(res, 404, { error: 'Campaign not found' });
+
+    let campaign;
+    try { campaign = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { return jsonRes(res, 500, { error: 'Failed to read campaign' }); }
+
+    const recipient = { id: user.id, email: user.email };
+    const html = emailCampaigns.renderCampaignHtml(campaign, recipient);
+    const text = emailCampaigns.campaignPlainText(campaign);
+    const result = await assignmentCoach.sendEmail(user.email, {
+      subject: `[TEST] ${campaign.subject || campaign.name || 'Campaign'}`,
+      text,
+      html,
+      from: campaign.fromEmail || ACCOUNT_EMAIL_FROM,
+    });
+    if (result && result.skipped) return jsonRes(res, 503, { error: result.reason || 'Email not sent' });
+    return jsonRes(res, 200, { ok: true });
+  }
+
+  // GET /api/admin/email/campaigns/:id
+  if (req.method === 'GET' && urlPath.startsWith('/api/admin/email/campaigns/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/email/campaigns/'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid campaign ID' });
+    const file = path.join(EMAIL_CAMPAIGNS_DIR, id + '.json');
+    if (!fs.existsSync(file)) return jsonRes(res, 404, { error: 'Campaign not found' });
+    try { return jsonRes(res, 200, JSON.parse(fs.readFileSync(file, 'utf8'))); }
+    catch { return jsonRes(res, 500, { error: 'Failed to read campaign' }); }
+  }
+
+  // PUT /api/admin/email/campaigns/:id
+  if (req.method === 'PUT' && urlPath.startsWith('/api/admin/email/campaigns/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/email/campaigns/'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid campaign ID' });
+    const file = path.join(EMAIL_CAMPAIGNS_DIR, id + '.json');
+    if (!fs.existsSync(file)) return jsonRes(res, 404, { error: 'Campaign not found' });
+    let existing;
+    try { existing = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { return jsonRes(res, 500, { error: 'Failed to read campaign' }); }
+
+    const body = await parseBody(req);
+
+    let fromEmail = existing.fromEmail;
+    if (typeof body.fromEmail === 'string' && body.fromEmail.trim()) {
+      const candidate = body.fromEmail.trim();
+      if (!EMAIL_RE.test(candidate) || !candidate.toLowerCase().endsWith('@yannickmorgans.ca')) {
+        return jsonRes(res, 400, { error: 'fromEmail must be a valid @yannickmorgans.ca address (the only verified sending domain)' });
+      }
+      fromEmail = candidate;
+    }
+
+    const updated = {
+      ...existing,
+      ...(typeof body.name === 'string' ? { name: body.name } : {}),
+      ...(typeof body.subject === 'string' ? { subject: body.subject } : {}),
+      fromEmail,
+      ...(Array.isArray(body.blocks) ? { blocks: body.blocks } : {}),
+      ...((typeof body.templateId === 'string' || body.templateId === null) ? { templateId: body.templateId } : {}),
+      ...(Array.isArray(body.recipientIds) ? { recipientIds: body.recipientIds.filter(x => typeof x === 'string') } : {}),
+      ...(typeof body.status === 'string' ? { status: body.status } : {}),
+      ...((typeof body.scheduledAt === 'string' || body.scheduledAt === null) ? { scheduledAt: body.scheduledAt } : {}),
+      id: existing.id,
+      updatedAt: new Date().toISOString(),
+    };
+    atomicWrite(file, updated);
+    return jsonRes(res, 200, updated);
+  }
+
+  // DELETE /api/admin/email/campaigns/:id
+  if (req.method === 'DELETE' && urlPath.startsWith('/api/admin/email/campaigns/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/email/campaigns/'.length);
+    if (!isValidId(id)) return jsonRes(res, 400, { error: 'Invalid campaign ID' });
+    try { fs.unlinkSync(path.join(EMAIL_CAMPAIGNS_DIR, id + '.json')); }
+    catch { return jsonRes(res, 404, { error: 'Campaign not found' }); }
     return jsonRes(res, 200, { ok: true });
   }
 
@@ -2779,6 +3528,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(` Data folder: C:\\SERVER\\data\\\n`);
   assignmentCoach.startScheduler();
   startLightsScheduler();
+  emailCampaigns.startCampaignScheduler();
 });
 
 server.on('error', err => {
