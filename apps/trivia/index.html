@@ -471,8 +471,12 @@
   const PREBANK = 3;               // questions pre-generated on load for an instant first game
   const GEN_RETRY = 4;             // attempts when a single-question request yields nothing
   const STUCK_LIMIT = 8;           // give up (end run) after this many consecutive fruitless generations
-  const EXCLUDE_MAX = 60;          // most-recent asked questions sent to the AI to avoid repeats
+  // Kept small on purpose: the full text of each excluded question is re-sent
+  // with every single-question request, so a long list slows down every
+  // generation as a run goes on. Must match TRIVIA_MAX_EXCLUDE on the server.
+  const EXCLUDE_MAX = 18;
   const HISTORY_MAX = 25;
+  const TOPIC_WARM_DEBOUNCE = 450; // ms of typing pause before warming a custom-topic bank
 
   // ── State ───────────────────────────────────────────────────────────────
   const els = {};
@@ -588,6 +592,14 @@
     });
   }
 
+  // Warm the bank for whatever topic/difficulty is currently selected on the
+  // home screen, so hitting "Start" is instant as often as possible.
+  function warmHomeBank() {
+    if (!aiAvailable) return;
+    const topic = els.topicInput.value.trim().slice(0, 100);
+    prebank(topic, selectedDifficulty, PREBANK);
+  }
+
   function initDifficulty() {
     const wrap = $('difficulty');
     wrap.querySelectorAll('.seg-btn').forEach(btn => {
@@ -595,9 +607,21 @@
         wrap.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         selectedDifficulty = btn.dataset.diff;
-        // Warm the bank for the newly chosen difficulty (blank topic).
-        if (aiAvailable) prebank('', selectedDifficulty, PREBANK);
+        warmHomeBank();
       });
+    });
+  }
+
+  // Warm a custom topic's bank shortly after the player stops typing it, so a
+  // typo-in-progress doesn't burn generations but a settled topic is ready
+  // before "Start" is even clicked.
+  let topicWarmTimer = null;
+  function initTopicWarm() {
+    els.topicInput.addEventListener('input', () => {
+      clearTimeout(topicWarmTimer);
+      const topic = els.topicInput.value.trim();
+      if (topic.length < 3) return;
+      topicWarmTimer = setTimeout(warmHomeBank, TOPIC_WARM_DEBOUNCE);
     });
   }
 
@@ -957,6 +981,7 @@
   function bindEvents() {
     $('start-btn').addEventListener('click', startRun);
     els.topicInput.addEventListener('keydown', e => { if (e.key === 'Enter') startRun(); });
+    initTopicWarm();
     $('quit-btn').addEventListener('click', () => {
       if (!run) { showView('home'); return; }
       clearInterval(run.timer);
@@ -965,16 +990,17 @@
       if (run.endless && run.answered.length > 0) { finishRun(); return; }
       run = null;
       showView('home');
+      warmHomeBank();   // the home bank may be empty/stale after the abandoned run
     });
     els.nextBtn.addEventListener('click', advanceQuestion);
     $('again-btn').addEventListener('click', startRun);
-    $('home-btn').addEventListener('click', () => showView('home'));
+    $('home-btn').addEventListener('click', () => { showView('home'); warmHomeBank(); });
     $('results-board-btn').addEventListener('click', () => { renderBoard(); showView('board'); });
     document.querySelectorAll('.tab').forEach(t => {
       t.addEventListener('click', () => {
         const tab = t.dataset.tab;
         if (tab === 'board') { renderBoard(); showView('board'); }
-        else showView('home');
+        else { showView('home'); warmHomeBank(); }
       });
     });
   }
@@ -997,10 +1023,12 @@
     $('home-name').textContent = user && user.username ? user.username : 'Player One';
     await loadStats();
     renderStats();
-    await checkAi();
-    // Pre-generate a few random questions (one at a time) so the first blank-topic
-    // game starts instantly; the rest are prepared in the background during play.
-    if (aiAvailable) { prebank('', selectedDifficulty, PREBANK); }
+    // Start the status check and the first prebank concurrently rather than
+    // waiting on the status round-trip first — generateOne() already flips
+    // aiAvailable/shows the offline notice itself if the model turns out to
+    // be down, so there's nothing to gain by serializing these.
+    checkAi();
+    warmHomeBank();
   });
 })();
 </script>

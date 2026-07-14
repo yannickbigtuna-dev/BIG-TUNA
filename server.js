@@ -65,7 +65,12 @@ const ECO_AI_DEFAULT_OPTIONS = Object.freeze({
 const TRIVIA_GEN_TIMEOUT_MS = 90 * 1000;
 const TRIVIA_MAX_COUNT = 10;
 const TRIVIA_MAX_TOPIC_LEN = 100;
-const TRIVIA_MAX_EXCLUDE = 60;   // most-recent already-asked questions sent to avoid duplicates
+// Kept small on purpose: this list is re-sent in full on every single-question
+// request, so a long list directly slows down every generation in a long run.
+// Server-side dedupe (validateTriviaQuestions) still catches anything the
+// model repeats that fell outside this hint window.
+const TRIVIA_MAX_EXCLUDE = 18;
+const TRIVIA_EXCLUDE_ITEM_MAX_LEN = 140;
 const YHZ_RADAR_CENTER = Object.freeze({ name: 'YHZ', lat: 44.6392425, lon: -63.5944923, radiusKm: 100 });
 const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.5944923/dist/55';
 const YHZ_RADAR_CACHE_MS = 12000;
@@ -2576,7 +2581,7 @@ async function handleAPI(req, res, urlPath) {
     const exclude = Array.isArray(body?.exclude)
       ? body.exclude
           .filter(s => typeof s === 'string' && s.trim())
-          .map(s => s.replace(/\s+/g, ' ').trim().slice(0, 240))
+          .map(s => s.replace(/\s+/g, ' ').trim().slice(0, TRIVIA_EXCLUDE_ITEM_MAX_LEN))
           .slice(0, TRIVIA_MAX_EXCLUDE)
       : [];
     const excludeSet = new Set(exclude.map(normalizeQuestionText));
@@ -2602,11 +2607,15 @@ async function handleAPI(req, res, urlPath) {
         model,
         stream: false,
         format: 'json',
+        keep_alive: '30m', // avoid a cold-model reload the next time a run starts
         messages: buildTriviaMessages(topic, count, difficulty, exclude),
         options: {
           temperature: 0.9,
           top_p: 0.95,
           num_ctx: 8192,
+          // Each question is a small JSON record (~150-250 tokens); cap output
+          // so a degenerating generation can't run away and blow out latency.
+          num_predict: Math.min(4000, 220 + count * 260),
           seed: crypto.randomInt(2 ** 31),
         },
       }, { timeoutMs: TRIVIA_GEN_TIMEOUT_MS });
