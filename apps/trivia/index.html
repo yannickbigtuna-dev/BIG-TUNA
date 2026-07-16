@@ -331,7 +331,7 @@
 
     <div class="notice" id="offline-notice">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
-      <span id="offline-text">The local AI model is offline, so new questions can't be generated right now.</span>
+      <span id="offline-text">The local AI is offline. Built-in questions are ready while it reconnects.</span>
     </div>
 
     <div class="topic-field">
@@ -462,19 +462,19 @@
   Topbar.setTitle('Trivia');
 
   // ── Config ──────────────────────────────────────────────────────────────
-  // Questions are generated ONE AT A TIME: the first one is shown as soon as it
-  // arrives, then each following question is prepared in the background while the
-  // player is answering the current one, always keeping a small buffer ready.
+  // The server answers from a ready bank immediately and refills that bank with
+  // AI questions in the background. The client requests batches and keeps enough
+  // questions buffered that advancing never needs to wait on model inference.
   const APP_ID = 'trivia';
   const QUESTION_TIME = 20;        // seconds per question
-  const PREFETCH = 2;              // questions to keep ready ahead of the current one
-  const PREBANK = 3;               // questions pre-generated on load for an instant first game
-  const GEN_RETRY = 4;             // attempts when a single-question request yields nothing
+  const PREFETCH = 3;              // questions to keep ready ahead of the current one
+  const PREBANK = 4;               // questions preloaded on home for an instant first game
+  const GEN_RETRY = 2;             // batch retries when a request yields no unique questions
   const STUCK_LIMIT = 8;           // give up (end run) after this many consecutive fruitless generations
-  // Kept small on purpose: the full text of each excluded question is re-sent
-  // with every single-question request, so a long list slows down every
-  // generation as a run goes on. Must match TRIVIA_MAX_EXCLUDE on the server.
-  const EXCLUDE_MAX = 18;
+  const GEN_TIMEOUT = 4500;        // keep first-question latency inside the five-second target
+  // The API uses this longer list for instant bank dedupe, then trims the AI
+  // prompt internally. Must match TRIVIA_MAX_EXCLUDE on the server.
+  const EXCLUDE_MAX = 80;
   const HISTORY_MAX = 25;
   const TOPIC_WARM_DEBOUNCE = 450; // ms of typing pause before warming a custom-topic bank
 
@@ -486,7 +486,7 @@
   // A "bank" of pre-generated questions keyed by topic+difficulty.
   const bank = {};                 // { key: [questions] }
   const bankSeen = {};             // { key: Set<normalized question text> } — bank-level dedupe
-  const fetching = {};             // { key: true } — de-dupes in-flight prebank requests
+  const fetching = {};             // { key: Promise } — shares in-flight home-bank requests
 
   let run = null;                  // active game state
 
@@ -525,48 +525,72 @@
   }
 
   // ── Question generation ─────────────────────────────────────────────────
-  // Request a single question (default) from the local AI. Returns 0..count
-  // validated questions; throws on a real failure (offline / server error).
-  async function generateOne(topic, difficulty, count, exclude) {
-    const res = await fetch('/api/trivia/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.token },
-      body: JSON.stringify({
-        topic: topic || '',
-        count: count || 1,
-        difficulty: difficulty || 'any',
-        exclude: Array.isArray(exclude) ? exclude.slice(-EXCLUDE_MAX) : [],
-      }),
-    });
+  // Request a ready batch. The API itself is latency-bounded by its built-in
+  // safety bank, and this client timeout prevents a broken connection from
+  // pushing the first visible question past five seconds.
+  async function generateQuestions(topic, difficulty, count, exclude, timeoutMs = GEN_TIMEOUT) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(100, timeoutMs));
+    let res;
+    try {
+      res = await fetch('/api/trivia/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.token },
+        signal: controller.signal,
+        body: JSON.stringify({
+          topic: topic || '',
+          count: Math.max(1, count || 1),
+          difficulty: difficulty || 'any',
+          exclude: Array.isArray(exclude) ? exclude.slice(-EXCLUDE_MAX) : [],
+        }),
+      });
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        const timeoutError = new Error('Question request timed out');
+        timeoutError.status = 408;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) {
       let msg = 'Question generation failed';
       try { const j = await res.json(); msg = j.error || msg; } catch {}
-      if (res.status === 503) { aiAvailable = false; updateOfflineNotice(); }
+      if (res.status === 503) aiAvailable = false;
+      updateOfflineNotice();
       const err = new Error(msg); err.status = res.status; throw err;
     }
-    aiAvailable = true; updateOfflineNotice();
     const data = await res.json();
+    if (typeof data.aiAvailable === 'boolean') aiAvailable = data.aiAvailable;
+    updateOfflineNotice();
     return Array.isArray(data.questions) ? data.questions : [];
   }
 
-  // Pre-generate a few questions on load (one at a time) so the first game of a
-  // blank/selected difficulty starts instantly. De-duped per key; the bank's
-  // seen-set is passed as the exclude list so pre-banked questions are unique.
-  async function prebank(topic, difficulty, n) {
+  // Preload the whole ready-ahead set in one request. Returning the same promise
+  // lets Start share an in-progress home warm-up instead of queueing a competing
+  // generation request behind it.
+  function prebank(topic, difficulty, n) {
     const key = keyFor(topic, difficulty);
-    if (fetching[key]) return;
-    fetching[key] = true;
     bank[key] = bank[key] || [];
     bankSeen[key] = bankSeen[key] || new Set();
-    try {
+    if (bank[key].length >= n) return Promise.resolve();
+    if (fetching[key]) return fetching[key];
+
+    fetching[key] = (async () => {
       let misses = 0;
-      while (aiAvailable && bank[key].length < n && misses < GEN_RETRY) {
-        const qs = await generateOne(topic, difficulty, 1, Array.from(bankSeen[key]));
+      while (bank[key].length < n && misses < GEN_RETRY) {
+        const needed = Math.min(10, n - bank[key].length);
+        const qs = await generateQuestions(topic, difficulty, needed, Array.from(bankSeen[key]));
         if (!qs.length) { misses++; continue; }
-        if (!addUnique(bank[key], bankSeen[key], qs)) misses++;  // model returned only dupes
+        if (!addUnique(bank[key], bankSeen[key], qs)) misses++;
       }
-    } catch { /* silent: foreground start-of-run surfaces errors */ }
-    finally { fetching[key] = false; }
+    })().catch(() => {
+      // Foreground start-of-run handling owns any user-facing error.
+    }).finally(() => {
+      delete fetching[key];
+    });
+    return fetching[key];
   }
 
   // Pull up to `n` banked questions (removing them from the bank).
@@ -595,9 +619,8 @@
   // Warm the bank for whatever topic/difficulty is currently selected on the
   // home screen, so hitting "Start" is instant as often as possible.
   function warmHomeBank() {
-    if (!aiAvailable) return;
     const topic = els.topicInput.value.trim().slice(0, 100);
-    prebank(topic, selectedDifficulty, PREBANK);
+    return prebank(topic, selectedDifficulty, PREBANK);
   }
 
   function initDifficulty() {
@@ -627,6 +650,12 @@
 
   function updateOfflineNotice() {
     els.offlineNotice.classList.toggle('show', !aiAvailable);
+    if (aiAvailable) {
+      els.offlineNotice.classList.remove('err');
+      $('offline-text').textContent = 'The local AI is offline. Built-in questions are ready while it reconnects.';
+    } else if (!els.offlineNotice.classList.contains('err')) {
+      $('offline-text').textContent = 'The local AI is offline. Built-in questions are ready while it reconnects.';
+    }
   }
 
   function renderStats() {
@@ -641,8 +670,9 @@
     const difficulty = selectedDifficulty;
     const total = selectedCount;           // 0 => endless
     const endless = total === 0;
+    const startedAt = Date.now();
 
-    run = {
+    const activeRun = {
       topic, difficulty, endless,
       target: endless ? Infinity : total,
       pool: [],
@@ -657,85 +687,101 @@
       fetching: false,
       genFails: 0,
     };
+    run = activeRun;
 
-    // Seed the pool from the pre-banked questions (instant first game if warm),
-    // recording each in `seen` so it can never be asked again this run.
-    addUnique(run.pool, run.seen, takeFromBank(topic, difficulty, endless ? PREFETCH + 1 : total));
-
+    // Share the home warm-up, then drain its ready batch into this run.
     showView('game');
     els.qBody.style.display = 'none';
     els.qLoading.style.display = 'flex';
-    $('q-loading-text').textContent = topic ? `Writing your first question about “${topic}”…` : 'Writing your first question…';
+    $('q-loading-text').textContent = topic ? `Preparing questions about “${topic}”…` : 'Preparing your questions…';
 
-    // Only ONE question is needed to begin — generate it now if the bank was cold.
-    if (!run.pool.length) {
+    // Keep the first visible buffer inside the five-second deadline.
+    const desired = Math.min(activeRun.target, PREFETCH + 1);
+    const warmer = prebank(topic, difficulty, desired);
+    const warmBudget = Math.max(0, GEN_TIMEOUT - (Date.now() - startedAt));
+    await Promise.race([warmer, sleep(warmBudget)]);
+    if (run !== activeRun) return;
+    addUnique(
+      activeRun.pool,
+      activeRun.seen,
+      takeFromBank(topic, difficulty, desired)
+    );
+
+    if (!activeRun.pool.length) {
+      const remaining = Math.max(0, GEN_TIMEOUT - (Date.now() - startedAt));
       try {
-        for (let tries = 0; tries < GEN_RETRY && run && !run.pool.length; tries++) {
-          const qs = await generateOne(topic, difficulty, 1, Array.from(run.seen));
-          if (!run) return;                  // player quit during the await
-          addUnique(run.pool, run.seen, qs);
+        if (remaining > 100) {
+          const qs = await generateQuestions(topic, difficulty, desired, [], remaining);
+          if (run !== activeRun) return;
+          addUnique(activeRun.pool, activeRun.seen, qs);
         }
       } catch (e) { failRun(e); return; }
     }
-    if (!run) return;                       // player quit during the wait
-    if (!run.pool.length) { failRun(new Error('No questions available')); return; }
+    if (run !== activeRun) return;
+    if (!activeRun.pool.length) {
+      failRun(new Error('No questions were ready within five seconds'));
+      return;
+    }
 
-    run.startTime = Date.now();
+    activeRun.startTime = Date.now();
     els.qBody.style.display = 'block';
     els.qLoading.style.display = 'none';
-    ensureBuffer();                         // start preparing the next question(s)
     renderQuestion();
+    ensureBuffer();
   }
 
   function failRun(err) {
     run = null;
     showView('home');
-    const offline = err && err.status === 503;
     els.offlineNotice.classList.add('show');
-    els.offlineNotice.classList.toggle('err', !offline);
-    $('offline-text').textContent = offline
-      ? 'The local AI model is offline, so new questions can’t be generated right now.'
-      : ('Could not build this run: ' + (err && err.message ? err.message : 'unknown error') + '. Please try again.');
+    els.offlineNotice.classList.add('err');
+    $('offline-text').textContent =
+      'Could not start this run: ' + (err && err.message ? err.message : 'unknown error') + '. Please try again.';
   }
 
-  // Prepare the next question(s) in the background — one request at a time —
-  // keeping PREFETCH questions ready ahead of the one being answered. Chains
-  // itself until the buffer target is met, and backs off if the model is down.
+  // Prepare every missing ready-ahead slot in one batch, then retry with backoff
+  // only if no unique questions were returned.
   function ensureBuffer() {
     if (!run || run.fetching) return;
-    const target = Math.min(run.target, run.index + 1 + PREFETCH);
-    if (run.pool.length >= target) return;
+    const activeRun = run;
+    const target = Math.min(activeRun.target, activeRun.index + 1 + PREFETCH);
+    const needed = target - activeRun.pool.length;
+    if (needed <= 0) return;
 
-    run.fetching = true;
-    generateOne(run.topic, run.difficulty, 1, Array.from(run.seen))
+    activeRun.fetching = true;
+    generateQuestions(activeRun.topic, activeRun.difficulty, Math.min(10, needed), Array.from(activeRun.seen))
       .then(qs => {
-        if (!run) return;
+        if (run !== activeRun) return;
         // addUnique drops any question already seen this run, so duplicates
         // never enter the pool even if the model slips one through.
-        const added = addUnique(run.pool, run.seen, qs);
+        const added = addUnique(activeRun.pool, activeRun.seen, qs);
         if (added) {
-          run.genFails = 0;
-          if (run.awaitingNext) renderQuestion();   // player was waiting — show it now
+          activeRun.genFails = 0;
+          if (activeRun.awaitingNext) renderQuestion();
         } else {
-          run.genFails++;
+          activeRun.genFails++;
         }
       })
-      .catch(() => { if (run) run.genFails++; })
+      .catch(() => {
+        if (run === activeRun) activeRun.genFails++;
+      })
       .finally(() => {
-        if (!run) return;
-        run.fetching = false;
+        if (run !== activeRun) return;
+        activeRun.fetching = false;
         // If the player is stuck waiting and the model can't produce any more
         // unique questions (topic exhausted / offline), end the run gracefully
         // with what they've answered instead of spinning forever.
-        if (run.awaitingNext && run.genFails >= STUCK_LIMIT) {
-          if (run.answered.length) return finishRun();
+        if (activeRun.awaitingNext && activeRun.genFails >= STUCK_LIMIT) {
+          if (activeRun.answered.length) return finishRun();
           return failRun(new Error('Ran out of new questions'));
         }
-        const t = Math.min(run.target, run.index + 1 + PREFETCH);
-        if (run.pool.length < t) {
+        const t = Math.min(activeRun.target, activeRun.index + 1 + PREFETCH);
+        if (activeRun.pool.length < t) {
           // Back off on repeated empty/offline responses so we don't hammer the model.
-          const delay = run.genFails > 1 ? Math.min(4000, 500 * run.genFails) : 0;
-          setTimeout(() => { if (run) ensureBuffer(); }, delay);
+          const delay = activeRun.genFails > 1 ? Math.min(4000, 500 * activeRun.genFails) : 0;
+          setTimeout(() => {
+            if (run === activeRun) ensureBuffer();
+          }, delay);
         }
       });
   }
@@ -816,6 +862,7 @@
       run.points += gained;
     }
     run.answered.push({ q, picked, correct: q.correct, ms, gained });
+    ensureBuffer();
 
     const btns = els.answers.querySelectorAll('.answer');
     btns.forEach((b, i) => {
@@ -1024,9 +1071,8 @@
     await loadStats();
     renderStats();
     // Start the status check and the first prebank concurrently rather than
-    // waiting on the status round-trip first — generateOne() already flips
-    // aiAvailable/shows the offline notice itself if the model turns out to
-    // be down, so there's nothing to gain by serializing these.
+    // waiting on the status round-trip first — the ready bank is playable
+    // even when the model is down, so there is nothing to gain by serializing.
     checkAi();
     warmHomeBank();
   });

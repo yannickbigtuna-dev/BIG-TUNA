@@ -4,6 +4,12 @@ Set-StrictMode -Version Latest
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $manifestPath = Join-Path $scriptRoot 'eco-ai-models.txt'
 $ollamaDefaultBaseUri = [Uri]'http://127.0.0.1:11434'
+$ollamaBackend = 'cpu_avx2'
+$ollamaBackendChanged = [Environment]::GetEnvironmentVariable('OLLAMA_LLM_LIBRARY', 'User') -ne $ollamaBackend
+if ($ollamaBackendChanged) {
+    [Environment]::SetEnvironmentVariable('OLLAMA_LLM_LIBRARY', $ollamaBackend, 'User')
+}
+$env:OLLAMA_LLM_LIBRARY = $ollamaBackend
 
 function Get-OllamaExecutable {
     $command = Get-Command ollama -CommandType Application -ErrorAction SilentlyContinue
@@ -62,18 +68,16 @@ function Start-OllamaApiIfNeeded {
         [Parameter(Mandatory = $true)][string]$Executable
     )
 
-    if (Test-OllamaApi) {
+    if ((Test-OllamaApi) -and -not $ollamaBackendChanged) {
         Write-Host 'Ollama API is already available.'
         return
     }
 
     $existing = Get-Process -Name 'ollama' -ErrorAction SilentlyContinue
     if ($existing) {
-        Write-Host 'Ollama is already running. Waiting for the API to come up.'
-        if (-not (Wait-OllamaApi -Seconds 60)) {
-            throw "Ollama is running, but its API did not become ready at $ollamaDefaultBaseUri."
-        }
-        return
+        Write-Host 'Ollama process exists but its API is unavailable; restarting it on the CPU backend.'
+        $existing | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
     }
 
     Write-Host "Starting Ollama API with $Executable"

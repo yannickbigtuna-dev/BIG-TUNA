@@ -6,6 +6,13 @@ if (-not (Test-Path $pm2)) {
     $pm2 = 'pm2.cmd'
 }
 
+$ollamaBackend = 'cpu_avx2'
+$ollamaBackendChanged = [Environment]::GetEnvironmentVariable('OLLAMA_LLM_LIBRARY', 'User') -ne $ollamaBackend
+if ($ollamaBackendChanged) {
+    [Environment]::SetEnvironmentVariable('OLLAMA_LLM_LIBRARY', $ollamaBackend, 'User')
+}
+$env:OLLAMA_LLM_LIBRARY = $ollamaBackend
+
 function Get-OllamaExecutable {
     $command = Get-Command ollama -CommandType Application -ErrorAction SilentlyContinue
     if ($command) {
@@ -50,14 +57,15 @@ function Start-OllamaApiIfNeeded {
         return
     }
 
-    if (Test-OllamaApi) {
+    if ((Test-OllamaApi) -and -not $ollamaBackendChanged) {
         Write-Host 'Ollama API is already running.'
         return
     }
 
     if (Get-Process -Name 'ollama' -ErrorAction SilentlyContinue) {
-        Write-Host 'Ollama is already starting in the background.'
-        return
+        Write-Host 'Restarting Ollama on the required CPU backend.'
+        Get-Process -Name 'ollama' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
     }
 
     Write-Host 'Starting Ollama API in the background'
