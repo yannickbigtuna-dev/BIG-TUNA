@@ -11,13 +11,13 @@ BIG-TUNA is a personal self-hosted website at `yannickmorgans.ca`. It runs on a 
 ## Mandatory Workflow
 
 1. Run `git pull origin main` before making changes.
-2. Start with the most capable available model acting as architect and top-level coordinator.
-3. The architect must inspect only the files needed after reading this context, then produce a thorough implementation spec before coding starts.
+2. The root thread uses the most capable configured model as architect, coordinator, integration owner, and final reviewer.
+3. The architect must inspect only the files needed after reading this context, then produce a thorough pre-code implementation spec covering scope, constraints, ownership, approach, and concrete acceptance checks.
 4. That spec must be strong enough to act as the acceptance and testing guide for the final validation pass.
-5. Delegate implementation work to cheaper sub-agents whenever practical, using prompts derived from the architect spec.
-6. After sub-agents report back, use the most capable available model again as the testing and validation agent.
-7. The testing agent must verify the implementation against the spec, check for regressions, and decide whether the work is complete.
-8. If the work is not good enough, run another sub-agent implementation pass using the testing feedback, then retest.
+5. Send independent, disjoint work packages to project implementer agents in one parallel round whenever practical. Lighter implementers must preserve concurrent work, run focused checks, and never commit or push.
+6. Tester agents may run independent validation in parallel where useful.
+7. The root must review the actual diff, verify the implementation against the original spec, check for regressions, and decide whether the work is complete.
+8. If the work is not good enough, run another implementation pass using the review feedback, then retest until the original spec passes.
 9. Once the work passes the spec, make the requested edits final.
 10. Run `git status` and `git diff`.
 11. Do not commit secrets, `.env`, `node_modules`, cache/build junk, or local machine-only files.
@@ -33,6 +33,9 @@ Do not force push or rewrite history. If `git pull` produces a merge conflict, s
 .
 +-- AGENTS.md                 # Codex operating instructions for this repo
 +-- CODEX_CONTEXT.md          # This file; persistent project context for Codex
++-- .codex/config.toml        # Codex root-thread model, permissions, and concurrency configuration
++-- .codex/agents/implementer.toml # Lighter project implementer-agent configuration
++-- .codex/agents/tester.toml # Project tester-agent configuration for independent validation
 +-- README.md                 # User/deployment documentation
 +-- CLAUDE.md                 # Older assistant context; may overlap with this file
 +-- server.js                 # Main app/API/static server, CommonJS, port 3000
@@ -719,8 +722,9 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 General:
 
 - Keep changes narrowly scoped. This is a live site.
-- Default orchestration for non-trivial work is architect spec -> cheaper sub-agent implementation -> top-level validation/testing -> repeat until the spec passes.
-- The architect spec should define scope, constraints, implementation approach, and concrete acceptance checks that the final validation pass can execute.
+- `.codex/config.toml` intentionally selects GPT-5.6-Sol with Ultra reasoning for the root, `approval_policy = "never"`, `danger-full-access`, and up to 6 direct concurrent subagents; `C:\SERVER` must remain trusted in the user's Codex configuration.
+- Default orchestration for non-trivial work is root spec -> parallel lighter implementers with disjoint ownership -> parallel tester checks where useful -> root review/acceptance -> repeat until the spec passes.
+- The root spec should define scope, constraints, ownership, implementation approach, and concrete acceptance checks that the final validation pass can execute.
 - Prefer existing plain Node and vanilla browser JavaScript patterns.
 - Do not introduce a framework, build step, transpiler, or database unless explicitly requested.
 - Use CommonJS in the root server and ES modules inside `mcp-server/`.

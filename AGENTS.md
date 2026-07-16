@@ -9,14 +9,14 @@ At the start of every session:
 
 For every requested change, use this agent workflow:
 
-1. Start with the most capable available model acting as the architect and top-level coordinator.
-2. The architect must inspect the request, gather the minimum required repo context, and write a thorough implementation spec before coding starts.
-3. The spec must be detailed enough to serve as the acceptance and testing guide for a later validation pass.
-4. The architect should delegate implementation work to cheaper sub-agents whenever practical, with clear task prompts derived from the spec.
-5. After sub-agents report back, use the most capable available model again as the testing and validation agent.
-6. The testing agent must verify the implementation against the architect's spec, check for regressions, and confirm the work behaves as intended.
-7. If the implementation is incomplete, incorrect, or weak, send it back through a new sub-agent pass with specific feedback from the testing agent.
-8. Repeat the implement -> report -> test -> feedback loop until the work meets the spec.
+1. Keep the root thread on the most capable configured model. The root owns architecture, coordination, integration, and final review.
+2. Before coding, the root must write a thorough implementation spec defining scope, constraints, file/module ownership, approach, and acceptance checks.
+3. Split work into the smallest independent packages possible, each with a disjoint write scope.
+4. Delegate coding to the project implementer agent. When at least two packages are independent, spawn all implementers in the same parallel round before waiting; parallel agents must never edit the same files.
+5. Tell every implementer that it is not alone, must preserve concurrent edits, must stay within its ownership, and must report changed paths and checks run.
+6. While agents run, the root does only useful non-overlapping work, then reviews the actual combined diff rather than trusting summaries.
+7. Delegate independent acceptance checks to project tester agents in parallel when useful, but testers never replace root review.
+8. The root performs final validation against the original spec and loops targeted implementation and testing until the work passes.
 
 For every requested change:
 
