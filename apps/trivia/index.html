@@ -331,7 +331,7 @@
 
     <div class="notice" id="offline-notice">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
-      <span id="offline-text">The local AI is offline. Built-in questions are ready while it reconnects.</span>
+      <span id="offline-text">The local AI is offline. Built-in random-mix questions are ready while it reconnects.</span>
     </div>
 
     <div class="topic-field">
@@ -462,16 +462,18 @@
   Topbar.setTitle('Trivia');
 
   // ── Config ──────────────────────────────────────────────────────────────
-  // The server answers from a ready bank immediately and refills that bank with
-  // AI questions in the background. The client requests batches and keeps enough
-  // questions buffered that advancing never needs to wait on model inference.
+  // Blank topics are answered immediately from the built-in bank. Typed topics
+  // receive one locally generated question per request, so the client warms a
+  // keyed bank early and keeps enough ready that advancing rarely needs to wait.
   const APP_ID = 'trivia';
   const QUESTION_TIME = 20;        // seconds per question
   const PREFETCH = 3;              // questions to keep ready ahead of the current one
-  const PREBANK = 4;               // questions preloaded on home for an instant first game
+  const PREBANK = 4;               // questions warmed on home for a fast first game
   const GEN_RETRY = 2;             // batch retries when a request yields no unique questions
   const STUCK_LIMIT = 8;           // give up (end run) after this many consecutive fruitless generations
-  const GEN_TIMEOUT = 4500;        // keep first-question latency inside the five-second target
+  const BLANK_REQUEST_TIMEOUT = 2500;  // blank topics are served immediately from the built-in bank
+  const CUSTOM_REQUEST_TIMEOUT = 9500; // headroom for the server's nine-second custom generation budget
+  const FIRST_QUESTION_DEADLINE = 9750; // leave render headroom inside the ten-second requirement
   // The API uses this longer list for instant bank dedupe, then trims the AI
   // prompt internally. Must match TRIVIA_MAX_EXCLUDE on the server.
   const EXCLUDE_MAX = 80;
@@ -487,6 +489,7 @@
   const bank = {};                 // { key: [questions] }
   const bankSeen = {};             // { key: Set<normalized question text> } — bank-level dedupe
   const fetching = {};             // { key: Promise } — shares in-flight home-bank requests
+  const bankWaiters = {};          // { key: Set<Function> } — wakes Start on the first ready question
 
   let run = null;                  // active game state
 
@@ -494,7 +497,6 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtTime = ms => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
   // Bank/run keys are scoped to both topic and difficulty so questions never
   // leak between, say, an "easy space" run and a "hard space" run.
   const keyFor = (topic, difficulty) => (difficulty || 'any') + '::' + (topic || '').trim().toLowerCase();
@@ -525,10 +527,13 @@
   }
 
   // ── Question generation ─────────────────────────────────────────────────
-  // Request a ready batch. The API itself is latency-bounded by its built-in
-  // safety bank, and this client timeout prevents a broken connection from
-  // pushing the first visible question past five seconds.
-  async function generateQuestions(topic, difficulty, count, exclude, timeoutMs = GEN_TIMEOUT) {
+  // Blank topics are an immediate built-in-bank read. Custom topics get a
+  // separate, longer budget because the API may generate one new AI question.
+  const requestTimeoutFor = topic => String(topic || '').trim()
+    ? CUSTOM_REQUEST_TIMEOUT
+    : BLANK_REQUEST_TIMEOUT;
+
+  async function generateQuestions(topic, difficulty, count, exclude, timeoutMs = requestTimeoutFor(topic)) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.max(100, timeoutMs));
     let res;
@@ -564,12 +569,58 @@
     const data = await res.json();
     if (typeof data.aiAvailable === 'boolean') aiAvailable = data.aiAvailable;
     updateOfflineNotice();
+    // A typed topic must never silently receive the random built-in fallback.
+    // The server labels successful custom generation explicitly.
+    if (String(topic || '').trim() && data.source !== 'ai-topic') {
+      const err = new Error('Custom-topic generation did not return a topic-matched question');
+      err.status = 502;
+      throw err;
+    }
     return Array.isArray(data.questions) ? data.questions : [];
   }
 
-  // Preload the whole ready-ahead set in one request. Returning the same promise
-  // lets Start share an in-progress home warm-up instead of queueing a competing
-  // generation request behind it.
+  function notifyBankReady(key) {
+    if (!bank[key] || !bank[key].length || !bankWaiters[key]) return;
+    for (const notify of Array.from(bankWaiters[key])) notify();
+  }
+
+  // Resolve as soon as one question reaches the keyed bank. `fillPromise` is
+  // also observed so a failed/empty fill can fail Start without waiting out
+  // the full click deadline. The fill itself remains alive and keeps banking.
+  function waitForBankQuestion(topic, difficulty, fillPromise, timeoutMs) {
+    const key = keyFor(topic, difficulty);
+    if (bank[key] && bank[key].length) return Promise.resolve(true);
+
+    return new Promise(resolve => {
+      let settled = false;
+      let timer = null;
+      const finish = ready => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        if (bankWaiters[key]) {
+          bankWaiters[key].delete(onReady);
+          if (!bankWaiters[key].size) delete bankWaiters[key];
+        }
+        resolve(ready);
+      };
+      const onReady = () => finish(true);
+
+      bankWaiters[key] = bankWaiters[key] || new Set();
+      bankWaiters[key].add(onReady);
+      timer = setTimeout(() => finish(false), Math.max(0, timeoutMs));
+      Promise.resolve(fillPromise).then(
+        () => finish(!!(bank[key] && bank[key].length)),
+        () => finish(!!(bank[key] && bank[key].length))
+      );
+      // Close the small registration race if a fetch completed synchronously.
+      if (bank[key] && bank[key].length) finish(true);
+    });
+  }
+
+  // Fill the ready-ahead set, using as many sequential requests as needed.
+  // Returning the same promise lets Start share an in-progress home warm-up
+  // instead of queueing a competing generation request behind it.
   function prebank(topic, difficulty, n) {
     const key = keyFor(topic, difficulty);
     bank[key] = bank[key] || [];
@@ -583,7 +634,9 @@
         const needed = Math.min(10, n - bank[key].length);
         const qs = await generateQuestions(topic, difficulty, needed, Array.from(bankSeen[key]));
         if (!qs.length) { misses++; continue; }
-        if (!addUnique(bank[key], bankSeen[key], qs)) misses++;
+        const added = addUnique(bank[key], bankSeen[key], qs);
+        if (!added) misses++;
+        else notifyBankReady(key);
       }
     })().catch(() => {
       // Foreground start-of-run handling owns any user-facing error.
@@ -591,6 +644,17 @@
       delete fetching[key];
     });
     return fetching[key];
+  }
+
+  // A drain can happen in the same microtask that finishes a blank-topic fill.
+  // Recheck once that shared promise settles so the bank still returns to four.
+  function keepPrebankFull(topic, difficulty) {
+    const key = keyFor(topic, difficulty);
+    const fill = prebank(topic, difficulty, PREBANK);
+    Promise.resolve(fill).then(() => {
+      if ((bank[key] || []).length < PREBANK) prebank(topic, difficulty, PREBANK);
+    });
+    return fill;
   }
 
   // Pull up to `n` banked questions (removing them from the bank).
@@ -635,15 +699,19 @@
     });
   }
 
-  // Warm a custom topic's bank shortly after the player stops typing it, so a
-  // typo-in-progress doesn't burn generations but a settled topic is ready
-  // before "Start" is even clicked.
+  // Warm every settled nonblank topic, including one- and two-character topics.
+  // Clearing the field immediately switches back to the blank built-in bank.
   let topicWarmTimer = null;
   function initTopicWarm() {
     els.topicInput.addEventListener('input', () => {
       clearTimeout(topicWarmTimer);
       const topic = els.topicInput.value.trim();
-      if (topic.length < 3) return;
+      els.offlineNotice.classList.remove('err');
+      updateOfflineNotice();
+      if (!topic) {
+        warmHomeBank();
+        return;
+      }
       topicWarmTimer = setTimeout(warmHomeBank, TOPIC_WARM_DEBOUNCE);
     });
   }
@@ -652,9 +720,12 @@
     els.offlineNotice.classList.toggle('show', !aiAvailable);
     if (aiAvailable) {
       els.offlineNotice.classList.remove('err');
-      $('offline-text').textContent = 'The local AI is offline. Built-in questions are ready while it reconnects.';
+      $('offline-text').textContent = 'The local AI is offline. Built-in random-mix questions are ready while it reconnects.';
     } else if (!els.offlineNotice.classList.contains('err')) {
-      $('offline-text').textContent = 'The local AI is offline. Built-in questions are ready while it reconnects.';
+      const hasTopic = !!(els.topicInput && els.topicInput.value.trim());
+      $('offline-text').textContent = hasTopic
+        ? 'The local AI is offline. Custom topics need it; clear Topic to play the built-in random mix.'
+        : 'The local AI is offline. Built-in random-mix questions are ready while it reconnects.';
     }
   }
 
@@ -689,37 +760,37 @@
     };
     run = activeRun;
 
-    // Share the home warm-up, then drain its ready batch into this run.
+    // Drain anything already ready before touching the network. Then start (or
+    // share) the keyed refill; it keeps filling the home bank toward PREBANK.
     showView('game');
     els.qBody.style.display = 'none';
     els.qLoading.style.display = 'flex';
     $('q-loading-text').textContent = topic ? `Preparing questions about “${topic}”…` : 'Preparing your questions…';
 
-    // Keep the first visible buffer inside the five-second deadline.
     const desired = Math.min(activeRun.target, PREFETCH + 1);
-    const warmer = prebank(topic, difficulty, desired);
-    const warmBudget = Math.max(0, GEN_TIMEOUT - (Date.now() - startedAt));
-    await Promise.race([warmer, sleep(warmBudget)]);
-    if (run !== activeRun) return;
     addUnique(
       activeRun.pool,
       activeRun.seen,
       takeFromBank(topic, difficulty, desired)
     );
+    const warmer = keepPrebankFull(topic, difficulty);
 
     if (!activeRun.pool.length) {
-      const remaining = Math.max(0, GEN_TIMEOUT - (Date.now() - startedAt));
-      try {
-        if (remaining > 100) {
-          const qs = await generateQuestions(topic, difficulty, desired, [], remaining);
-          if (run !== activeRun) return;
-          addUnique(activeRun.pool, activeRun.seen, qs);
-        }
-      } catch (e) { failRun(e); return; }
+      // Do not await all four prebank questions. Wake on the first arrival and
+      // render it while the same `fetching[key]` promise continues the refill.
+      const remaining = Math.max(0, FIRST_QUESTION_DEADLINE - (Date.now() - startedAt));
+      await waitForBankQuestion(topic, difficulty, warmer, remaining);
+      if (run !== activeRun) return;
+      addUnique(
+        activeRun.pool,
+        activeRun.seen,
+        takeFromBank(topic, difficulty, desired)
+      );
+      keepPrebankFull(topic, difficulty);
     }
     if (run !== activeRun) return;
     if (!activeRun.pool.length) {
-      failRun(new Error('No questions were ready within five seconds'));
+      failRun(new Error('No question was ready within 9.75 seconds'));
       return;
     }
 
@@ -731,59 +802,106 @@
   }
 
   function failRun(err) {
+    const topic = run && run.topic;
     run = null;
     showView('home');
     els.offlineNotice.classList.add('show');
     els.offlineNotice.classList.add('err');
-    $('offline-text').textContent =
-      'Could not start this run: ' + (err && err.message ? err.message : 'unknown error') + '. Please try again.';
+    const detail = err && err.message ? err.message : 'unknown error';
+    $('offline-text').textContent = topic
+      ? 'Could not generate this custom topic: ' + detail + '. Custom topics require the local AI; clear Topic for the built-in random mix, or try again.'
+      : 'Could not start this run: ' + detail + '. Please try again.';
   }
 
-  // Prepare every missing ready-ahead slot in one batch, then retry with backoff
-  // only if no unique questions were returned.
+  function acceptBufferQuestions(activeRun, questions) {
+    // addUnique drops any question already seen this run, so duplicates never
+    // enter the pool even if the model slips one through.
+    const added = addUnique(activeRun.pool, activeRun.seen, questions);
+    if (added) {
+      activeRun.genFails = 0;
+      if (activeRun.awaitingNext) renderQuestion();
+    } else {
+      activeRun.genFails++;
+    }
+    return added;
+  }
+
+  function finishBufferAttempt(activeRun) {
+    if (run !== activeRun) return;
+    activeRun.fetching = false;
+    // If the player is stuck waiting and the model can't produce any more
+    // unique questions (topic exhausted / offline), end the run gracefully
+    // with what they've answered instead of spinning forever.
+    if (activeRun.awaitingNext && activeRun.genFails >= STUCK_LIMIT) {
+      if (activeRun.answered.length) return finishRun();
+      return failRun(new Error('Ran out of new questions'));
+    }
+    const target = Math.min(activeRun.target, activeRun.index + 1 + PREFETCH);
+    if (activeRun.pool.length < target) {
+      // Back off on repeated empty/offline responses so we don't hammer the model.
+      const delay = activeRun.genFails > 1 ? Math.min(4000, 500 * activeRun.genFails) : 0;
+      setTimeout(() => {
+        if (run === activeRun) ensureBuffer();
+      }, delay);
+    }
+  }
+
+  // Fill every missing ready-ahead slot. Questions already landing in the home
+  // bank are drained first, and an active keyed prebank request is shared so the
+  // client never sends two consumers racing for the same one-question AI fill.
   function ensureBuffer() {
     if (!run || run.fetching) return;
     const activeRun = run;
     const target = Math.min(activeRun.target, activeRun.index + 1 + PREFETCH);
-    const needed = target - activeRun.pool.length;
+    let needed = target - activeRun.pool.length;
     if (needed <= 0) return;
-
     activeRun.fetching = true;
+
+    const banked = takeFromBank(activeRun.topic, activeRun.difficulty, needed);
+    if (banked.length) {
+      acceptBufferQuestions(activeRun, banked);
+      keepPrebankFull(activeRun.topic, activeRun.difficulty);
+      if (run !== activeRun) return;
+      needed = target - activeRun.pool.length;
+      if (needed <= 0) {
+        activeRun.fetching = false;
+        return;
+      }
+    }
+
+    const key = keyFor(activeRun.topic, activeRun.difficulty);
+    const sharedFill = fetching[key];
+
+    if (sharedFill) {
+      waitForBankQuestion(
+        activeRun.topic,
+        activeRun.difficulty,
+        sharedFill,
+        requestTimeoutFor(activeRun.topic)
+      ).then(() => {
+        if (run !== activeRun) return;
+        const nextTarget = Math.min(activeRun.target, activeRun.index + 1 + PREFETCH);
+        const nextNeeded = nextTarget - activeRun.pool.length;
+        if (nextNeeded <= 0) return;
+        const ready = takeFromBank(activeRun.topic, activeRun.difficulty, nextNeeded);
+        acceptBufferQuestions(activeRun, ready);
+        if (ready.length) keepPrebankFull(activeRun.topic, activeRun.difficulty);
+      }).catch(() => {
+        if (run === activeRun) activeRun.genFails++;
+      }).finally(() => finishBufferAttempt(activeRun));
+      return;
+    }
+
+    // No home fill exists (for example later in a long run), so retain the
+    // normal direct buffer request and its exclusion/dedupe behavior.
     generateQuestions(activeRun.topic, activeRun.difficulty, Math.min(10, needed), Array.from(activeRun.seen))
       .then(qs => {
-        if (run !== activeRun) return;
-        // addUnique drops any question already seen this run, so duplicates
-        // never enter the pool even if the model slips one through.
-        const added = addUnique(activeRun.pool, activeRun.seen, qs);
-        if (added) {
-          activeRun.genFails = 0;
-          if (activeRun.awaitingNext) renderQuestion();
-        } else {
-          activeRun.genFails++;
-        }
+        if (run === activeRun) acceptBufferQuestions(activeRun, qs);
       })
       .catch(() => {
         if (run === activeRun) activeRun.genFails++;
       })
-      .finally(() => {
-        if (run !== activeRun) return;
-        activeRun.fetching = false;
-        // If the player is stuck waiting and the model can't produce any more
-        // unique questions (topic exhausted / offline), end the run gracefully
-        // with what they've answered instead of spinning forever.
-        if (activeRun.awaitingNext && activeRun.genFails >= STUCK_LIMIT) {
-          if (activeRun.answered.length) return finishRun();
-          return failRun(new Error('Ran out of new questions'));
-        }
-        const t = Math.min(activeRun.target, activeRun.index + 1 + PREFETCH);
-        if (activeRun.pool.length < t) {
-          // Back off on repeated empty/offline responses so we don't hammer the model.
-          const delay = activeRun.genFails > 1 ? Math.min(4000, 500 * activeRun.genFails) : 0;
-          setTimeout(() => {
-            if (run === activeRun) ensureBuffer();
-          }, delay);
-        }
-      });
+      .finally(() => finishBufferAttempt(activeRun));
   }
 
   // ── Render a question ───────────────────────────────────────────────────

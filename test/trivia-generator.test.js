@@ -34,8 +34,9 @@ test('the complete safety bank normalizes into valid four-answer questions', () 
   questions.forEach(assertValidQuestion);
 });
 
-test('fallback selection honors requested difficulty and exclusions', () => {
-  const first = selectFallbackQuestions({ difficulty: 'hard', count: 10 });
+test('blank-topic fallback selection honors requested difficulty and exclusions', () => {
+  const first = selectFallbackQuestions({ topic: '', difficulty: 'hard', count: 10 });
+  assert.equal(first.topicMatched, true);
   assert.equal(first.questions.length, 10);
   first.questions.forEach(question => {
     assertValidQuestion(question);
@@ -44,10 +45,12 @@ test('fallback selection honors requested difficulty and exclusions', () => {
 
   const excluded = first.questions.map(question => question.question);
   const second = selectFallbackQuestions({
+    topic: '   \t\n',
     difficulty: 'hard',
     count: 10,
     exclude: excluded,
   });
+  assert.equal(second.topicMatched, true);
   assert.equal(second.questions.length, 10);
   const firstKeys = new Set(excluded.map(normalizeQuestionText));
   second.questions.forEach(question => {
@@ -55,19 +58,25 @@ test('fallback selection honors requested difficulty and exclusions', () => {
   });
 });
 
-test('fallback topic matching prefers relevant built-in questions', () => {
+test('fallback selection refuses every nonblank topic, including curated matches', () => {
   const result = selectFallbackQuestions({
     topic: 'space astronomy',
     difficulty: 'medium',
     count: 3,
   });
-  assert.equal(result.topicMatched, true);
-  assert.equal(result.questions.length, 3);
-  result.questions.forEach(question => {
-    assert.match(
-      [question.question, question.category, question.explanation].join(' ').toLowerCase(),
-      /space|planet|moon|satellite|solar|astronomy/
-    );
+  assert.deepEqual(result, {
+    topicMatched: false,
+    questions: [],
+  });
+
+  assert.deepEqual(selectFallbackQuestions({ topic: '  SPACE ASTRONOMY?!  ' }), {
+    topicMatched: false,
+    questions: [],
+  });
+
+  assert.deepEqual(selectFallbackQuestions({ topic: '  ?...!!!  ' }), {
+    topicMatched: false,
+    questions: [],
   });
 });
 
@@ -104,8 +113,9 @@ test('trivia model selection prefers the dedicated small model', () => {
     { name: 'qwen2.5:1.5b' },
     { name: 'phi4-mini:latest' },
   ];
-  assert.equal(pickTriviaModel(models), 'phi4-mini:latest');
+  assert.equal(pickTriviaModel(models), 'qwen2.5:1.5b');
   assert.equal(pickTriviaModel(models, 'llama3.1:8b'), 'llama3.1:8b');
+  assert.equal(pickTriviaModel(models.filter(model => model.name !== 'qwen2.5:1.5b')), 'phi4-mini:latest');
 });
 
 test('AI prompt uses the compact schema and bounds duplicate hints', () => {
