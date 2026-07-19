@@ -331,7 +331,7 @@
 
     <div class="notice" id="offline-notice">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
-      <span id="offline-text">The local AI is offline. Built-in random-mix questions are ready while it reconnects.</span>
+      <span id="offline-text">The verified 1,000-question Luna bank is ready for random trivia.</span>
     </div>
 
     <div class="topic-field">
@@ -462,19 +462,22 @@
   Topbar.setTitle('Trivia');
 
   // ── Config ──────────────────────────────────────────────────────────────
-  // Blank topics are answered immediately from the built-in bank. Typed topics
-  // receive one locally generated question per request, so the client warms a
-  // keyed bank early and keeps enough ready that advancing rarely needs to wait.
+  // Blank topics are answered immediately from the immutable Luna bank. Typed
+  // topics use live Luna generation, so the client warms a keyed topic bank
+  // early and keeps enough ready that advancing rarely needs to wait.
   const APP_ID = 'trivia';
+  const EXPECTED_PROVIDER = 'openai';
+  const EXPECTED_MODEL = 'gpt-5.6-luna';
+  const REQUIRED_BANK_SIZE = 1000;
   const QUESTION_TIME = 20;        // seconds per question
   const PREFETCH = 3;              // questions to keep ready ahead of the current one
   const PREBANK = 4;               // questions warmed on home for a fast first game
   const GEN_RETRY = 2;             // batch retries when a request yields no unique questions
   const STUCK_LIMIT = 8;           // give up (end run) after this many consecutive fruitless generations
-  const BLANK_REQUEST_TIMEOUT = 2500;  // blank topics are served immediately from the built-in bank
-  const CUSTOM_REQUEST_TIMEOUT = 9500; // headroom for the server's nine-second custom generation budget
-  const FIRST_QUESTION_DEADLINE = 9750; // leave render headroom inside the ten-second requirement
-  // The API uses this longer list for instant bank dedupe, then trims the AI
+  const BLANK_REQUEST_TIMEOUT = 2500;  // blank topics are served immediately from the Luna bank
+  const TOPIC_REQUEST_TIMEOUT = 9200;  // server has an eight-second hard Luna deadline
+  const FIRST_QUESTION_DEADLINE = 9600; // leave render headroom inside the ten-second requirement
+  // The API uses this longer list for instant bank dedupe, then trims the Luna
   // prompt internally. Must match TRIVIA_MAX_EXCLUDE on the server.
   const EXCLUDE_MAX = 80;
   const HISTORY_MAX = 25;
@@ -483,13 +486,16 @@
   // ── State ───────────────────────────────────────────────────────────────
   const els = {};
   let stats = { bestScore: 0, gamesPlayed: 0, totalPoints: 0, totalCorrect: 0, totalQuestions: 0, history: [] };
-  let aiAvailable = true;
+  let topicGenerationAvailable = true;
+  let lunaBankReady = true;
+  let lunaBankSize = REQUIRED_BANK_SIZE;
 
   // A "bank" of pre-generated questions keyed by topic+difficulty.
   const bank = {};                 // { key: [questions] }
   const bankSeen = {};             // { key: Set<normalized question text> } — bank-level dedupe
   const fetching = {};             // { key: Promise } — shares in-flight home-bank requests
   const bankWaiters = {};          // { key: Set<Function> } — wakes Start on the first ready question
+  const bankErrors = {};           // { key: Error } — last safe generation error for foreground reporting
 
   let run = null;                  // active game state
 
@@ -504,15 +510,71 @@
   // Canonical form used to detect duplicate questions (matches the server).
   const normQ = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').replace(/[?.!]+$/, '').trim();
 
+  function publicError(message, status) {
+    const err = new Error(message);
+    err.publicMessage = message;
+    if (status) err.status = status;
+    return err;
+  }
+
+  // Server errors are normally already user-safe, but never echo likely
+  // credentials, stack traces, HTML, or arbitrarily long upstream output.
+  function safeServerMessage(value) {
+    if (typeof value !== 'string') return '';
+    const message = value.replace(/\s+/g, ' ').trim();
+    if (!message || message.length > 180) return '';
+    if (/<html|<!doctype|https?:\/\/|[{}\[\]]|\b(?:bearer|authorization|traceback|typeerror|syntaxerror|econn\w*|enotfound|invalid_request_error|response_format)\b|sk-[a-z0-9_-]+|api[_ -]?key|\bat\s+\S+\s*\([^)]*:\d+/i.test(message)) return '';
+    return message;
+  }
+
+  function errorDetail(error, fallback) {
+    if (error && typeof error.publicMessage === 'string') return error.publicMessage;
+    return fallback;
+  }
+
+  // The server validates and verifies questions before responding. This second
+  // boundary prevents malformed payloads from ever entering a bank or run.
+  function validateResponseQuestion(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    if (typeof raw.question !== 'string') return null;
+    const question = raw.question.trim();
+    if (!question || question.length > 500) return null;
+
+    if (!Array.isArray(raw.answers) || raw.answers.length !== 4) return null;
+    if (raw.answers.some(answer => typeof answer !== 'string')) return null;
+    const answers = raw.answers.map(answer => answer.trim());
+    if (answers.some(answer => !answer || answer.length > 240)) return null;
+    const answerKeys = answers.map(answer => answer.toLowerCase().replace(/\s+/g, ' '));
+    if (new Set(answerKeys).size !== 4) return null;
+
+    if (!Number.isInteger(raw.correct) || raw.correct < 0 || raw.correct > 3) return null;
+    if (typeof raw.category !== 'string' || !raw.category.trim() || raw.category.trim().length > 80) return null;
+    if (typeof raw.difficulty !== 'string' || !['easy', 'medium', 'hard'].includes(raw.difficulty.toLowerCase())) return null;
+    if (typeof raw.explanation !== 'string' || !raw.explanation.trim() || raw.explanation.length > 500) return null;
+    if (raw.id !== undefined && (typeof raw.id !== 'string' || !raw.id.trim() || raw.id.length > 200)) return null;
+
+    const clean = {
+      question,
+      answers,
+      correct: raw.correct,
+      category: raw.category.trim(),
+      difficulty: raw.difficulty.toLowerCase(),
+      explanation: raw.explanation.trim(),
+    };
+    if (raw.id !== undefined) clean.id = raw.id.trim();
+    return clean;
+  }
+
   // Append questions to `list`, skipping any whose text is already in `seen`.
   // Returns how many were actually added. This is the single choke-point that
-  // guarantees a question is never shown twice.
+  // guarantees a question is valid and never shown twice.
   function addUnique(list, seen, questions) {
     let added = 0;
-    for (const q of (questions || [])) {
-      if (!q || !q.question) continue;
+    for (const raw of (questions || [])) {
+      const q = validateResponseQuestion(raw);
+      if (!q) continue;
       const n = normQ(q.question);
-      if (seen.has(n)) continue;
+      if (!n || seen.has(n)) continue;
       seen.add(n);
       list.push(q);
       added++;
@@ -527,10 +589,10 @@
   }
 
   // ── Question generation ─────────────────────────────────────────────────
-  // Blank topics are an immediate built-in-bank read. Custom topics get a
-  // separate, longer budget because the API may generate one new AI question.
+  // Blank topics are an immediate Luna-bank read. Typed topics get a separate,
+  // longer budget for the server's bounded live Luna request.
   const requestTimeoutFor = topic => String(topic || '').trim()
-    ? CUSTOM_REQUEST_TIMEOUT
+    ? TOPIC_REQUEST_TIMEOUT
     : BLANK_REQUEST_TIMEOUT;
 
   async function generateQuestions(topic, difficulty, count, exclude, timeoutMs = requestTimeoutFor(topic)) {
@@ -551,32 +613,73 @@
       });
     } catch (error) {
       if (error && error.name === 'AbortError') {
-        const timeoutError = new Error('Question request timed out');
-        timeoutError.status = 408;
-        throw timeoutError;
+        throw publicError(
+          String(topic || '').trim()
+            ? 'Luna topic generation timed out. Please retry.'
+            : 'The Luna bank request timed out. Please retry.',
+          408
+        );
       }
-      throw error;
+      throw publicError('Could not reach the Trivia service. Please retry.');
     } finally {
       clearTimeout(timer);
     }
     if (!res.ok) {
-      let msg = 'Question generation failed';
-      try { const j = await res.json(); msg = j.error || msg; } catch {}
-      if (res.status === 503) aiAvailable = false;
+      let payload = null;
+      try { payload = await res.json(); } catch {}
+      const hasTopic = !!String(topic || '').trim();
+      const fallback = res.status === 429
+        ? 'Luna is temporarily rate-limited. Please retry shortly.'
+        : ([408, 504].includes(res.status)
+          ? 'Luna generation timed out. Please retry.'
+          : (hasTopic
+            ? 'Live Luna topic generation failed. Please retry.'
+            : 'The verified Luna bank could not be loaded. Please retry.'));
+      const message = safeServerMessage(payload && (payload.error || payload.message)) || fallback;
+      if (res.status === 503) {
+        if (hasTopic) topicGenerationAvailable = false;
+        else lunaBankReady = false;
+      }
       updateOfflineNotice();
-      const err = new Error(msg); err.status = res.status; throw err;
+      throw publicError(message, res.status);
     }
-    const data = await res.json();
-    if (typeof data.aiAvailable === 'boolean') aiAvailable = data.aiAvailable;
+
+    let data;
+    try { data = await res.json(); } catch {
+      throw publicError('The Trivia service returned an invalid response. Please retry.', 502);
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw publicError('The Trivia service returned an invalid response. Please retry.', 502);
+    }
+
+    const hasTopic = !!String(topic || '').trim();
+    if (hasTopic) {
+      if (data.source !== 'openai-topic' || data.provider !== EXPECTED_PROVIDER || data.model !== EXPECTED_MODEL) {
+        throw publicError('Topic generation returned an unexpected source. Please retry.', 502);
+      }
+      topicGenerationAvailable = true;
+    } else {
+      const size = Number(data.bankSize);
+      if (data.source !== 'luna-bank' || data.provider !== EXPECTED_PROVIDER || data.model !== EXPECTED_MODEL || size !== REQUIRED_BANK_SIZE) {
+        throw publicError('The verified 1,000-question Luna bank was not returned. Please retry.', 502);
+      }
+      lunaBankReady = true;
+      lunaBankSize = size;
+    }
     updateOfflineNotice();
-    // A typed topic must never silently receive the random built-in fallback.
-    // The server labels successful custom generation explicitly.
-    if (String(topic || '').trim() && data.source !== 'ai-topic') {
-      const err = new Error('Custom-topic generation did not return a topic-matched question');
-      err.status = 502;
-      throw err;
+
+    const valid = (Array.isArray(data.questions) ? data.questions : [])
+      .map(validateResponseQuestion)
+      .filter(Boolean);
+    if (!valid.length) {
+      throw publicError(
+        hasTopic
+          ? 'Luna returned no valid questions for this topic. Please retry.'
+          : 'The Luna bank returned no valid questions. Please retry.',
+        502
+      );
     }
-    return Array.isArray(data.questions) ? data.questions : [];
+    return valid;
   }
 
   function notifyBankReady(key) {
@@ -591,10 +694,10 @@
     const key = keyFor(topic, difficulty);
     if (bank[key] && bank[key].length) return Promise.resolve(true);
 
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       let settled = false;
       let timer = null;
-      const finish = ready => {
+      const finish = (ready, error) => {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
@@ -602,16 +705,22 @@
           bankWaiters[key].delete(onReady);
           if (!bankWaiters[key].size) delete bankWaiters[key];
         }
-        resolve(ready);
+        if (ready) resolve(true);
+        else reject(error || bankErrors[key] || publicError(
+          String(topic || '').trim()
+            ? 'No topic question was ready before the Luna deadline. Please retry.'
+            : 'The Luna bank did not return a question in time. Please retry.',
+          408
+        ));
       };
       const onReady = () => finish(true);
 
       bankWaiters[key] = bankWaiters[key] || new Set();
       bankWaiters[key].add(onReady);
-      timer = setTimeout(() => finish(false), Math.max(0, timeoutMs));
+      timer = setTimeout(() => finish(false, bankErrors[key]), Math.max(0, timeoutMs));
       Promise.resolve(fillPromise).then(
-        () => finish(!!(bank[key] && bank[key].length)),
-        () => finish(!!(bank[key] && bank[key].length))
+        () => finish(!!(bank[key] && bank[key].length), bankErrors[key]),
+        error => finish(!!(bank[key] && bank[key].length), error)
       );
       // Close the small registration race if a fetch completed synchronously.
       if (bank[key] && bank[key].length) finish(true);
@@ -625,7 +734,10 @@
     const key = keyFor(topic, difficulty);
     bank[key] = bank[key] || [];
     bankSeen[key] = bankSeen[key] || new Set();
-    if (bank[key].length >= n) return Promise.resolve();
+    if (bank[key].length >= n) {
+      delete bankErrors[key];
+      return Promise.resolve();
+    }
     if (fetching[key]) return fetching[key];
 
     fetching[key] = (async () => {
@@ -633,13 +745,22 @@
       while (bank[key].length < n && misses < GEN_RETRY) {
         const needed = Math.min(10, n - bank[key].length);
         const qs = await generateQuestions(topic, difficulty, needed, Array.from(bankSeen[key]));
-        if (!qs.length) { misses++; continue; }
         const added = addUnique(bank[key], bankSeen[key], qs);
         if (!added) misses++;
-        else notifyBankReady(key);
+        else {
+          delete bankErrors[key];
+          notifyBankReady(key);
+        }
       }
-    })().catch(() => {
-      // Foreground start-of-run handling owns any user-facing error.
+      if (bank[key].length < n && misses >= GEN_RETRY) {
+        throw publicError('Luna did not return a new unique question. Please retry.', 502);
+      }
+    })().catch(error => {
+      // Home warming stays quiet; Start reads this safe error and reports the
+      // actual failure instead of replacing it with a generic deadline.
+      bankErrors[key] = error && error.publicMessage
+        ? error
+        : publicError('Question generation failed. Please retry.');
     }).finally(() => {
       delete fetching[key];
     });
@@ -700,7 +821,7 @@
   }
 
   // Warm every settled nonblank topic, including one- and two-character topics.
-  // Clearing the field immediately switches back to the blank built-in bank.
+  // Clearing the field immediately switches back to the blank Luna bank.
   let topicWarmTimer = null;
   function initTopicWarm() {
     els.topicInput.addEventListener('input', () => {
@@ -717,15 +838,20 @@
   }
 
   function updateOfflineNotice() {
-    els.offlineNotice.classList.toggle('show', !aiAvailable);
-    if (aiAvailable) {
-      els.offlineNotice.classList.remove('err');
-      $('offline-text').textContent = 'The local AI is offline. Built-in random-mix questions are ready while it reconnects.';
-    } else if (!els.offlineNotice.classList.contains('err')) {
-      const hasTopic = !!(els.topicInput && els.topicInput.value.trim());
-      $('offline-text').textContent = hasTopic
-        ? 'The local AI is offline. Custom topics need it; clear Topic to play the built-in random mix.'
-        : 'The local AI is offline. Built-in random-mix questions are ready while it reconnects.';
+    if (els.offlineNotice.classList.contains('err')) return;
+    const hasTopic = !!(els.topicInput && els.topicInput.value.trim());
+    const show = !topicGenerationAvailable || !lunaBankReady;
+    els.offlineNotice.classList.toggle('show', show);
+    if (!show) return;
+
+    if (!topicGenerationAvailable && hasTopic) {
+      $('offline-text').textContent = 'Live Luna topic generation is unavailable right now. Please retry in a moment.';
+    } else if (!topicGenerationAvailable && lunaBankReady) {
+      $('offline-text').textContent = `Live topic generation is unavailable, but the verified ${lunaBankSize.toLocaleString()}-question Luna bank remains ready for random trivia.`;
+    } else if (!lunaBankReady && topicGenerationAvailable) {
+      $('offline-text').textContent = 'The verified Luna bank is temporarily unavailable. Live topic generation remains available.';
+    } else {
+      $('offline-text').textContent = 'Trivia questions are temporarily unavailable. Please retry in a moment.';
     }
   }
 
@@ -743,6 +869,11 @@
     const endless = total === 0;
     const startedAt = Date.now();
 
+    // A retry owns a fresh status/error presentation even when the topic text
+    // did not change between attempts.
+    els.offlineNotice.classList.remove('err');
+    updateOfflineNotice();
+
     const activeRun = {
       topic, difficulty, endless,
       target: endless ? Infinity : total,
@@ -757,6 +888,7 @@
       awaitingNext: false,
       fetching: false,
       genFails: 0,
+      lastGenerationError: null,
     };
     run = activeRun;
 
@@ -779,7 +911,12 @@
       // Do not await all four prebank questions. Wake on the first arrival and
       // render it while the same `fetching[key]` promise continues the refill.
       const remaining = Math.max(0, FIRST_QUESTION_DEADLINE - (Date.now() - startedAt));
-      await waitForBankQuestion(topic, difficulty, warmer, remaining);
+      try {
+        await waitForBankQuestion(topic, difficulty, warmer, remaining);
+      } catch (error) {
+        if (run === activeRun) failRun(error);
+        return;
+      }
       if (run !== activeRun) return;
       addUnique(
         activeRun.pool,
@@ -790,7 +927,7 @@
     }
     if (run !== activeRun) return;
     if (!activeRun.pool.length) {
-      failRun(new Error('No question was ready within 9.75 seconds'));
+      failRun(bankErrors[keyFor(topic, difficulty)] || publicError('No valid question was ready in time. Please retry.', 408));
       return;
     }
 
@@ -807,18 +944,20 @@
     showView('home');
     els.offlineNotice.classList.add('show');
     els.offlineNotice.classList.add('err');
-    const detail = err && err.message ? err.message : 'unknown error';
+    const detail = errorDetail(err, 'Question generation failed. Please retry.');
+    const retry = /\bretry\b/i.test(detail) ? '' : ' Please retry.';
     $('offline-text').textContent = topic
-      ? 'Could not generate this custom topic: ' + detail + '. Custom topics require the local AI; clear Topic for the built-in random mix, or try again.'
-      : 'Could not start this run: ' + detail + '. Please try again.';
+      ? `Could not start questions about “${topic}”: ${detail}${retry}`
+      : `Could not load the verified Luna bank: ${detail}${retry}`;
   }
 
   function acceptBufferQuestions(activeRun, questions) {
     // addUnique drops any question already seen this run, so duplicates never
-    // enter the pool even if the model slips one through.
+    // enter the pool even if Luna slips one through.
     const added = addUnique(activeRun.pool, activeRun.seen, questions);
     if (added) {
       activeRun.genFails = 0;
+      activeRun.lastGenerationError = null;
       if (activeRun.awaitingNext) renderQuestion();
     } else {
       activeRun.genFails++;
@@ -829,16 +968,16 @@
   function finishBufferAttempt(activeRun) {
     if (run !== activeRun) return;
     activeRun.fetching = false;
-    // If the player is stuck waiting and the model can't produce any more
-    // unique questions (topic exhausted / offline), end the run gracefully
+    // If the player is stuck waiting and Luna can't produce any more unique
+    // questions, end the run gracefully
     // with what they've answered instead of spinning forever.
     if (activeRun.awaitingNext && activeRun.genFails >= STUCK_LIMIT) {
       if (activeRun.answered.length) return finishRun();
-      return failRun(new Error('Ran out of new questions'));
+      return failRun(activeRun.lastGenerationError || publicError('Luna ran out of new questions. Please retry.'));
     }
     const target = Math.min(activeRun.target, activeRun.index + 1 + PREFETCH);
     if (activeRun.pool.length < target) {
-      // Back off on repeated empty/offline responses so we don't hammer the model.
+      // Back off on repeated empty/unavailable responses so requests stay bounded.
       const delay = activeRun.genFails > 1 ? Math.min(4000, 500 * activeRun.genFails) : 0;
       setTimeout(() => {
         if (run === activeRun) ensureBuffer();
@@ -848,7 +987,7 @@
 
   // Fill every missing ready-ahead slot. Questions already landing in the home
   // bank are drained first, and an active keyed prebank request is shared so the
-  // client never sends two consumers racing for the same one-question AI fill.
+  // client never sends two consumers racing for the same Luna fill.
   function ensureBuffer() {
     if (!run || run.fetching) return;
     const activeRun = run;
@@ -886,8 +1025,11 @@
         const ready = takeFromBank(activeRun.topic, activeRun.difficulty, nextNeeded);
         acceptBufferQuestions(activeRun, ready);
         if (ready.length) keepPrebankFull(activeRun.topic, activeRun.difficulty);
-      }).catch(() => {
-        if (run === activeRun) activeRun.genFails++;
+      }).catch(error => {
+        if (run === activeRun) {
+          activeRun.genFails++;
+          activeRun.lastGenerationError = error;
+        }
       }).finally(() => finishBufferAttempt(activeRun));
       return;
     }
@@ -898,8 +1040,11 @@
       .then(qs => {
         if (run === activeRun) acceptBufferQuestions(activeRun, qs);
       })
-      .catch(() => {
-        if (run === activeRun) activeRun.genFails++;
+      .catch(error => {
+        if (run === activeRun) {
+          activeRun.genFails++;
+          activeRun.lastGenerationError = error;
+        }
       })
       .finally(() => finishBufferAttempt(activeRun));
   }
@@ -1170,13 +1315,33 @@
     });
   }
 
-  async function checkAi() {
+  async function checkTriviaStatus() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     try {
-      const res = await fetch('/api/eco-ai/status', { headers: { 'Authorization': 'Bearer ' + Auth.token } });
+      const res = await fetch('/api/trivia/status', {
+        headers: { 'Authorization': 'Bearer ' + Auth.token },
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error('status unavailable');
       const data = await res.json();
-      aiAvailable = !!data.available;
-      if (!aiAvailable && data.setupMessage) $('offline-text').textContent = data.setupMessage;
-    } catch { aiAvailable = false; }
+      const identityMatches = data && data.provider === EXPECTED_PROVIDER && data.model === EXPECTED_MODEL;
+      const advertisedAvailable = typeof data.topicGenerationAvailable === 'boolean'
+        ? data.topicGenerationAvailable
+        : !!(data && data.available);
+      const reportedSize = Number(data && data.bankSize);
+      topicGenerationAvailable = identityMatches && advertisedAvailable;
+      lunaBankReady = identityMatches
+        && data.bankReady === true
+        && reportedSize === REQUIRED_BANK_SIZE;
+      if (lunaBankReady) lunaBankSize = reportedSize;
+    } catch {
+      // The immutable blank-topic bank remains independently playable; a
+      // failed status request only makes live topic availability unknown.
+      topicGenerationAvailable = false;
+    } finally {
+      clearTimeout(timer);
+    }
     updateOfflineNotice();
   }
 
@@ -1190,8 +1355,9 @@
     renderStats();
     // Start the status check and the first prebank concurrently rather than
     // waiting on the status round-trip first — the ready bank is playable
-    // even when the model is down, so there is nothing to gain by serializing.
-    checkAi();
+    // even when live topic generation is unavailable, so there is nothing to
+    // gain by serializing.
+    checkTriviaStatus();
     warmHomeBank();
   });
 })();

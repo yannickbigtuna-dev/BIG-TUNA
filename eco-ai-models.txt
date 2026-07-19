@@ -1,5 +1,3 @@
 # Eco AI Ollama maintenance manifest
-phi4-mini:latest
-qwen2.5:1.5b
 llama3.1:8b
 qwen2.5-coder:7b

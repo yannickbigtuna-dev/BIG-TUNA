@@ -58,9 +58,10 @@ const ECO_AI_DEFAULT_OPTIONS = Object.freeze({
   temperature: 0.5,
   num_ctx: 8192,
 });
-// Blank-topic trivia uses the immediate built-in safety bank. Custom topics use
-// a small AI-only bank with one compact question generated inside this deadline.
-const TRIVIA_GEN_TIMEOUT_MS = 9000;
+// Blank-topic trivia uses the committed Luna-generated bank. Custom topics use
+// one Luna generation request plus two concurrent independent Luna fact-checks
+// inside this deadline, leaving browser headroom under the 10-second budget.
+const TRIVIA_GEN_TIMEOUT_MS = 8000;
 const TRIVIA_MAX_COUNT = 10;
 const TRIVIA_MAX_TOPIC_LEN = 100;
 // The immediate bank can cheaply compare a long run history. The compact AI
@@ -80,15 +81,36 @@ const triviaGenerator = require('./lib/trivia-generator');
 const geoip = require('geoip-lite');
 
 const {
-  buildTriviaFormat,
-  buildTriviaMessages: buildTriviaAiMessages,
-  extractTriviaArray: extractTriviaAiArray,
+  TRIVIA_MODEL,
+  TRIVIA_BANK_SIZE,
+  DEFAULT_TRIVIA_BANK_PATH,
   normalizeQuestionText: normalizeTriviaText,
-  pickTriviaModel,
-  selectFallbackQuestions,
-  validateTriviaQuestions: validateGeneratedTriviaQuestions,
+  loadTriviaBank,
+  selectBankQuestions,
+  prepareQuestionForClient,
+  requestVerifiedTriviaQuestions,
 } = triviaGenerator;
+const OPENAI_API_KEY = typeof process.env.OPENAI_API_KEY === 'string'
+  ? process.env.OPENAI_API_KEY.trim()
+  : '';
 const triviaBanks = new Map();
+let triviaQuestionBank = Object.freeze([]);
+let triviaBankSetupMessage = '';
+
+try {
+  const loadedTriviaBank = loadTriviaBank(DEFAULT_TRIVIA_BANK_PATH);
+  const loadedQuestions = Array.isArray(loadedTriviaBank?.questions)
+    ? loadedTriviaBank.questions
+    : [];
+  if (loadedQuestions.length !== TRIVIA_BANK_SIZE) {
+    throw new Error(`Expected exactly ${TRIVIA_BANK_SIZE} validated questions`);
+  }
+  triviaQuestionBank = Object.freeze(loadedQuestions.slice());
+} catch (error) {
+  triviaBankSetupMessage = `The verified ${TRIVIA_BANK_SIZE}-question Trivia bank is unavailable.`;
+  const detail = error instanceof Error && error.message ? error.message : 'Unknown validation error';
+  console.error(`[trivia] Failed to load ${DEFAULT_TRIVIA_BANK_PATH}: ${detail}`);
+}
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
 for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, RADAR_DIR, ASSIGNMENTS_DIR, ANALYTICS_EVENTS_DIR, EMAIL_TEMPLATES_DIR, EMAIL_CAMPAIGNS_DIR])
@@ -850,9 +872,8 @@ function buildEcoAiOllamaMessages(messages, skillId) {
 
 // ── Trivia question generation (Lumina Trivia) ────────────────────────────────
 
-function triviaBankKey(topic, difficulty, requestedModel) {
+function triviaBankKey(topic, difficulty) {
   return JSON.stringify([
-    requestedModel || '',
     difficulty || 'any',
     String(topic || '').trim().toLowerCase(),
   ]);
@@ -868,8 +889,8 @@ function pruneTriviaBanks(protectedKey = '') {
   }
 }
 
-function getTriviaBank(topic, difficulty, requestedModel) {
-  const key = triviaBankKey(topic, difficulty, requestedModel);
+function getTriviaBank(topic, difficulty) {
+  const key = triviaBankKey(topic, difficulty);
   let state = triviaBanks.get(key);
   if (!state) {
     state = {
@@ -879,8 +900,6 @@ function getTriviaBank(topic, difficulty, requestedModel) {
       filling: null,
       nextRetryAt: 0,
       lastUsedAt: Date.now(),
-      aiAvailable: null,
-      lastModel: '',
       lastError: '',
     };
     triviaBanks.set(key, state);
@@ -918,90 +937,61 @@ function addTriviaBankQuestions(state, questions) {
   return added;
 }
 
-function parseTriviaModelContent(content) {
-  let parsed = null;
-  try { parsed = JSON.parse(content); } catch {
-    const match = String(content || '').match(/\{[\s\S]*\}/);
-    if (match) {
-      try { parsed = JSON.parse(match[0]); } catch {}
-    }
+function safeTriviaGenerationError(error, timedOut = false) {
+  if (
+    timedOut
+    || error?.name === 'AbortError'
+    || error?.code === 'TRIVIA_REQUEST_ABORTED'
+    || /deadline|timed out/i.test(String(error?.message || ''))
+  ) {
+    return 'Question generation timed out. Please try again.';
   }
-  return parsed;
+  return 'Unable to generate a verified question right now. Please try again.';
 }
 
-// Custom-topic AI generation is coalesced per topic/difficulty/model. A cache
+// Custom-topic Luna generation is coalesced per topic/difficulty. A cache
 // miss awaits this promise; after each consumed question the route starts the
 // next one-question fill so a following request can share or consume it.
-function queueTriviaRefill({ topic, difficulty, requestedModel, exclude, state }) {
+function queueTriviaRefill({ topic, difficulty, exclude, state }) {
   if (state.filling || state.questions.length >= TRIVIA_BANK_TARGET || Date.now() < state.nextRetryAt) {
     return state.filling;
+  }
+  if (!OPENAI_API_KEY) {
+    state.lastError = 'Topic question generation is not configured.';
+    return null;
   }
 
   state.filling = (async () => {
     const deadline = new AbortController();
-    const deadlineTimer = setTimeout(() => {
-      deadline.abort(new Error('Trivia question generation timed out after 9 seconds'));
-    }, TRIVIA_GEN_TIMEOUT_MS);
+    let deadlineTimer;
 
     try {
-      let model = state.lastModel;
-      if (!model) {
-        const status = await getEcoAiStatus(deadline.signal);
-        if (deadline.signal.aborted) throw deadline.signal.reason;
-        state.aiAvailable = !!status.available && status.models.length > 0;
-        if (!state.aiAvailable) {
-          throw new Error(status.setupMessage || status.error || 'Ollama is unavailable');
-        }
-
-        model = pickTriviaModel(status.models, requestedModel);
-        if (!model) throw new Error('No suitable local trivia model is installed');
-      } else {
-        state.aiAvailable = true;
-      }
-
       const avoid = [...state.history, ...(Array.isArray(exclude) ? exclude : [])].slice(-TRIVIA_MAX_EXCLUDE);
-      const result = await ollamaFetchJson('/api/chat', {
-        model,
-        stream: false,
-        format: buildTriviaFormat(1),
-        keep_alive: '30m',
-        messages: buildTriviaAiMessages(topic, 1, difficulty, avoid),
-        options: {
-          temperature: 0.7,
-          top_p: 0.9,
-          num_ctx: 2048,
-          num_predict: 290,
-          seed: crypto.randomInt(2 ** 31),
-        },
-      }, {
-        timeoutMs: TRIVIA_GEN_TIMEOUT_MS,
-        signal: deadline.signal,
+      const timeout = new Promise((_, reject) => {
+        deadlineTimer = setTimeout(() => {
+          const error = new Error('Trivia generation deadline exceeded');
+          deadline.abort(error);
+          reject(error);
+        }, TRIVIA_GEN_TIMEOUT_MS);
       });
-
-      if (!result.ok) {
-        state.aiAvailable = false;
-        throw new Error(result.data?.error || result.text || `Ollama HTTP ${result.status}`);
-      }
-
-      const content = typeof result.data?.message?.content === 'string'
-        ? result.data.message.content : '';
-      const parsed = parseTriviaModelContent(content);
-      const excluded = new Set([
-        ...state.seen,
-        ...(Array.isArray(exclude) ? exclude.map(normalizeTriviaText) : []),
+      const generated = await Promise.race([
+        requestVerifiedTriviaQuestions({
+          apiKey: OPENAI_API_KEY,
+          topic,
+          count: 1,
+          difficulty: difficulty === 'any' ? 'mixed' : difficulty,
+          exclude: avoid,
+          signal: deadline.signal,
+        }),
+        timeout,
       ]);
-      const generated = validateGeneratedTriviaQuestions(
-        extractTriviaAiArray(parsed),
-        1,
-        excluded
-      );
-      if (['easy', 'medium', 'hard'].includes(difficulty)) {
-        generated.forEach(question => { question.difficulty = difficulty; });
+      if (!Array.isArray(generated) || !generated.length) {
+        throw new Error('No validated Trivia question was returned');
       }
-      if (!generated.length) throw new Error('The local model returned no usable trivia question');
 
-      addTriviaBankQuestions(state, generated);
-      state.lastModel = model;
+      if (!addTriviaBankQuestions(state, generated)) {
+        throw new Error('No new validated Trivia question was returned');
+      }
       state.lastError = '';
       state.nextRetryAt = 0;
       return generated;
@@ -1009,8 +999,7 @@ function queueTriviaRefill({ topic, difficulty, requestedModel, exclude, state }
       clearTimeout(deadlineTimer);
     }
   })().catch(error => {
-    state.aiAvailable = false;
-    state.lastError = ecoAiFriendlyError(error);
+    state.lastError = safeTriviaGenerationError(error);
     state.nextRetryAt = Date.now() + TRIVIA_REFILL_RETRY_MS;
   }).finally(() => {
     state.filling = null;
@@ -2605,11 +2594,36 @@ async function handleAPI(req, res, urlPath) {
     return;
   }
 
+  // GET /api/trivia/status - authenticated, non-spending Trivia readiness check.
+  if (req.method === 'GET' && urlPath === '/api/trivia/status') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+
+    const topicGenerationAvailable = !!OPENAI_API_KEY;
+    const bankReady = triviaQuestionBank.length === TRIVIA_BANK_SIZE;
+    const setupMessages = [];
+    if (!topicGenerationAvailable) {
+      setupMessages.push('Set OPENAI_API_KEY on the website server to enable custom-topic questions.');
+    }
+    if (!bankReady) {
+      setupMessages.push(triviaBankSetupMessage || `The verified ${TRIVIA_BANK_SIZE}-question Trivia bank is unavailable.`);
+    }
+
+    return jsonRes(res, 200, {
+      available: topicGenerationAvailable,
+      topicGenerationAvailable,
+      provider: 'openai',
+      model: TRIVIA_MODEL,
+      bankReady,
+      bankSize: triviaQuestionBank.length,
+      ...(setupMessages.length ? { setupMessage: setupMessages.join(' ') } : {}),
+    });
+  }
+
   // POST /api/trivia/generate - authenticated low-latency trivia generator.
-  // Body: { topic?, count?, model?, difficulty?, exclude?: string[] }. `exclude`
-  // is the list of already-asked questions. Blank topics use only the immediate
-  // built-in bank. Custom topics use only their exact keyed AI bank; the first
-  // miss waits for one compact question and later requests share queued fills.
+  // Body: { topic?, count?, difficulty?, exclude?: string[] }. Blank topics use
+  // only the committed Luna bank. Custom topics use their exact keyed Luna bank;
+  // the first miss waits for one compact question and later requests share fills.
   if (req.method === 'POST' && urlPath === '/api/trivia/generate') {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
@@ -2634,57 +2648,118 @@ async function handleAPI(req, res, urlPath) {
           .slice(-TRIVIA_MAX_EXCLUDE)
       : [];
     const excludeSet = new Set(exclude.map(normalizeTriviaText));
-    const requestedModel = typeof body?.model === 'string'
-      ? body.model.trim().slice(0, 120) : '';
     if (!topic) {
-      const fallback = selectFallbackQuestions({ topic, difficulty, count, exclude });
-      if (!fallback.questions.length) {
+      if (triviaQuestionBank.length !== TRIVIA_BANK_SIZE) {
         return jsonRes(res, 503, {
-          error: 'No built-in trivia questions are available right now',
+          error: triviaBankSetupMessage || `The verified ${TRIVIA_BANK_SIZE}-question Trivia bank is unavailable.`,
+          provider: 'openai',
+          model: TRIVIA_MODEL,
+          source: 'luna-bank',
+          bankSize: triviaQuestionBank.length,
+          questions: [],
+        });
+      }
+
+      let questions;
+      try {
+        const selected = selectBankQuestions(triviaQuestionBank, {
+          difficulty: difficulty === 'any' ? 'mixed' : difficulty,
+          count,
+          exclude,
+        });
+        questions = selected.map(question => prepareQuestionForClient(question));
+      } catch {
+        return jsonRes(res, 503, {
+          error: 'The verified Trivia bank is unavailable right now.',
+          provider: 'openai',
+          model: TRIVIA_MODEL,
+          source: 'luna-bank',
+          bankSize: triviaQuestionBank.length,
+          questions: [],
+        });
+      }
+      if (!questions.length) {
+        return jsonRes(res, 503, {
+          error: 'No unused verified Trivia questions are available right now.',
+          provider: 'openai',
+          model: TRIVIA_MODEL,
+          source: 'luna-bank',
+          bankSize: triviaQuestionBank.length,
           questions: [],
         });
       }
 
       return jsonRes(res, 200, {
         ok: true,
-        model: '',
+        provider: 'openai',
+        model: TRIVIA_MODEL,
         topic,
         topicMatched: true,
         difficulty,
-        source: 'built-in',
-        aiAvailable: null,
+        source: 'luna-bank',
+        bankSize: triviaQuestionBank.length,
+        aiAvailable: !!OPENAI_API_KEY,
         refillPending: false,
-        questions: fallback.questions,
+        questions,
       });
     }
 
-    const state = getTriviaBank(topic, difficulty, requestedModel);
-    let questions = takeTriviaBankQuestions(state, count, excludeSet);
+    if (!OPENAI_API_KEY) {
+      return jsonRes(res, 503, {
+        error: 'Topic question generation is not configured.',
+        provider: 'openai',
+        model: TRIVIA_MODEL,
+        topic,
+        topicMatched: true,
+        difficulty,
+        source: 'openai-topic',
+        questions: [],
+      });
+    }
 
-    if (!questions.length) {
+    const state = getTriviaBank(topic, difficulty);
+    let canonicalQuestions = takeTriviaBankQuestions(state, count, excludeSet);
+
+    if (!canonicalQuestions.length) {
       const coalescedQuestions = await queueTriviaRefill({
         topic,
         difficulty,
-        requestedModel,
         exclude,
         state,
       });
-      questions = takeTriviaBankQuestions(state, count, excludeSet);
-      if (!questions.length && Array.isArray(coalescedQuestions)) {
-        questions = coalescedQuestions
+      canonicalQuestions = takeTriviaBankQuestions(state, count, excludeSet);
+      if (!canonicalQuestions.length && Array.isArray(coalescedQuestions)) {
+        canonicalQuestions = coalescedQuestions
           .filter(question => !excludeSet.has(normalizeTriviaText(question?.question)))
           .slice(0, count);
       }
     }
 
-    if (!questions.length) {
+    if (!canonicalQuestions.length) {
       return jsonRes(res, 503, {
-        error: `Unable to generate a trivia question about "${topic}" right now`,
-        details: state.lastError || 'The local model did not return a usable question',
+        error: state.lastError || 'Unable to generate a verified question right now. Please try again.',
+        provider: 'openai',
+        model: TRIVIA_MODEL,
         topic,
         topicMatched: true,
         difficulty,
-        source: 'ai-topic',
+        source: 'openai-topic',
+        questions: [],
+      });
+    }
+
+    let questions;
+    try {
+      questions = canonicalQuestions.map(question => prepareQuestionForClient(question));
+    } catch {
+      return jsonRes(res, 503, {
+        error: 'Unable to prepare a verified question right now. Please try again.',
+        provider: 'openai',
+        model: TRIVIA_MODEL,
+        topic,
+        topicMatched: true,
+        difficulty,
+        source: 'openai-topic',
         questions: [],
       });
     }
@@ -2692,19 +2767,19 @@ async function handleAPI(req, res, urlPath) {
     queueTriviaRefill({
       topic,
       difficulty,
-      requestedModel,
       exclude: [...exclude, ...questions.map(question => question.question)],
       state,
     });
 
     return jsonRes(res, 200, {
       ok: true,
-      model: state.lastModel || '',
+      provider: 'openai',
+      model: TRIVIA_MODEL,
       topic,
       topicMatched: true,
       difficulty,
-      source: 'ai-topic',
-      aiAvailable: state.aiAvailable,
+      source: 'openai-topic',
+      aiAvailable: true,
       refillPending: !!state.filling,
       questions,
     });

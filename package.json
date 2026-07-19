@@ -4,6 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
+    "generate:trivia-bank": "node scripts/generate-trivia-bank.js",
     "test": "node --test",
     "start": "node server.js"
   },

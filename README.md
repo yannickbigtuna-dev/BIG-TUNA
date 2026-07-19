@@ -100,7 +100,7 @@ http://localhost:3000
 
 There is no build step. Changes to files in `apps/` are picked up on the next browser refresh. Changes to `server.js` require restarting the Node process.
 
-The default test script is currently a placeholder:
+Run the Node test suite with:
 
 ```powershell
 npm test
@@ -127,6 +127,43 @@ pm2 save
 ```
 
 If this repository is not located at `C:\SERVER`, update the batch files, pm2 commands, and Cloudflare configuration paths before installing services.
+
+## Trivia OpenAI Setup
+
+Trivia uses OpenAI `gpt-5.6-luna` in two ways:
+
+- Blank-topic games sample from the committed `lib/trivia-bank.json`, which
+  contains exactly 1,000 Luna-generated questions and is never consumed at
+  runtime.
+- Typed topics are generated live through the OpenAI Responses API, then
+  admitted only when two independent Luna checks select the same canonical
+  answer. The API key stays on the server and is never sent to the browser.
+
+Set `OPENAI_API_KEY` in the server environment (see `server.env.example`), then
+apply it to PM2 with:
+
+```powershell
+pm2 restart ecosystem.config.cjs --update-env
+```
+
+The bank is a deployable asset, not live mutable state. Regenerate it only as
+an intentional maintenance operation; the generator uses Luna for candidate
+creation and two independent answer-verification passes before admitting a
+question. It rejects paraphrases of an existing fact across the entire bank,
+checkpoints resumable work outside the repository, and replaces the bank only
+after exact-size validation:
+
+```powershell
+npm run generate:trivia-bank
+npm test
+```
+
+To keep the accepted portion of an existing twice-verified bank while replacing
+duplicates or a reviewed question, use `--repair`; repeat `--drop-id` for any
+specific Luna question IDs that must be replaced.
+
+Never commit the API key, `server.env`, checkpoints, or partial generator
+output.
 
 ## Eco AI Ollama Maintenance
 
