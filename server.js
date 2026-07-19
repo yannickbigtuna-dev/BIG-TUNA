@@ -78,6 +78,7 @@ const YHZ_RADAR_TIMEOUT_MS = 8000;
 const assignmentCoach = require('./lib/assignment-coach');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
+const { createTriviaTopicPool } = require('./lib/trivia-topic-pool');
 const geoip = require('geoip-lite');
 
 const {
@@ -93,7 +94,6 @@ const {
 const OPENAI_API_KEY = typeof process.env.OPENAI_API_KEY === 'string'
   ? process.env.OPENAI_API_KEY.trim()
   : '';
-const triviaBanks = new Map();
 let triviaQuestionBank = Object.freeze([]);
 let triviaBankSetupMessage = '';
 
@@ -872,71 +872,6 @@ function buildEcoAiOllamaMessages(messages, skillId) {
 
 // ── Trivia question generation (Lumina Trivia) ────────────────────────────────
 
-function triviaBankKey(topic, difficulty) {
-  return JSON.stringify([
-    difficulty || 'any',
-    String(topic || '').trim().toLowerCase(),
-  ]);
-}
-
-function pruneTriviaBanks(protectedKey = '') {
-  if (triviaBanks.size <= TRIVIA_BANK_MAX_KEYS) return;
-  const oldest = [...triviaBanks.entries()]
-    .filter(([key, state]) => key !== protectedKey && !state.filling)
-    .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
-  while (triviaBanks.size > TRIVIA_BANK_MAX_KEYS && oldest.length) {
-    triviaBanks.delete(oldest.shift()[0]);
-  }
-}
-
-function getTriviaBank(topic, difficulty) {
-  const key = triviaBankKey(topic, difficulty);
-  let state = triviaBanks.get(key);
-  if (!state) {
-    state = {
-      questions: [],
-      seen: new Set(),
-      history: [],
-      filling: null,
-      nextRetryAt: 0,
-      lastUsedAt: Date.now(),
-      lastError: '',
-    };
-    triviaBanks.set(key, state);
-    pruneTriviaBanks(key);
-  }
-  state.lastUsedAt = Date.now();
-  return state;
-}
-
-function takeTriviaBankQuestions(state, count, excludeSet) {
-  const selected = [];
-  const remaining = [];
-  for (const question of state.questions) {
-    const key = normalizeTriviaText(question.question);
-    if (excludeSet.has(key)) continue;
-    if (selected.length < count) selected.push(question);
-    else remaining.push(question);
-  }
-  state.questions = remaining;
-  return selected;
-}
-
-function addTriviaBankQuestions(state, questions) {
-  let added = 0;
-  for (const question of questions) {
-    const key = normalizeTriviaText(question?.question);
-    if (!key || state.seen.has(key)) continue;
-    state.seen.add(key);
-    state.history.push(question.question);
-    state.questions.push(question);
-    added++;
-    if (state.questions.length >= TRIVIA_BANK_TARGET) break;
-  }
-  if (state.history.length > 120) state.history = state.history.slice(-120);
-  return added;
-}
-
 function safeTriviaGenerationError(error, timedOut = false) {
   if (
     timedOut
@@ -949,24 +884,17 @@ function safeTriviaGenerationError(error, timedOut = false) {
   return 'Unable to generate a verified question right now. Please try again.';
 }
 
-// Custom-topic Luna generation is coalesced per topic/difficulty. A cache
-// miss awaits this promise; after each consumed question the route starts the
-// next one-question fill so a following request can share or consume it.
-function queueTriviaRefill({ topic, difficulty, exclude, state }) {
-  if (state.filling || state.questions.length >= TRIVIA_BANK_TARGET || Date.now() < state.nextRetryAt) {
-    return state.filling;
-  }
-  if (!OPENAI_API_KEY) {
-    state.lastError = 'Topic question generation is not configured.';
-    return null;
-  }
-
-  state.filling = (async () => {
+const triviaTopicPool = createTriviaTopicPool({
+  normalize: normalizeTriviaText,
+  targetSize: TRIVIA_BANK_TARGET,
+  maxKeys: TRIVIA_BANK_MAX_KEYS,
+  maxExclude: TRIVIA_MAX_EXCLUDE,
+  retryMs: TRIVIA_REFILL_RETRY_MS,
+  safeError: safeTriviaGenerationError,
+  generate: async ({ topic, difficulty, count, exclude }) => {
     const deadline = new AbortController();
     let deadlineTimer;
-
     try {
-      const avoid = [...state.history, ...(Array.isArray(exclude) ? exclude : [])].slice(-TRIVIA_MAX_EXCLUDE);
       const timeout = new Promise((_, reject) => {
         deadlineTimer = setTimeout(() => {
           const error = new Error('Trivia generation deadline exceeded');
@@ -978,9 +906,10 @@ function queueTriviaRefill({ topic, difficulty, exclude, state }) {
         requestVerifiedTriviaQuestions({
           apiKey: OPENAI_API_KEY,
           topic,
-          count: 1,
+          count,
           difficulty: difficulty === 'any' ? 'mixed' : difficulty,
-          exclude: avoid,
+          exclude,
+          allowPartial: true,
           signal: deadline.signal,
         }),
         timeout,
@@ -988,25 +917,12 @@ function queueTriviaRefill({ topic, difficulty, exclude, state }) {
       if (!Array.isArray(generated) || !generated.length) {
         throw new Error('No validated Trivia question was returned');
       }
-
-      if (!addTriviaBankQuestions(state, generated)) {
-        throw new Error('No new validated Trivia question was returned');
-      }
-      state.lastError = '';
-      state.nextRetryAt = 0;
       return generated;
     } finally {
       clearTimeout(deadlineTimer);
     }
-  })().catch(error => {
-    state.lastError = safeTriviaGenerationError(error);
-    state.nextRetryAt = Date.now() + TRIVIA_REFILL_RETRY_MS;
-  }).finally(() => {
-    state.filling = null;
-  });
-
-  return state.filling;
-}
+  },
+});
 
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -2622,8 +2538,7 @@ async function handleAPI(req, res, urlPath) {
 
   // POST /api/trivia/generate - authenticated low-latency trivia generator.
   // Body: { topic?, count?, difficulty?, exclude?: string[] }. Blank topics use
-  // only the committed Luna bank. Custom topics use their exact keyed Luna bank;
-  // the first miss waits for one compact question and later requests share fills.
+  // only the committed Luna bank. Custom topics use a keyed, demand-aware pool.
   if (req.method === 'POST' && urlPath === '/api/trivia/generate') {
     const user = getSessionUser(getToken(req));
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
@@ -2647,7 +2562,6 @@ async function handleAPI(req, res, urlPath) {
           .map(s => s.replace(/\s+/g, ' ').trim().slice(0, TRIVIA_EXCLUDE_ITEM_MAX_LEN))
           .slice(-TRIVIA_MAX_EXCLUDE)
       : [];
-    const excludeSet = new Set(exclude.map(normalizeTriviaText));
     if (!topic) {
       if (triviaQuestionBank.length !== TRIVIA_BANK_SIZE) {
         return jsonRes(res, 503, {
@@ -2717,27 +2631,12 @@ async function handleAPI(req, res, urlPath) {
       });
     }
 
-    const state = getTriviaBank(topic, difficulty);
-    let canonicalQuestions = takeTriviaBankQuestions(state, count, excludeSet);
-
-    if (!canonicalQuestions.length) {
-      const coalescedQuestions = await queueTriviaRefill({
-        topic,
-        difficulty,
-        exclude,
-        state,
-      });
-      canonicalQuestions = takeTriviaBankQuestions(state, count, excludeSet);
-      if (!canonicalQuestions.length && Array.isArray(coalescedQuestions)) {
-        canonicalQuestions = coalescedQuestions
-          .filter(question => !excludeSet.has(normalizeTriviaText(question?.question)))
-          .slice(0, count);
-      }
-    }
+    const poolResult = await triviaTopicPool.request({ topic, difficulty, count, exclude });
+    const canonicalQuestions = poolResult.questions;
 
     if (!canonicalQuestions.length) {
       return jsonRes(res, 503, {
-        error: state.lastError || 'Unable to generate a verified question right now. Please try again.',
+        error: poolResult.error || 'Unable to generate a verified question right now. Please try again.',
         provider: 'openai',
         model: TRIVIA_MODEL,
         topic,
@@ -2764,13 +2663,6 @@ async function handleAPI(req, res, urlPath) {
       });
     }
 
-    queueTriviaRefill({
-      topic,
-      difficulty,
-      exclude: [...exclude, ...questions.map(question => question.question)],
-      state,
-    });
-
     return jsonRes(res, 200, {
       ok: true,
       provider: 'openai',
@@ -2780,7 +2672,7 @@ async function handleAPI(req, res, urlPath) {
       difficulty,
       source: 'openai-topic',
       aiAvailable: true,
-      refillPending: !!state.filling,
+      refillPending: poolResult.refillPending,
       questions,
     });
   }
