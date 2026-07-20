@@ -228,6 +228,10 @@
   let eventsConnected = false;
   let lastUpdatedAt = '';
   let hasLoadedState = false;
+  let verifiedToken = '';
+  let authCheckSequence = 0;
+  let authValidation = null;
+  let stateLoadPromise = null;
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   document.body.classList.toggle('standalone', isStandalone);
@@ -241,6 +245,15 @@
     return localStorage.getItem(TOKEN_KEY) || '';
   }
 
+  function isOwnerUser(user) {
+    return !!user && typeof user.username === 'string' && user.username.toLowerCase() === 'yannick';
+  }
+
+  function clearCachedSession() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  }
+
   function apiToWebsiteState(on) {
     return INVERT_WEBSITE_STATE ? on !== true : on === true;
   }
@@ -249,35 +262,118 @@
     return INVERT_WEBSITE_STATE ? on !== true : on === true;
   }
 
-  function setVisual(on, updatedAt) {
-    if (updatedAt) lastUpdatedAt = updatedAt;
-    hasLoadedState = true;
+  function setVisual(on) {
     currentOn = on === true;
     document.body.classList.toggle('is-on', currentOn);
     switchBtn.setAttribute('aria-checked', String(currentOn));
   }
 
-  // Top status dot: green only when the cached session is yannick (can control).
+  function applyServerState(data) {
+    if (!data || typeof data.on !== 'boolean') return false;
+    const updatedAt = typeof data.updatedAt === 'string' ? data.updatedAt : '';
+    if (updatedAt && lastUpdatedAt && updatedAt < lastUpdatedAt) return false;
+    if (updatedAt) lastUpdatedAt = updatedAt;
+    hasLoadedState = true;
+    setVisual(apiToWebsiteState(data.on));
+    updateAccess();
+    return true;
+  }
+
+  function invalidateAccess(clearSession = false) {
+    authCheckSequence++;
+    verifiedToken = '';
+    authValidation = null;
+    if (clearSession) clearCachedSession();
+    updateAccess();
+  }
+
+  // Top status dot: green only when a live yannick session has been verified.
   function updateAccess() {
     const user = getCachedUser();
-    canControl = !!user && typeof user.username === 'string' && user.username.toLowerCase() === 'yannick';
-    switchBtn.disabled = !canControl || pending;
+    const token = getToken();
+    canControl = !!token && token === verifiedToken && isOwnerUser(user);
+    switchBtn.disabled = !canControl || !hasLoadedState || pending;
     document.body.classList.toggle('is-authed', canControl);
   }
 
-  async function loadState() {
-    try {
-      const res = await fetch('/api/lights', { cache: 'no-store' });
-      if (!res.ok) throw new Error('load failed');
-      const data = await res.json();
-      if (!lastUpdatedAt || !data.updatedAt || data.updatedAt >= lastUpdatedAt) {
-        setVisual(apiToWebsiteState(data.on), data.updatedAt);
-      }
-    } catch {
-      // Keep last known visual; nothing to display.
-    } finally {
+  function validateAccess(force = false) {
+    const token = getToken();
+    const cachedUser = getCachedUser();
+
+    if (!token) {
+      invalidateAccess(false);
+      if (cachedUser) localStorage.removeItem(USER_KEY);
       updateAccess();
+      return Promise.resolve(false);
     }
+
+    if (!force && token === verifiedToken && isOwnerUser(cachedUser)) {
+      updateAccess();
+      return Promise.resolve(true);
+    }
+
+    if (authValidation && authValidation.token === token) {
+      return authValidation.promise;
+    }
+
+    const checkId = ++authCheckSequence;
+    verifiedToken = '';
+    updateAccess();
+
+    const validation = { token, checkId, promise: null };
+    validation.promise = (async () => {
+      try {
+        const res = await fetch('/api/auth/me', {
+          cache: 'no-store',
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        if (checkId !== authCheckSequence || token !== getToken()) return false;
+
+        if (res.status === 401) {
+          invalidateAccess(true);
+          return false;
+        }
+        if (!res.ok) return false;
+
+        const data = await res.json();
+        if (checkId !== authCheckSequence || token !== getToken()) return false;
+        if (!data || typeof data.username !== 'string') return false;
+
+        const nextUser = {
+          ...(cachedUser && typeof cachedUser === 'object' ? cachedUser : {}),
+          ...data,
+          username: data.username,
+        };
+        localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+        if (isOwnerUser(nextUser)) verifiedToken = token;
+        return token === verifiedToken;
+      } catch {
+        // A transient network failure must not erase an otherwise valid cache.
+        return false;
+      } finally {
+        if (authValidation === validation) authValidation = null;
+        updateAccess();
+      }
+    })();
+    authValidation = validation;
+    return validation.promise;
+  }
+
+  function loadState() {
+    if (stateLoadPromise) return stateLoadPromise;
+    stateLoadPromise = (async () => {
+      try {
+        const res = await fetch('/api/lights', { cache: 'no-store' });
+        if (!res.ok) throw new Error('load failed');
+        applyServerState(await res.json());
+      } catch {
+        // Keep the last authoritative visual; nothing else to display.
+      } finally {
+        stateLoadPromise = null;
+        updateAccess();
+      }
+    })();
+    return stateLoadPromise;
   }
 
   // Bottom status dot: green when the relay polled the server within the last 5s.
@@ -301,9 +397,7 @@
     };
     events.onmessage = event => {
       try {
-        const data = JSON.parse(event.data);
-        setVisual(apiToWebsiteState(data.on), data.updatedAt);
-        updateAccess();
+        applyServerState(JSON.parse(event.data));
       } catch {}
     };
     events.onerror = () => {
@@ -312,28 +406,54 @@
     return true;
   }
 
-  async function saveState(on) {
-    if (!canControl || pending) return;
-    const previous = currentOn;
+  async function saveState() {
+    if (!canControl || !hasLoadedState || pending) return;
+    const token = verifiedToken;
     pending = true;
     switchBtn.setAttribute('aria-busy', 'true');
-    setVisual(on);
     updateAccess();
 
     try {
+      let latest = null;
+      for (let attempt = 0; attempt < 2 && !latest; attempt++) {
+        const latestRes = await fetch('/api/lights', { cache: 'no-store' });
+        if (!latestRes.ok) throw new Error('load failed');
+        const candidate = await latestRes.json();
+        if (!candidate || typeof candidate.on !== 'boolean') throw new Error('invalid state');
+        if (applyServerState(candidate)) latest = candidate;
+      }
+      if (!latest) throw new Error('stale state');
+
+      if (token !== verifiedToken || token !== getToken()) {
+        const error = new Error('Session changed');
+        error.sessionChanged = true;
+        throw error;
+      }
+
+      const targetOn = !apiToWebsiteState(latest.on);
       const res = await fetch('/api/lights', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + getToken(),
+          'Authorization': 'Bearer ' + token,
         },
-        body: JSON.stringify({ on: websiteToApiState(on) }),
+        body: JSON.stringify({ on: websiteToApiState(targetOn) }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'save failed');
-      setVisual(apiToWebsiteState(data.on), data.updatedAt);
-    } catch {
-      setVisual(previous);
+      if (!res.ok) {
+        const error = new Error(data.error || 'save failed');
+        error.status = res.status;
+        throw error;
+      }
+      if (!applyServerState(data)) throw new Error('invalid state');
+    } catch (error) {
+      if (error && error.status === 401 && token === getToken()) {
+        invalidateAccess(true);
+      } else if (error && (error.status === 401 || error.status === 403 || error.sessionChanged)) {
+        invalidateAccess(false);
+        validateAccess();
+      }
+      await loadState();
     } finally {
       pending = false;
       switchBtn.setAttribute('aria-busy', 'false');
@@ -343,17 +463,36 @@
 
   function handleSwitchPress(event) {
     event.preventDefault();
-    saveState(!currentOn);
+    saveState();
   }
 
   switchBtn.addEventListener('pointerdown', handleSwitchPress);
   switchBtn.addEventListener('keydown', event => {
     if (event.key === ' ' || event.key === 'Enter') handleSwitchPress(event);
   });
-  window.addEventListener('storage', updateAccess);
+  window.addEventListener('storage', event => {
+    if (event.key && event.key !== TOKEN_KEY && event.key !== USER_KEY) return;
+    invalidateAccess(false);
+    validateAccess();
+  });
+  window.addEventListener('online', () => {
+    validateAccess();
+    if (!pending) loadState();
+  });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    validateAccess();
+    if (!pending) loadState();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    validateAccess();
+    if (!pending) loadState();
+  });
 
   updateAccess();
   loadState();
+  validateAccess();
   loadDeviceStatus();
   connectEvents();
   setInterval(() => {
