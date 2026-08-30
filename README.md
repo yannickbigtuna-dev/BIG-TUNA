@@ -358,6 +358,216 @@ GET/POST          /api/lights/device/status
 
 The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.txt](docs/lights-esp8266-prompt.txt).
 
+## Yannick vs Emma Strava Challenge
+
+The homepage includes a public, read-only hockey-arena scoreboard for the annual
+Yannick (red) vs Emma (blue) activity challenge. It shows the live current week,
+finalized season points, recent qualifying and non-qualifying activities, current
+and season statistics, and drill-down history for finalized weeks. The old
+homepage clock was local to the launcher and has been replaced; the independent
+Workout Timer clock is unchanged.
+
+The integration uses the official Strava OAuth and athlete-activities APIs. This
+specific public cross-athlete display and historical retention operates under the
+owner's written Strava approval. Do not reuse this implementation for additional
+athletes or another public data product without confirming that approval covers the
+new use.
+
+### Competition rules
+
+- A week is Monday 00:00 through the next Monday 00:00 in
+  `America/Halifax`. Activities are assigned by their UTC start instant converted
+  to that timezone.
+- Runs and walks require 4,000 metres; swims require 3,000 metres.
+- gym/workout/weight activities and paddle/row activities require 1,800 seconds;
+  climbing requires 3,600 seconds.
+- Every qualifying activity is worth one activity, regardless of excess distance
+  or duration.
+- More qualifying activities wins. If counts match, exact total qualifying
+  activity seconds decides the winner. Equal count and equal seconds is a true tie
+  and awards no point.
+- Run, swim, walk, paddle, and row use Strava `moving_time` (with elapsed fallback).
+  Gym and climbing use `elapsed_time` (with moving fallback), because rest and
+  belay time are representative parts of those sessions.
+- The current week is live and never awards an early point. A finalized week is an
+  immutable official snapshot; season standings are derived from those snapshots.
+
+### Runtime data and migration
+
+There is no SQL database or ORM in BIG TUNA. On first use, the server creates and
+migrates the versioned file:
+
+```text
+data/strava-challenge/state.json
+```
+
+It contains normalized activities, hashed invitation/OAuth-state records,
+encrypted credentials, sync metadata, and finalized snapshots. The entire `data/`
+tree is gitignored. Initialization/migration is automatic when the server starts;
+there is no separate migration command. Back up `data/strava-challenge/` together
+with the rest of live `data/` before deployment or recovery work.
+
+### Environment configuration
+
+Copy `server.env.example` to the gitignored `server.env` and configure:
+
+```text
+STRAVA_CLIENT_ID=
+STRAVA_CLIENT_SECRET=
+STRAVA_REDIRECT_URI=https://yannickmorgans.ca/api/strava-challenge/oauth/callback
+CHALLENGE_BASE_URL=https://yannickmorgans.ca
+STRAVA_CHALLENGE_YEAR=2026
+STRAVA_CHALLENGE_START_DATE=2026-01-01
+STRAVA_CHALLENGE_YANNICK_EMAIL=
+STRAVA_CHALLENGE_EMMA_EMAIL=
+STRAVA_CHALLENGE_CRYPTO_SECRET=
+STRAVA_CHALLENGE_INVITE_TTL_HOURS=168
+STRAVA_CHALLENGE_SYNC_INTERVAL_MINUTES=15
+STRAVA_CHALLENGE_FINALIZE_HOUR=8
+STRAVA_CHALLENGE_FROM_EMAIL=challenge@yannickmorgans.ca
+STRAVA_CHALLENGE_DISCLOSURE_APPROVED=true
+```
+
+`CHALLENGE_BASE_URL` falls back to `PUBLIC_BASE_URL`. Generate the encryption
+secret once with:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Keep that value stable and backed up. Changing or losing it makes stored Strava
+credentials unreadable and requires both participants to reconnect. Never commit
+`server.env`, a client secret, an invitation link, or an access/refresh token.
+
+Email delivery reuses the existing `RESEND_API_KEY`. The domain in
+`STRAVA_CHALLENGE_FROM_EMAIL` must be verified in Resend. Invitation and result
+messages use persisted delivery state and Resend idempotency keys so scheduler or
+deployment retries cannot send duplicates.
+
+### Strava developer application
+
+1. Sign in to Strava with the developer account and open
+   `https://www.strava.com/settings/api`.
+2. Create one application for this website. A current Strava subscription is
+   required to create an app.
+3. Set **Website** to `https://yannickmorgans.ca`.
+4. Set **Authorization Callback Domain** to `yannickmorgans.ca` (domain only; do
+   not paste a path there).
+5. Set the full server callback in `server.env` exactly to
+   `https://yannickmorgans.ca/api/strava-challenge/oauth/callback`.
+6. Copy the application Client ID and Client Secret into `STRAVA_CLIENT_ID` and
+   `STRAVA_CLIENT_SECRET`. Keep the secret server-side.
+7. Upgrade the application from its initial single-player capacity to the
+   self-service 10-athlete capacity before connecting the second participant.
+8. The website requests only `activity:read_all`. A participant can uncheck that
+   permission on Strava; the connection is rejected with a useful error rather
+   than silently showing incomplete results.
+
+The invitation link and OAuth `state` are separate. Invitation links carry a
+random token in a URL fragment so the raw token is not sent to request logs or
+referrers. Only a SHA-256 hash is stored. OAuth state is separately hashed,
+participant-bound, expiring, and single-use. Access and refresh tokens are
+AES-256-GCM encrypted at rest and never sent to browser JavaScript.
+
+### Connecting Yannick and Emma
+
+Sign in as the `yannick` BIG TUNA account and open `/admin/`, then select the
+Strava Challenge view.
+
+For Yannick:
+
+1. Confirm Yannick's challenge email and save the configuration.
+2. Select **Send connection email** on Yannick's red participant panel. This
+   revokes any older unused Yannick invitation and sends a new expiring link.
+3. Yannick opens the link. The website validates it server-side, identifies the
+   fixed Yannick slot, explains the data use, and shows **Connect with Strava**.
+4. Strava asks Yannick to sign in and approve activity access. He never gives the
+   website a Strava password or copied token.
+5. After authorization, the callback validates one-time state and granted scope,
+   associates the returned athlete ID with Yannick, encrypts the newest tokens,
+   consumes the invitation, and attempts the initial historical sync.
+6. Confirm the admin panel shows **Connected**, the athlete ID, initial-history
+   status, and a recent successful sync timestamp.
+
+Repeat the same steps from Emma's blue participant panel. Emma's invitation is
+server-bound only to Emma and cannot be edited into a Yannick invitation. The
+returned Strava display name is never used to choose a participant. **Reconnect**
+issues a fresh invitation and replaces credentials only after a successful OAuth
+flow.
+
+### Synchronization and Monday finalization
+
+The challenge scheduler runs inside the continuously running PM2 `apps-server`
+process, alongside the existing site jobs:
+
+- a delayed startup pass catches up work missed while the server was offline;
+- connected athletes are incrementally synchronized every 15 minutes by default;
+- at or after 08:00 Monday in `America/Halifax`, the previous week is synchronized
+  through Sunday for both athletes and finalized only if both required syncs
+  succeed;
+- overdue unfinalized weeks are retryable after outages or restarts;
+- homepage requests read local cached state and never call Strava.
+
+Initial connection paginates back to `STRAVA_CHALLENGE_START_DATE`, subject to the
+activities Strava makes available to the authorized account and current API rate
+limits. Admin status records whether that initial import completed; incomplete
+history is labeled rather than silently presented as complete. Regular syncs
+reconcile the live/unfinalized window for duplicates, edits, and deletions while
+leaving finalized official snapshots unchanged under the written approval.
+
+### Safe manual testing
+
+All mutation controls below require the signed-in `yannick` account:
+
+- **Manual sync:** `/admin/` → Strava Challenge → **Sync Yannick**, **Sync Emma**,
+  or **Sync both**.
+- **Current/weekly calculation:** use **Preview finalization**. It computes the
+  result without awarding a point or sending email.
+- **Manual finalization:** preview first, then type the exact confirmation shown
+  (`FINALIZE YYYY-MM-DD`). Repeating the same week is idempotent.
+- **Connection email preview:** choose `connection` in Email Preview. No real
+  invitation is generated or sent.
+- **Invitation-link test:** choose **Generate test link**. The raw link is shown
+  once; use it in a private browser window. Generating another revokes the prior
+  unused invitation.
+- **Winner/loser/tiebreaker/tie previews:** select the corresponding Email Preview
+  scenario. Preview HTML is isolated in a sandboxed frame and is not sent.
+- **Historical UI:** open `/?challengeDemo=1` for fixed, clearly labeled preview
+  data, or open a real finalized result with `/?week=YYYY-MM-DD#strava-challenge`.
+- **Automated focused tests:**
+
+  ```powershell
+  node --test test/strava-*.test.js
+  ```
+
+Run the full regression suite before deployment:
+
+```powershell
+npm test
+```
+
+### Deployment
+
+No package installation, SQL migration, new PM2 process, Windows Scheduled Task,
+or Cloudflare route is required. After pulling the code and filling `server.env`,
+load the new values explicitly:
+
+```powershell
+cd C:\SERVER
+pm2 restart ecosystem.config.cjs --update-env
+pm2 save
+```
+
+Verify locally before sending invitations:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3000/api/strava-challenge/public
+```
+
+Then check `/`, `/admin/`, and `/strava-connect/` through the public hostname. A
+Strava outage does not break `/`; cached challenge data remains available with a
+last-updated/stale indicator, and failed required syncs prevent finalization.
+
 ## MCP Server
 
 The `mcp-server/` directory contains a separate Model Context Protocol server that runs on port `3001`. It uses `@modelcontextprotocol/sdk` and requires an `MCP_SECRET` value.

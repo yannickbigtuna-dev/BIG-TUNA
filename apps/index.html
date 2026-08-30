@@ -5,18 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>BIG TUNA</title>
 <link rel="stylesheet" href="/styles/tokens.css">
+<link rel="stylesheet" href="/strava-challenge.css">
 <style>
   body {
-    height: 100vh;
-    height: 100svh;
+    min-height: 100vh;
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     padding: calc(env(safe-area-inset-top, 0px) + 84px) 20px calc(env(safe-area-inset-bottom, 0px) + 84px);
     text-align: center;
     position: relative;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   /* Mouse-follow atmosphere */
@@ -69,7 +71,7 @@
   #temp-label { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 4px; opacity: 0.6; }
 
   /* ── Centerpiece ── */
-  .stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%; transform-origin: center center; will-change: transform; }
+  .stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 1040px; }
 
   .hero { display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 2vh, 20px); margin-bottom: clamp(30px, 6vh, 54px); }
 
@@ -94,46 +96,6 @@
     opacity: 0.85;
   }
 
-  /* ── Segment clock ── */
-  .clock-digital {
-    display: flex;
-    align-items: center;
-    gap: clamp(5px, 1.2vw, 10px);
-    user-select: none;
-    margin-top: clamp(4px, 1.4vh, 12px);
-  }
-  .digit-slot {
-    position: relative;
-    width: clamp(40px, 7.6vw, 64px);
-    height: clamp(56px, 11.4vw, 96px);
-    background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
-    border-radius: var(--radius);
-    border: 1px solid rgba(255,255,255,0.05);
-    overflow: hidden;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
-  }
-  .digit-slot.sec { border-color: var(--accent-ring); }
-  .digit-val {
-    position: absolute;
-    width: 100%;
-    text-align: center;
-    font-family: var(--font-ui);
-    font-variant-numeric: tabular-nums;
-    font-size: clamp(34px, 6.6vw, 56px);
-    font-weight: var(--weight-black);
-    line-height: clamp(56px, 11.4vw, 96px);
-    color: var(--text);
-    letter-spacing: -0.04em;
-  }
-  .digit-slot.sec .digit-val { color: var(--accent); text-shadow: 0 0 18px var(--accent-glow); }
-
-  @keyframes roll-out-up { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-115%); opacity: 0; } }
-  @keyframes roll-in-up  { 0% { transform: translateY(115%); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
-  .digit-val.leaving  { animation: roll-out-up 0.28s var(--ease) forwards; }
-  .digit-val.arriving { animation: roll-in-up  0.28s var(--ease) forwards; }
-
-  .clock-sep { font-family: var(--font-ui); font-size: clamp(26px, 5vw, 40px); font-weight: var(--weight-black); color: var(--accent); opacity: 0.4; padding-bottom: 4px; flex-shrink: 0; animation: sep-pulse 2s var(--ease) infinite; }
-  @keyframes sep-pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.15; } }
 
   /* ── Ask Emma bar (Eco AI assistant) ── */
   #ask-emma {
@@ -297,9 +259,6 @@
     body { padding-top: calc(env(safe-area-inset-top, 0px) + 76px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
     .logo { font-size: clamp(2.4rem, 13vw, 3rem); }
     .date-display { font-size: 0.64rem; letter-spacing: 0.26em; }
-    .digit-slot { width: clamp(38px, 13vw, 48px); height: clamp(52px, 18vw, 64px); }
-    .digit-val { font-size: clamp(26px, 9vw, 34px); line-height: clamp(52px, 18vw, 64px); }
-    .clock-sep { font-size: 1.5rem; }
     .grid { gap: 14px; max-width: 400px; }
     .card { gap: 0; border-radius: var(--radius-lg); }
     .card .name { display: none; }  /* mobile design: icon-only tiles */
@@ -320,21 +279,15 @@
 </nav>
 
 <main class="stage">
-  <!-- Hero: wordmark → date → clock -->
+  <!-- Hero: wordmark → date → Strava Cup -->
   <header class="hero">
     <div class="logo">BIG TUNA</div>
     <div class="date-display" id="date-display"></div>
-    <div class="clock-digital" id="clock">
-      <div class="digit-slot" id="h1"></div>
-      <div class="digit-slot" id="h2"></div>
-      <div class="clock-sep">:</div>
-      <div class="digit-slot" id="m1"></div>
-      <div class="digit-slot" id="m2"></div>
-      <div class="clock-sep">:</div>
-      <div class="digit-slot sec" id="s1"></div>
-      <div class="digit-slot sec" id="s2"></div>
-    </div>
   </header>
+
+  <section id="strava-challenge" class="sc-challenge" aria-labelledby="sc-title" aria-live="polite">
+    <div class="sc-loading">Loading the Strava Cup scoreboard…</div>
+  </section>
 
   <!-- Ask Emma (Eco AI assistant) -->
   <form id="ask-emma" action="/eco-ai/" method="get" autocomplete="off">
@@ -417,45 +370,7 @@
   }
   updateDate();
 
-  // ── Segment clock (per-digit roll) ──
-  const slotState = {};
-  function pruneSlot(slot, keep) {
-    slot.querySelectorAll('.digit-val').forEach(el => { if (el !== keep) el.remove(); });
-  }
-  function setSlot(id, char) {
-    const slot = document.getElementById(id);
-    const existing = Array.from(slot.querySelectorAll('.digit-val'));
-    const current = existing[existing.length - 1] || null;
-    if (slotState[id] === char) {
-      pruneSlot(slot, current);
-      if (current) current.classList.remove('leaving', 'arriving');
-      return;
-    }
-    slotState[id] = char;
-    pruneSlot(slot, current);
-    if (current) {
-      current.classList.remove('arriving');
-      current.classList.add('leaving');
-      current.addEventListener('animationend', () => current.remove(), { once: true });
-    }
-    const next = document.createElement('div');
-    next.className = 'digit-val arriving';
-    next.textContent = char;
-    slot.appendChild(next);
-    next.addEventListener('animationend', () => { next.classList.remove('arriving'); pruneSlot(slot, next); }, { once: true });
-  }
-  function tickClock() {
-    const t = new Date();
-    const h = String(t.getHours()).padStart(2, '0');
-    const m = String(t.getMinutes()).padStart(2, '0');
-    const s = String(t.getSeconds()).padStart(2, '0');
-    setSlot('h1', h[0]); setSlot('h2', h[1]);
-    setSlot('m1', m[0]); setSlot('m2', m[1]);
-    setSlot('s1', s[0]); setSlot('s2', s[1]);
-    if (t.getHours() === 0 && t.getMinutes() === 0 && t.getSeconds() === 0) updateDate();
-  }
-  tickClock();
-  setInterval(tickClock, 1000);
+  setInterval(updateDate, 60000);
 
   // ── Ask Emma → Eco AI ──
   // Whatever is typed is handed to Eco AI as ?q=…; the assistant opens a fresh
@@ -468,65 +383,6 @@
     window.location.href = q ? `/eco-ai/?q=${encodeURIComponent(q)}` : '/eco-ai/';
   });
 
-  // ── Fit-to-screen: scale the stage so the homepage never needs scrolling ──
-  // The clock, Ask Emma bar and app tiles shrink together to match whatever
-  // viewport they land in, on any screen size or orientation.
-  //
-  // IMPORTANT: measure the *same* box the layout actually uses. The body is
-  // sized with `height: 100svh`, so its padded content area is exactly the
-  // space the stage is centered in. We must NOT use `window.innerHeight` here:
-  // on iOS Safari that reports the large (toolbar-hidden) viewport, which is
-  // taller than the `svh` box — the stage would be under-scaled and its top /
-  // bottom would bleed past the padding into the fixed topnav and corner-tools
-  // (the mobile "overlap" bug). `document.body.clientHeight` tracks svh/vh and
-  // is stable across the address-bar showing/hiding, so the fit stays correct.
-  const stage = document.querySelector('.stage');
-  const topnavEl = document.getElementById('topnav');
-  const cornerEl = document.querySelector('.corner-tools');
-
-  // Reserve exactly as much room as the fixed bars actually occupy. Measuring
-  // offsetHeight (rather than hardcoding padding) keeps the reserve correct on
-  // any device: it already includes each bar's safe-area-inset padding, font
-  // metrics, and any wrapped content — so the stage can never sit under a bar.
-  const GAP = 12; // breathing room between a bar and the stage
-  function reserveBars() {
-    if (topnavEl) document.body.style.paddingTop = (topnavEl.offsetHeight + GAP) + 'px';
-    if (cornerEl) {
-      const cornerBottom = parseFloat(getComputedStyle(cornerEl).bottom) || 0;
-      document.body.style.paddingBottom = (cornerEl.offsetHeight + cornerBottom + GAP) + 'px';
-    }
-  }
-
-  function fitStage() {
-    if (!stage) return;
-    reserveBars();
-    stage.style.transform = 'none';
-    const cs = getComputedStyle(document.body);
-    // Measure the SAME box the layout uses. The body is `height: 100svh`, so its
-    // padded content area is exactly the space the stage is centered in. Using
-    // document.body.clientHeight (not window.innerHeight) keeps the fit correct
-    // on iOS Safari, where innerHeight reports the taller toolbar-hidden viewport
-    // and would otherwise leave the stage bleeding past the padding into the bars.
-    const availH = document.body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const availW = document.body.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    const needH = stage.offsetHeight;
-    const needW = stage.offsetWidth;
-    if (!needH || !needW) return;
-    // Shrink to fit height AND width; the 0.5px trim absorbs sub-pixel rounding
-    // so a scaled edge never spills 1px into the reserved zones.
-    let scale = Math.min((availH - 0.5) / needH, (availW - 0.5) / needW, 1);
-    if (!isFinite(scale) || scale <= 0) scale = 1;
-    stage.style.transform = `scale(${scale})`;
-  }
-  const refit = () => requestAnimationFrame(fitStage);
-  refit();
-  window.addEventListener('resize', refit);
-  window.addEventListener('orientationchange', refit);
-  window.addEventListener('load', refit);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
-  // Expose so the post-auth script (below, after /auth.js) can re-fit once the
-  // account pill is injected.
-  window.__refitStage = refit;
 
   // ── Temperature: Open-Meteo "feels like" ──
   const HALIFAX_WEATHER = { lat: 44.6488, lon: -63.5752 };
@@ -571,15 +427,9 @@
   }
 </script>
 
+<script src="/strava-challenge.js"></script>
 <script src="/auth.js"></script>
 <script>
-  // The account pill is injected by /auth.js after the main script ran; re-fit
-  // the stage once it lands so its width is accounted for in the scaling.
-  // Note: `Auth` is a top-level `const` from /auth.js — it's a global identifier
-  // but never a `window` property, so checks must reference `Auth` directly,
-  // not `window.Auth` (which is always undefined and silently no-ops).
-  if (typeof Auth !== 'undefined' && Auth.onReady && window.__refitStage) Auth.onReady(window.__refitStage);
-
   // Admin Dashboard link — only ever shown to the site owner's account (yannick), same convention as the terminal/lights restrictions.
   if (typeof Auth !== 'undefined' && Auth.onReady) Auth.onReady(user => {
     if (!user || user.username.toLowerCase() !== 'yannick') return;

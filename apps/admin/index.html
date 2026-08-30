@@ -290,11 +290,33 @@
 
   .hidden { display: none !important; }
 
+  /* Strava Challenge — operational controls, deliberately separate from public data. */
+  .challenge-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .challenge-person { border-top: 4px solid var(--person-color); }
+  .challenge-person h3 { color: var(--person-color); }
+  .challenge-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+  .challenge-fact { min-width: 0; padding: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .challenge-fact b, .challenge-fact span { display: block; overflow-wrap: anywhere; }
+  .challenge-fact b { margin-top: 3px; font-size: var(--text-sm); color: var(--text-muted); }
+  .challenge-actions, .challenge-form-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+  .challenge-actions .btn, .challenge-form-row .btn { min-height: 44px; }
+  .challenge-status { min-height: 1.5em; margin-top: 10px; color: var(--text-muted); }
+  .challenge-status.error { color: var(--danger); }
+  .challenge-status.success { color: var(--success); }
+  .challenge-link { margin-top: 12px; padding: 10px; border: 1px solid var(--warning); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--warning) 10%, transparent); }
+  .challenge-link code { display: block; margin: 8px 0; overflow-wrap: anywhere; color: var(--text); }
+  .challenge-preview { white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-muted); max-height: 240px; overflow: auto; }
+  .finalize-warning { color: var(--warning); font-size: var(--text-sm); }
+
   @media (max-width: 860px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
     .grid.cols2 { grid-template-columns: 1fr; }
     .editor-columns { grid-template-columns: 1fr; }
     .editor-preview-frame { height: 360px; }
+  }
+  @media (max-width: 620px) {
+    .challenge-grid, .challenge-fields { grid-template-columns: 1fr; }
+    .challenge-actions .btn, .challenge-form-row > * { width: 100%; }
   }
   @media (max-width: 760px) {
     .admin-shell { flex-direction: column; }
@@ -331,6 +353,7 @@
         <button class="nav-item" data-view="users">Users</button>
         <button class="nav-item" data-view="templates">Email Templates</button>
         <button class="nav-item" data-view="campaigns">Campaigns</button>
+        <button class="nav-item" data-view="challenge">Strava Challenge</button>
       </nav>
     </aside>
 
@@ -472,6 +495,64 @@
               </tbody>
             </table>
           </div>
+        </section>
+      </section>
+
+      <section id="view-challenge" class="view-section hidden" aria-labelledby="challenge-title">
+        <h1 class="page-title" id="challenge-title">Strava Challenge</h1>
+        <div class="page-sub">Private setup and operational controls for Yannick vs Emma. Credentials and invitation secrets are never shown here.</div>
+        <div id="challenge-feedback" class="challenge-status" role="status" aria-live="polite"></div>
+
+        <section class="card">
+          <div class="card-head"><h3>Season setup</h3></div>
+          <div class="challenge-form-row">
+            <label>Challenge year<input id="challenge-year" class="input" type="number" min="2000" max="2100" inputmode="numeric" aria-label="Challenge year"></label>
+            <label>Challenge start date<input id="challenge-start-date" class="input" type="date" aria-label="Challenge start date"></label>
+            <label>Yannick email<input id="challenge-yannick-email" class="input" type="email" autocomplete="email" aria-label="Yannick email"></label>
+            <label>Emma email<input id="challenge-emma-email" class="input" type="email" autocomplete="email" aria-label="Emma email"></label>
+            <button type="button" class="btn btn-primary" id="challenge-save-config">Save setup</button>
+          </div>
+        </section>
+
+        <div class="challenge-grid" id="challenge-participants" aria-live="polite">
+          <div class="card challenge-person" style="--person-color:var(--c-red)"><h3>Yannick <span class="label">Red</span></h3><p class="caption">Loading private connection status…</p></div>
+          <div class="card challenge-person" style="--person-color:var(--c-blue)"><h3>Emma <span class="label">Blue</span></h3><p class="caption">Loading private connection status…</p></div>
+        </div>
+
+        <section class="card">
+          <div class="card-head"><h3>Sync</h3><button type="button" class="btn btn-primary" id="challenge-sync-both">Sync both athletes</button></div>
+          <p class="caption">Fetches and normalizes current Strava activities. This does not award points or finalize a week.</p>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3>Finalization preview</h3></div>
+          <div class="challenge-form-row">
+            <label>Week starting Monday<input id="challenge-preview-week" class="input" type="date" aria-label="Week starting Monday"></label>
+            <button type="button" class="btn btn-ghost" id="challenge-preview-finalization">Preview weekly result</button>
+          </div>
+          <div id="challenge-finalization-preview" class="challenge-preview caption">Choose a week to preview scoring readiness.</div>
+          <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
+          <p class="finalize-warning">Finalizing locks an official weekly snapshot and sends the result emails once. Type the exact confirmation below.</p>
+          <div class="challenge-form-row" style="margin-top:10px">
+            <label>Confirmation<input id="challenge-finalize-confirm" class="input" type="text" autocomplete="off" placeholder="FINALIZE YYYY-MM-DD" aria-label="Finalization confirmation"></label>
+            <button type="button" class="btn btn-ghost" id="challenge-finalize">Finalize selected week</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3>Safe email previews</h3></div>
+          <div class="challenge-form-row">
+            <label>Email type<select id="challenge-email-type" class="input" aria-label="Email preview type"><option value="connection">Connection invitation</option><option value="winner">Winner</option><option value="loser">Loser</option><option value="tiebreaker">Tiebreaker</option><option value="true_tie">True tie</option></select></label>
+            <label>Participant<select id="challenge-email-participant" class="input" aria-label="Email preview participant"><option value="yannick">Yannick</option><option value="emma">Emma</option></select></label>
+            <button type="button" class="btn btn-ghost" id="challenge-preview-email">Preview email</button>
+          </div>
+          <div id="challenge-email-preview" class="challenge-preview caption">Previews stay in this browser and do not send email.</div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3>Pre-season reset</h3></div>
+          <p class="finalize-warning">For testing before Monday only. This clears challenge activities, finalized results, scores, and result-email state; it never disconnects either Strava account.</p>
+          <div class="challenge-form-row"><label>Confirmation<input id="challenge-reset-confirm" class="input" type="text" autocomplete="off" placeholder="RESET STRAVA CHALLENGE" aria-label="Challenge reset confirmation"></label><button type="button" class="btn btn-ghost" id="challenge-reset">Reset test challenge data</button></div>
         </section>
       </section>
 
@@ -633,12 +714,14 @@ function showAuthorized() {
 let usersLoaded = false;
 let templatesLoaded = false;
 let campaignsLoaded = false;
+let challengeLoaded = false;
 function showView(name) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   document.querySelectorAll('.view-section').forEach(s => s.classList.toggle('hidden', s.id !== `view-${name}`));
   if (name === 'users' && !usersLoaded) loadUsers();
   if (name === 'templates' && !templatesLoaded) loadTemplates();
   if (name === 'campaigns' && !campaignsLoaded) loadCampaigns();
+  if (name === 'challenge' && !challengeLoaded) loadChallengeStatus();
 }
 document.querySelectorAll('.nav-item').forEach(btn => {
   btn.addEventListener('click', () => showView(btn.dataset.view));
@@ -678,6 +761,141 @@ function renderOverview(data) {
   renderDeviceChart(data.deviceBreakdown || { mobile: 0, desktop: 0, tablet: 0 });
   renderActivity(data.recentActivity || []);
 }
+
+/* ── Strava Challenge (private owner view) ─────────────────────────────── */
+const challengeApiBase = '/api/admin/strava-challenge';
+function challengeMessage(message, kind = '') {
+  const el = document.getElementById('challenge-feedback');
+  el.textContent = message || '';
+  el.className = `challenge-status ${kind}`;
+}
+function challengeDate(value) {
+  if (!value) return 'not available';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'not available' : d.toLocaleString();
+}
+function challengeValue(value, fallback = 'Not available') {
+  return value === null || value === undefined || value === '' ? fallback : String(value);
+}
+function challengePersonCard(raw, fixedId) {
+  const person = raw || {};
+  const id = fixedId === 'yannick' ? 'yannick' : 'emma';
+  const name = id === 'yannick' ? 'Yannick' : 'Emma';
+  const color = id === 'yannick' ? 'var(--c-red)' : 'var(--c-blue)';
+  const connection = person.connection || person;
+  const invite = person.invite || {};
+  const emailConfigured = Boolean(person.emailConfigured || person.email);
+  const connected = Boolean(connection.connected || connection.stravaAthleteId || connection.athleteId);
+  const athleteId = connection.stravaAthleteId || connection.athleteId;
+  const status = connection.syncStatus || connection.status || (connected ? 'Connected' : 'Not connected');
+  const syncError = connection.lastSyncError || person.lastSyncError;
+  const completeness = connection.completeness || person.completeness;
+  const inviteStatus = invite.status || (invite.usedAt ? 'Used' : invite.revokedAt ? 'Revoked' : invite.expiresAt ? 'Issued' : 'None');
+  return `<article class="card challenge-person" style="--person-color:${color}">
+    <div class="card-head"><h3>${name} <span class="label">${id === 'yannick' ? 'Red' : 'Blue'}</span></h3><span class="status-pill">${esc(connected ? 'Connected' : 'Not connected')}</span></div>
+    <div class="challenge-fields">
+      <div class="challenge-fact"><span class="label">Email</span><b>${emailConfigured ? 'Configured' : 'Not configured'}</b></div>
+      <div class="challenge-fact"><span class="label">Strava athlete ID</span><b>${esc(challengeValue(athleteId, 'Not connected'))}</b></div>
+      <div class="challenge-fact"><span class="label">Last successful sync</span><b>${esc(challengeDate(connection.lastSuccessfulSync || person.lastSuccessfulSync))}</b></div>
+      <div class="challenge-fact"><span class="label">Sync status</span><b>${esc(challengeValue(status))}${syncError ? `<br><small>${esc(String(syncError))}</small>` : ''}${completeness ? `<br><small>${esc(String(completeness))}</small>` : ''}</b></div>
+      <div class="challenge-fact"><span class="label">Invitation</span><b>${esc(challengeValue(inviteStatus))}</b></div>
+      <div class="challenge-fact"><span class="label">Invite sent / expires</span><b>${esc(invite.sentAt ? challengeDate(invite.sentAt) : 'Not sent')}<br><small>${esc(invite.expiresAt ? `Expires ${challengeDate(invite.expiresAt)}` : '')}</small></b></div>
+    </div>
+    <div class="challenge-actions">
+      <button type="button" class="btn btn-primary" data-challenge-action="send" data-participant="${id}">${connected ? 'Send new connection email' : 'Send connection email'}</button>
+      <button type="button" class="btn btn-ghost" data-challenge-action="generate" data-participant="${id}">Generate test link</button>
+      <button type="button" class="btn btn-ghost" data-challenge-action="sync" data-participant="${id}">Sync ${name}</button>
+    </div>
+    <div id="challenge-link-${id}"></div>
+  </article>`;
+}
+function bindChallengePersonActions() {
+  document.querySelectorAll('[data-challenge-action]').forEach(button => button.addEventListener('click', async () => {
+    const participant = button.dataset.participant;
+    const action = button.dataset.challengeAction;
+    button.disabled = true;
+    try {
+      if (action === 'send') {
+        await api(`${challengeApiBase}/invites/${encodeURIComponent(participant)}/send`, { method: 'POST' });
+        challengeMessage(`Connection email sent to ${participant === 'yannick' ? 'Yannick' : 'Emma'}.`, 'success');
+      } else if (action === 'sync') {
+        await api(`${challengeApiBase}/sync/${encodeURIComponent(participant)}`, { method: 'POST' });
+        challengeMessage(`Sync started for ${participant === 'yannick' ? 'Yannick' : 'Emma'}.`, 'success');
+      } else {
+        // The non-secret issuance endpoint remains `/invites/${encodeURIComponent(participant)}/generate`;
+        // this separate owner-only endpoint is the deliberate one-time test-link display path.
+        const result = await api(`${challengeApiBase}/invites/${encodeURIComponent(participant)}/test-link`, { method: 'POST' });
+        const url = result.connectionUrl || result.url || result.invitationUrl;
+        if (!url || typeof url !== 'string') throw new Error('The server did not return a test link.');
+        const host = document.getElementById(`challenge-link-${participant}`);
+        host.innerHTML = `<div class="challenge-link"><strong>One-time test link</strong><p class="caption">Copy it now. It is intentionally shown once and is not stored in this page.</p><code>${esc(url)}</code><button type="button" class="btn btn-ghost" data-copy-challenge-link>Copy link</button></div>`;
+        host.querySelector('[data-copy-challenge-link]').addEventListener('click', async e => {
+          try { await navigator.clipboard.writeText(url); e.currentTarget.textContent = 'Copied'; } catch (_) { e.currentTarget.textContent = 'Select and copy the link'; }
+        });
+        challengeMessage('Test link generated. Keep it private.', 'success');
+      }
+      await loadChallengeStatus();
+    } catch (err) { challengeMessage('That action could not be completed. Check the setup and try again.', 'error'); handleApiError(err); }
+    finally { button.disabled = false; }
+  }));
+}
+async function loadChallengeStatus() {
+  try {
+    const data = await api(`${challengeApiBase}/status`);
+    const config = data.config || data.challenge || {};
+    document.getElementById('challenge-year').value = challengeValue(config.challengeYear || config.year, '');
+    document.getElementById('challenge-start-date').value = String(config.challengeStart || config.challengeStartDate || config.startDate || '').slice(0, 10);
+    const list = Array.isArray(data.participants) ? data.participants : [];
+    const source = data.participants && !Array.isArray(data.participants) ? data.participants : {};
+    const byId = Object.assign({}, ...Object.entries(source).map(([key, value]) => ({ [key.toLowerCase()]: value })), ...list.map(p => ({ [String(p.id || p.participantId || p.slug || '').toLowerCase()]: p })));
+    document.getElementById('challenge-yannick-email').value = (byId.yannick && byId.yannick.email) || config.yannickEmail || '';
+    document.getElementById('challenge-emma-email').value = (byId.emma && byId.emma.email) || config.emmaEmail || '';
+    document.getElementById('challenge-participants').innerHTML = challengePersonCard(byId.yannick, 'yannick') + challengePersonCard(byId.emma, 'emma');
+    bindChallengePersonActions();
+    challengeLoaded = true;
+  } catch (err) { challengeMessage('Challenge status is unavailable. Refresh to retry.', 'error'); handleApiError(err); }
+}
+document.getElementById('challenge-save-config').addEventListener('click', async () => {
+  const year = Number(document.getElementById('challenge-year').value);
+  const startDate = document.getElementById('challenge-start-date').value;
+  const yannickEmail = document.getElementById('challenge-yannick-email').value.trim();
+  const emmaEmail = document.getElementById('challenge-emma-email').value.trim();
+  if (!Number.isInteger(year) || !startDate) return challengeMessage('Enter a valid challenge year and start date.', 'error');
+  try { await api(`${challengeApiBase}/config`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeYear: year, challengeStart: startDate, yannickEmail, emmaEmail }) }); challengeMessage('Season setup saved.', 'success'); await loadChallengeStatus(); }
+  catch (err) { challengeMessage('Season setup could not be saved.', 'error'); handleApiError(err); }
+});
+document.getElementById('challenge-sync-both').addEventListener('click', async e => {
+  e.currentTarget.disabled = true;
+  try { await Promise.all(['yannick', 'emma'].map(id => api(`${challengeApiBase}/sync/${id}`, { method: 'POST' }))); challengeMessage('Sync started for both athletes.', 'success'); await loadChallengeStatus(); }
+  catch (err) { challengeMessage('One or both syncs could not be started.', 'error'); handleApiError(err); }
+  finally { e.currentTarget.disabled = false; }
+});
+document.getElementById('challenge-preview-finalization').addEventListener('click', async () => {
+  const week = document.getElementById('challenge-preview-week').value;
+  if (!week) return challengeMessage('Choose a Monday week start to preview.', 'error');
+  try { const result = await api(`${challengeApiBase}/finalization-preview?week=${encodeURIComponent(week)}`); document.getElementById('challenge-finalization-preview').textContent = JSON.stringify(result.preview || result, null, 2); challengeMessage('Weekly calculation preview loaded.', 'success'); }
+  catch (err) { challengeMessage('The weekly preview could not be loaded.', 'error'); handleApiError(err); }
+});
+document.getElementById('challenge-finalize').addEventListener('click', async () => {
+  const weekStart = document.getElementById('challenge-preview-week').value;
+  const confirmValue = document.getElementById('challenge-finalize-confirm').value.trim();
+  if (!weekStart || confirmValue !== `FINALIZE ${weekStart}`) return challengeMessage(`Type FINALIZE ${weekStart || 'YYYY-MM-DD'} exactly to finalize.`, 'error');
+  try { await api(`${challengeApiBase}/finalize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart, confirm: confirmValue }) }); challengeMessage('Week finalized. This official result will not be duplicated.', 'success'); await loadChallengeStatus(); }
+  catch (err) { challengeMessage('The week was not finalized. Review the preview and readiness.', 'error'); handleApiError(err); }
+});
+document.getElementById('challenge-preview-email').addEventListener('click', async () => {
+  const type = document.getElementById('challenge-email-type').value;
+  const participant = document.getElementById('challenge-email-participant').value;
+  try { const result = await api(`${challengeApiBase}/email-preview?type=${encodeURIComponent(type)}&participant=${encodeURIComponent(participant)}`); document.getElementById('challenge-email-preview').textContent = result.text || result.html || JSON.stringify(result, null, 2); challengeMessage('Email preview loaded. Nothing was sent.', 'success'); }
+  catch (err) { challengeMessage('The email preview could not be loaded.', 'error'); handleApiError(err); }
+});
+document.getElementById('challenge-reset').addEventListener('click', async () => {
+  const confirmValue = document.getElementById('challenge-reset-confirm').value.trim();
+  if (confirmValue !== 'RESET STRAVA CHALLENGE') return challengeMessage('Type RESET STRAVA CHALLENGE exactly to clear test challenge data.', 'error');
+  if (!confirm('Clear only Strava Challenge test data and scores? Strava connections stay linked.')) return;
+  try { await api(`${challengeApiBase}/reset-for-season-start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: confirmValue }) }); document.getElementById('challenge-reset-confirm').value = ''; challengeMessage('Challenge test data cleared. Connected athletes can be synced again.', 'success'); await loadChallengeStatus(); }
+  catch (err) { challengeMessage('The challenge reset could not be completed.', 'error'); handleApiError(err); }
+});
 
 function renderDailyChart(series) {
   const wrap = document.getElementById('daily-chart-wrap');

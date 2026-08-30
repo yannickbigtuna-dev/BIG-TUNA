@@ -76,10 +76,54 @@ const YHZ_RADAR_UPSTREAM = 'https://api.adsb.lol/v2/lat/44.6392425/lon/-63.59449
 const YHZ_RADAR_CACHE_MS = 12000;
 const YHZ_RADAR_TIMEOUT_MS = 8000;
 const assignmentCoach = require('./lib/assignment-coach');
+const { createStravaChallenge } = require('./lib/strava-challenge');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
 const { createTriviaTopicPool } = require('./lib/trivia-topic-pool');
 const geoip = require('geoip-lite');
+
+// The service deliberately owns all Strava credentials and durable challenge
+// state. Keep the server adapter small so public routes can never accidentally
+// serialize the service's private configuration.
+function redactSensitiveText(value) {
+  return String(value || '')
+    .replace(/([?&](?:code|state|token|t|inviteToken|resetToken)=)[^&#\s]*/gi, '$1[redacted]')
+    .replace(/(\/strava\/connect\/)[^/?#\s]+/gi, '$1[redacted]')
+    .replace(/(Bearer\s+)[^\s]+/gi, '$1[redacted]');
+}
+
+function sanitizeRequestUrl(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl || ''), 'http://localhost');
+    for (const key of ['code', 'state', 'token', 't', 'inviteToken', 'resetToken']) {
+      if (parsed.searchParams.has(key)) parsed.searchParams.set(key, '[redacted]');
+    }
+    parsed.pathname = parsed.pathname.replace(/(\/strava\/connect\/)[^/?#]+/i, '$1[redacted]');
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return redactSensitiveText(rawUrl);
+  }
+}
+
+const stravaChallengeLogger = Object.freeze({
+  info: (...values) => console.log('[strava challenge]', ...values.map(redactSensitiveText)),
+  warn: (...values) => console.warn('[strava challenge]', ...values.map(redactSensitiveText)),
+  error: (...values) => console.error('[strava challenge]', ...values.map(redactSensitiveText)),
+});
+
+let stravaChallenge = null;
+try {
+  stravaChallenge = createStravaChallenge({
+    dataDir: path.join(DATA, 'strava-challenge'),
+    env: process.env,
+    sendEmail: assignmentCoach.sendEmail,
+    fetchImpl: global.fetch,
+    logger: stravaChallengeLogger,
+  });
+} catch (error) {
+  // A missing Strava configuration must never take down the public site.
+  stravaChallengeLogger.error('service unavailable during startup:', error && error.message);
+}
 
 const {
   TRIVIA_MODEL,
@@ -587,6 +631,54 @@ function getToken(req) {
 function jsonRes(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
+}
+
+function setSensitiveResponseHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
+function boundedString(value, max = 512) {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, max);
+}
+
+function challengeAdminUser(req, res) {
+  const user = getSessionUser(getToken(req));
+  if (!user) { jsonRes(res, 401, { error: 'Not authenticated' }); return null; }
+  if (String(user.username || '').toLowerCase() !== 'yannick') { jsonRes(res, 403, { error: 'Forbidden' }); return null; }
+  return user;
+}
+
+function challengeServiceOrUnavailable(res) {
+  if (stravaChallenge) return stravaChallenge;
+  jsonRes(res, 503, { error: 'Challenge service is temporarily unavailable' });
+  return null;
+}
+
+function challengeError(res, error, fallback = 'Challenge request could not be completed') {
+  const status = Number(error && error.status);
+  const code = String(error && error.code || '');
+  const codeStatus = {
+    invalid_invite: 400, invalid_oauth_state: 400, invalid_oauth_callback: 400,
+    invalid_athlete: 400, invalid_week: 400, invalid_config: 400,
+    missing_email: 400, missing_base_url: 400, confirmation_required: 400,
+    unknown_participant: 404, not_connected: 409, athlete_already_connected: 409,
+    missing_scope: 422, oauth_denied: 422, unconfigured: 503,
+  }[code];
+  const safeStatus = [400, 401, 403, 404, 409, 422, 429, 503].includes(status)
+    ? status
+    : (codeStatus || 500);
+  if (safeStatus >= 500) stravaChallengeLogger.error(fallback, error && error.message);
+  return jsonRes(res, safeStatus, { error: safeStatus >= 500 ? fallback : 'Challenge request was rejected' });
+}
+
+function challengeOAuthPage(success) {
+  const title = success ? 'Strava connected' : 'Connection not completed';
+  const message = success
+    ? 'Your Strava account is connected to the challenge. You can close this page.'
+    : 'We could not complete the Strava connection. Please use a fresh invitation link and try again.';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#08090d;color:#f4f7fb;font-family:system-ui,sans-serif}.card{max-width:32rem;margin:1.5rem;padding:2rem;border:1px solid #313846;border-radius:1rem;background:#131722;text-align:center}h1{margin-top:0;color:${success ? '#71e29c' : '#f2b766'}}p{line-height:1.55;color:#c5ccd8}</style></head><body><main class="card"><h1>${title}</h1><p>${message}</p></main></body></html>`;
 }
 
 function radarJsonRes(res, data) {
@@ -1383,6 +1475,159 @@ function parsePbestPDF(buf) {
 
 // ── API router ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res, urlPath) {
+
+  // ── Public Yannick vs Emma Strava Challenge ─────────────────────────────
+  if (req.method === 'GET' && urlPath === '/api/strava-challenge/public') {
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    try {
+      return jsonRes(res, 200, await service.getPublicDashboard());
+    } catch (error) {
+      return challengeError(res, error, 'Challenge scoreboard is temporarily unavailable');
+    }
+  }
+
+  const publicWeekMatch = urlPath.match(/^\/api\/strava-challenge\/public\/weeks\/(\d{4}-\d{2}-\d{2})$/);
+  if (req.method === 'GET' && publicWeekMatch) {
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    try {
+      return jsonRes(res, 200, await service.getPublicWeek(publicWeekMatch[1]));
+    } catch (error) {
+      return challengeError(res, error, 'Challenge week is temporarily unavailable');
+    }
+  }
+
+  // Invitation token is supplied only in a POST body, never a URL. The service
+  // validates it and returns a Strava authorization URL containing only OAuth
+  // state, not an invitation credential.
+  if (req.method === 'POST' && urlPath === '/api/strava-challenge/oauth/prepare') {
+    setSensitiveResponseHeaders(res);
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    const body = await parseBody(req);
+    const inviteToken = boundedString(body && body.inviteToken, 256);
+    if (!inviteToken) return jsonRes(res, 400, { error: 'Connection link is invalid or expired' });
+    try {
+      const prepared = await service.prepareOAuth(inviteToken);
+      return jsonRes(res, 200, { authorizationUrl: prepared.authorizationUrl });
+    } catch (error) {
+      return challengeError(res, error, 'Connection link is invalid or expired');
+    }
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/strava-challenge/oauth/callback') {
+    setSensitiveResponseHeaders(res);
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return res.end(challengeOAuthPage(false));
+    const callback = new URL(req.url, 'http://localhost').searchParams;
+    const values = {
+      code: boundedString(callback.get('code'), 4096),
+      state: boundedString(callback.get('state'), 512),
+      scope: boundedString(callback.get('scope'), 512),
+      error: boundedString(callback.get('error'), 128),
+    };
+    try {
+      if (values.error || !values.code || !values.state) throw Object.assign(new Error('OAuth callback rejected'), { status: 400 });
+      await service.completeOAuth(values);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(challengeOAuthPage(true));
+    } catch (error) {
+      stravaChallengeLogger.warn('OAuth callback failed:', error && error.message);
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(challengeOAuthPage(false));
+    }
+  }
+
+  // ── Yannick-only Strava Challenge setup and operations ──────────────────
+  if (urlPath.startsWith('/api/admin/strava-challenge/')) {
+    if (!challengeAdminUser(req, res)) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+
+    if (req.method === 'GET' && urlPath === '/api/admin/strava-challenge/status') {
+      try { return jsonRes(res, 200, await service.getAdminStatus()); }
+      catch (error) { return challengeError(res, error, 'Challenge status is temporarily unavailable'); }
+    }
+
+    if (req.method === 'PUT' && urlPath === '/api/admin/strava-challenge/config') {
+      const body = await parseBody(req);
+      const config = {};
+      if (body && typeof body === 'object' && !Array.isArray(body)) {
+        for (const [key, value] of Object.entries(body)) {
+          if (/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) {
+            config[key] = typeof value === 'string' ? boundedString(value, 512) : value;
+          }
+        }
+      }
+      try { return jsonRes(res, 200, await service.updateConfig(config)); }
+      catch (error) { return challengeError(res, error, 'Challenge configuration was not saved'); }
+    }
+
+    const inviteMatch = urlPath.match(/^\/api\/admin\/strava-challenge\/invites\/(yannick|emma)\/(send|generate)$/);
+    if (req.method === 'POST' && inviteMatch) {
+      setSensitiveResponseHeaders(res);
+      try {
+        const result = inviteMatch[2] === 'send'
+          ? await service.sendInvite(inviteMatch[1])
+          : await service.generateInvite(inviteMatch[1]);
+        // Never disclose the raw invitation token; sendInvite owns email delivery.
+        return jsonRes(res, 200, inviteMatch[2] === 'send'
+          ? { ok: true, sent: Boolean(result && result.sent) }
+          : { ok: true, expiresAt: result && result.expiresAt || null });
+      } catch (error) { return challengeError(res, error, 'Challenge invitation could not be issued'); }
+    }
+
+    const testInviteMatch = urlPath.match(/^\/api\/admin\/strava-challenge\/invites\/(yannick|emma)\/test-link$/);
+    if (req.method === 'POST' && testInviteMatch) {
+      setSensitiveResponseHeaders(res);
+      try {
+        const result = await service.generateInvite(testInviteMatch[1]);
+        // This is intentionally owner-only and one-time display for testing.
+        return jsonRes(res, 200, { ok: true, connectionUrl: result.url, expiresAt: result.expiresAt });
+      } catch (error) { return challengeError(res, error, 'Challenge test invitation could not be issued'); }
+    }
+
+    const syncMatch = urlPath.match(/^\/api\/admin\/strava-challenge\/sync\/(yannick|emma|all)$/);
+    if (req.method === 'POST' && syncMatch) {
+      try {
+        const result = syncMatch[1] === 'all' ? await service.syncAll() : await service.syncParticipant(syncMatch[1]);
+        return jsonRes(res, 200, result);
+      } catch (error) { return challengeError(res, error, 'Challenge synchronization could not be completed'); }
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/admin/strava-challenge/finalization-preview') {
+      const week = boundedString(new URL(req.url, 'http://localhost').searchParams.get('week'), 10);
+      try { return jsonRes(res, 200, await service.previewFinalization(week || undefined)); }
+      catch (error) { return challengeError(res, error, 'Challenge finalization preview is unavailable'); }
+    }
+
+    if (req.method === 'POST' && urlPath === '/api/admin/strava-challenge/finalize') {
+      const body = await parseBody(req);
+      const weekStart = boundedString(body && body.weekStart, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !body || body.confirm !== `FINALIZE ${weekStart}`) return jsonRes(res, 400, { error: 'Confirmation must match the selected week' });
+      try { return jsonRes(res, 200, await service.finalizeWeek({ weekStart, confirm: body.confirm, manual: true })); }
+      catch (error) { return challengeError(res, error, 'Challenge week could not be finalized'); }
+    }
+
+    if (req.method === 'POST' && urlPath === '/api/admin/strava-challenge/reset-for-season-start') {
+      const body = await parseBody(req);
+      if (!body || body.confirm !== 'RESET STRAVA CHALLENGE') return jsonRes(res, 400, { error: 'Confirmation must match RESET STRAVA CHALLENGE' });
+      try { return jsonRes(res, 200, await service.resetForSeasonStart({ confirm: body.confirm })); }
+      catch (error) { return challengeError(res, error, 'Challenge reset could not be completed'); }
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/admin/strava-challenge/email-preview') {
+      const params = new URL(req.url, 'http://localhost').searchParams;
+      const type = boundedString(params.get('type'), 64);
+      const participant = boundedString(params.get('participant'), 16);
+      if (!type || !['yannick', 'emma'].includes(participant)) return jsonRes(res, 400, { error: 'A valid email type and participant are required' });
+      try { return jsonRes(res, 200, await service.previewEmail({ type, participantId: participant })); }
+      catch (error) { return challengeError(res, error, 'Challenge email preview is unavailable'); }
+    }
+
+    return jsonRes(res, 404, { error: 'Not found' });
+  }
 
   if (req.method === 'OPTIONS' && urlPath === '/api/radar/yhz') {
     res.writeHead(204, {
@@ -3448,7 +3693,7 @@ const server = http.createServer(async (req, res) => {
 
   if (urlPath.startsWith('/api/')) {
     await handleAPI(req, res, urlPath);
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    console.log(`${new Date().toISOString()} ${req.method} ${sanitizeRequestUrl(req.url)}`);
     return;
   }
 
@@ -3484,7 +3729,7 @@ const server = http.createServer(async (req, res) => {
       <a href="/" style="color:#ff453a">← Home</a></body></html>`);
   }
 
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  console.log(`${new Date().toISOString()} ${req.method} ${sanitizeRequestUrl(req.url)}`);
 });
 
 // ── WebSocket terminal ────────────────────────────────────────────────────
@@ -3572,6 +3817,11 @@ server.listen(PORT, '0.0.0.0', () => {
   assignmentCoach.startScheduler();
   startLightsScheduler();
   emailCampaigns.startCampaignScheduler();
+  if (stravaChallenge) {
+    Promise.resolve(stravaChallenge.startScheduler()).catch(error => {
+      stravaChallengeLogger.error('scheduler did not start:', error && error.message);
+    });
+  }
 });
 
 server.on('error', err => {

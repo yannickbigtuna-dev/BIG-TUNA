@@ -1,0 +1,8 @@
+'use strict';
+const test = require('node:test'); const assert = require('node:assert/strict');
+const { createStravaClient, StravaClientError } = require('../lib/strava-challenge/strava-client');
+const env = { STRAVA_CLIENT_ID: 'id', STRAVA_CLIENT_SECRET: 'secret', STRAVA_REDIRECT_URI: 'https://example.test/callback' };
+function response(body, status = 200, headers = {}) { return { ok: status < 300, status, headers: { get: k => headers[k.toLowerCase()] || null }, text: async () => JSON.stringify(body) }; }
+test('client paginates activity results and preserves rate metadata', async () => { let page = 0; const client = createStravaClient({ env, fetchImpl: async () => { page++; return response(page === 1 ? Array.from({ length: 100 }, (_, i) => ({ id: i })) : [{ id: 101 }], 200, { 'x-ratelimit-usage': '1,2' }); } }); const result = await client.listActivities('token', { after: new Date(0), before: new Date(1000) }); assert.equal(result.activities.length, 101); assert.equal(page, 2); assert.equal(result.rateLimit, '1,2'); });
+test('client reports rate limits without exposing body details', async () => { const client = createStravaClient({ env, fetchImpl: async () => response({ message: 'secret payload' }, 429, { 'retry-after': '17' }) }); await assert.rejects(() => client.listActivities('token'), e => e instanceof StravaClientError && e.status === 429 && e.retryAfter === 17 && !e.message.includes('secret')); });
+test('authorization URL requests activity read all', () => { const url = createStravaClient({ env, fetchImpl: async () => response({}) }).authorizeUrl('state'); assert.equal(new URL(url).searchParams.get('scope'), 'activity:read_all'); });
