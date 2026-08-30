@@ -393,3 +393,60 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
 - [x] Review combined diff and run independent acceptance checks.
 - [x] Selectively commit/push, restart through the elevated production task, and
       verify rules, recap assets, authentication, MCP, and Cloudflare publicly.
+
+## Active Manual Strava Refresh
+
+### Goal, constraints, and design
+
+- Keep the automatic Strava synchronization interval at the persisted 30-minute
+  setting; do not change the scheduler configuration.
+- Add one homepage action that synchronizes both fixed challenge participants and
+  refreshes the cached scoreboard for the signed-in `yannick` and `fishyemma`
+  accounts only. Username comparison is case-insensitive and exact after
+  normalization.
+- Enforce authorization on the server, return only a safe summary, coalesce an
+  already-running refresh, and apply a shared five-minute server-side cooldown
+  so UI mistakes or repeated requests cannot unnecessarily consume the Strava
+  API allowance.
+- Treat the control as a quiet rink-side maintenance action: use the established
+  glass scoreboard, shared typography/color tokens, a 44px touch target, clear
+  focus, and an accessible status message. Do not add a new visual language.
+
+### Ownership and approach
+
+- Backend implementer owns `server.js` and `test/strava-server-wiring.test.js`.
+  Add a narrowly scoped authenticated refresh route, an allowlist helper, and
+  in-flight/cooldown behavior around the existing `syncAll()` service method.
+- Frontend implementer owns `apps/index.html`, `apps/strava-challenge.js`,
+  `apps/strava-challenge.css`, and `test/strava-public-ui.test.js`. Register with
+  `Auth.onReady`, render the control only for the two allowed accounts, attach the
+  bearer token, disable while running, reload the public DTO after success, and
+  show useful success/cooldown/error feedback.
+- Root owns this plan, documentation/context decisions, combined diff and security
+  review, independent acceptance, selective staging, commit/push, live restart,
+  and post-deployment checks. Implementers must preserve concurrent/user edits,
+  stay within ownership, not commit or push, and report changed paths and checks.
+
+### Acceptance and rollback
+
+- The persisted live interval remains exactly 30 minutes.
+- The refresh route returns 401 without a valid session and 403 for any account
+  other than normalized `yannick` or `fishyemma`; both allowed accounts can invoke
+  one sync of both challenge participant slots.
+- Concurrent/repeated refreshes do not create duplicate bursts of Strava calls;
+  credentials, tokens, participant emails, and private configuration never appear
+  in frontend assets, responses, or logs.
+- The button is absent for signed-out/unrelated users and has working busy,
+  success, cooldown, and error states for allowed users on desktop and mobile.
+- Focused Strava tests and `npm test` pass. Rollback is the feature commit; no data
+  migration is required, and the cached challenge state is backed up before the
+  live restart.
+
+### Progress
+
+- [x] Confirm the live interval is already 30 minutes and identify `fishyemma` as
+      the exact account username.
+- [x] Write implementation specification and disjoint ownership plan.
+- [x] Implement backend and frontend packages.
+- [x] Review the combined diff and run independent security/acceptance checks.
+- [ ] Commit, push, restart the affected app process, and verify live behavior.

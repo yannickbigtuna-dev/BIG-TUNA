@@ -24,6 +24,30 @@ test('Strava public, OAuth, and protected admin routes are wired explicitly', ()
   assert.match(server, /sync\\\/\(yannick\|emma\|all\)/);
 });
 
+test('participant refresh is authenticated, allowlisted, coalesced, and response-safe', () => {
+  assert.match(server, /POST' && urlPath === '\/api\/strava-challenge\/refresh'/);
+  assert.match(server, /function challengeRefreshUser/);
+  assert.match(server, /new Set\(\['yannick', 'fishyemma'\]\)\.has\(normalizedChallengeUsername\(user\)\)/);
+  assert.match(server, /String\(user && user\.username \|\| ''\)\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(server, /const CHALLENGE_REFRESH_COOLDOWN_MS = 5 \* 60_000/);
+  assert.match(server, /let challengeRefreshInFlight = null/);
+  assert.match(server, /challengeRefreshCooldownUntil = Date\.now\(\) \+ CHALLENGE_REFRESH_COOLDOWN_MS;\s*const sync/);
+  assert.match(server, /return \{ \.\.\.await challengeRefreshInFlight, coalesced: true \}/);
+  assert.match(server, /service\.syncAll\(\)/);
+  assert.match(server, /\.then\(summarizeChallengeRefresh\)/);
+  assert.match(server, /function summarizeChallengeRefresh/);
+  assert.match(server, /successfulParticipants === participantIds\.length/);
+  assert.match(server, /: successfulParticipants > 0 \? 'partial' : 'failed'/);
+  assert.match(server, /totalParticipants: participantIds\.length/);
+  assert.match(server, /retryAfterSeconds: Math\.ceil\(remainingMs \/ 1000\)/);
+  assert.match(server, /return \{ \.\.\.summary, coalesced: false \}/);
+  assert.match(server, /setSensitiveResponseHeaders\(res\);\s*if \(!challengeRefreshUser\(req, res\)\) return;/);
+
+  const refreshRoute = server.slice(server.indexOf("urlPath === '/api/strava-challenge/refresh'"), server.indexOf('const publicWeekMatch'));
+  assert.doesNotMatch(refreshRoute, /jsonRes\(res, 200, result\)/);
+  assert.doesNotMatch(refreshRoute, /syncParticipant/);
+});
+
 test('request logging redacts OAuth and invitation credentials', () => {
   assert.match(server, /function sanitizeRequestUrl/);
   assert.match(server, /\['code', 'state', 'token', 't', 'inviteToken', 'resetToken'\]/);

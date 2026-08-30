@@ -422,7 +422,7 @@ STRAVA_CHALLENGE_YANNICK_EMAIL=
 STRAVA_CHALLENGE_EMMA_EMAIL=
 STRAVA_CHALLENGE_CRYPTO_SECRET=
 STRAVA_CHALLENGE_INVITE_TTL_HOURS=168
-STRAVA_CHALLENGE_SYNC_INTERVAL_MINUTES=15
+STRAVA_CHALLENGE_SYNC_INTERVAL_MINUTES=30
 STRAVA_CHALLENGE_FINALIZE_HOUR=8
 STRAVA_CHALLENGE_FROM_EMAIL=challenge@yannickmorgans.ca
 STRAVA_CHALLENGE_DISCLOSURE_APPROVED=true
@@ -501,7 +501,11 @@ The challenge scheduler runs inside the continuously running PM2 `apps-server`
 process, alongside the existing site jobs:
 
 - a delayed startup pass catches up work missed while the server was offline;
-- connected athletes are incrementally synchronized every 15 minutes by default;
+- connected athletes are incrementally synchronized every 30 minutes in the live
+  challenge configuration;
+- signed-in `yannick` and `fishyemma` can use the homepage **Refresh activities**
+  control to sync both participant slots on demand; it has a shared five-minute
+  cooldown and reloads the cached scoreboard;
 - at or after 08:00 Monday in `America/Halifax`, the previous week is synchronized
   through Sunday for both athletes and finalized only if both required syncs
   succeed;

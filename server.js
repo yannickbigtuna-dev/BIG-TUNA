@@ -112,6 +112,9 @@ const stravaChallengeLogger = Object.freeze({
 });
 
 let stravaChallenge = null;
+const CHALLENGE_REFRESH_COOLDOWN_MS = 5 * 60_000;
+let challengeRefreshInFlight = null;
+let challengeRefreshCooldownUntil = 0;
 try {
   stravaChallenge = createStravaChallenge({
     dataDir: path.join(DATA, 'strava-challenge'),
@@ -648,6 +651,54 @@ function challengeAdminUser(req, res) {
   if (!user) { jsonRes(res, 401, { error: 'Not authenticated' }); return null; }
   if (String(user.username || '').toLowerCase() !== 'yannick') { jsonRes(res, 403, { error: 'Forbidden' }); return null; }
   return user;
+}
+
+function normalizedChallengeUsername(user) {
+  return String(user && user.username || '').trim().toLowerCase();
+}
+
+function challengeRefreshUser(req, res) {
+  const user = getSessionUser(getToken(req));
+  if (!user) { jsonRes(res, 401, { error: 'Not authenticated' }); return null; }
+  if (!new Set(['yannick', 'fishyemma']).has(normalizedChallengeUsername(user))) {
+    jsonRes(res, 403, { error: 'Forbidden' });
+    return null;
+  }
+  return user;
+}
+
+async function refreshChallengeScoreboard(service) {
+  if (challengeRefreshInFlight) {
+    return { ...await challengeRefreshInFlight, coalesced: true };
+  }
+
+  const remainingMs = challengeRefreshCooldownUntil - Date.now();
+  if (remainingMs > 0) {
+    return { ok: true, status: 'cooldown', retryAfterSeconds: Math.ceil(remainingMs / 1000) };
+  }
+
+  // Reserve the cooldown before entering the service so an unexpected sync
+  // rejection cannot be hammered by immediate retries.
+  challengeRefreshCooldownUntil = Date.now() + CHALLENGE_REFRESH_COOLDOWN_MS;
+  const sync = Promise.resolve()
+    .then(() => service.syncAll())
+    .then(summarizeChallengeRefresh);
+  challengeRefreshInFlight = sync;
+  try {
+    const summary = await sync;
+    return { ...summary, coalesced: false };
+  } finally {
+    if (challengeRefreshInFlight === sync) challengeRefreshInFlight = null;
+  }
+}
+
+function summarizeChallengeRefresh(result) {
+  const participantIds = ['yannick', 'emma'];
+  const successfulParticipants = participantIds.filter(id => result && result[id] && result[id].ok === true).length;
+  const status = successfulParticipants === participantIds.length
+    ? 'completed'
+    : successfulParticipants > 0 ? 'partial' : 'failed';
+  return { ok: true, status, successfulParticipants, totalParticipants: participantIds.length };
 }
 
 function challengeServiceOrUnavailable(res) {
@@ -1484,6 +1535,21 @@ async function handleAPI(req, res, urlPath) {
       return jsonRes(res, 200, await service.getPublicDashboard());
     } catch (error) {
       return challengeError(res, error, 'Challenge scoreboard is temporarily unavailable');
+    }
+  }
+
+  // This is intentionally separate from the owner-only admin controls: both
+  // challenge participants may refresh the cached public scoreboard, but the
+  // response never includes the private sync result.
+  if (req.method === 'POST' && urlPath === '/api/strava-challenge/refresh') {
+    setSensitiveResponseHeaders(res);
+    if (!challengeRefreshUser(req, res)) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    try {
+      return jsonRes(res, 200, await refreshChallengeScoreboard(service));
+    } catch (error) {
+      return challengeError(res, error, 'Challenge synchronization could not be completed');
     }
   }
 

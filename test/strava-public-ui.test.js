@@ -70,3 +70,37 @@ test('compact recap bullets are explicit and preserve Yannick red and Emma blue 
   assert.match(css, /\.sc-recap--e \.sc-recap-line::before \{ color:var\(--c-blue\); \}/);
   assert.match(css, /\.sc-recap-metric \{ color:var\(--text-muted\); \}/);
 });
+
+test('manual activity refresh is auth-gated, bearer-authenticated, and refreshes the public dashboard', () => {
+  assert.match(html, /<script src="\/auth\.js"><\/script>\s*<script src="\/strava-challenge\.js"><\/script>/);
+  assert.match(js, /new Set\(\['yannick', 'fishyemma'\]\)/);
+  assert.match(js, /String\(user && user\.username \|\| ''\)\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(js, /Auth\.onReady\(user =>/);
+  assert.match(js, /\/api\/strava-challenge\/refresh/);
+  assert.match(js, /Authorization:`Bearer \$\{Auth\.token\}`/);
+  assert.match(js, /refresh\.busy=true/);
+  assert.match(js, /disabled aria-busy="true"/);
+  assert.match(js, /await loadPublicDashboard\(\)/);
+  assert.match(js, /response\.status === 429/);
+  assert.match(js, /result\.status === 'cooldown'/);
+  assert.match(js, /result\.status === 'in_progress'/);
+  assert.match(js, /result\.status === 'partial'/);
+  assert.match(js, /result\.status === 'failed'/);
+  assert.match(js, /Connected activities refreshed, but one account could not update or is not connected\./);
+  assert.match(js, /Retry-After/);
+  assert.match(js, /role="status" aria-live="polite"/);
+});
+
+test('manual refresh control uses existing scoreboard tokens with a 44px accessible target', () => {
+  assert.match(css, /\.sc-refresh-button \{ min-width:44px; min-height:44px;/);
+  assert.match(css, /var\(--accent\)/);
+  assert.match(css, /\.sc-refresh-status--success \{ color:var\(--success\); \}/);
+  assert.match(css, /\.sc-refresh-status--cooldown,\.sc-refresh-status--warning \{ color:var\(--warning\); \}/);
+  assert.match(css, /\.sc-refresh-status--error \{ color:var\(--danger\); \}/);
+});
+
+test('manual refresh is never offered or enabled in the challenge demo preview', () => {
+  assert.match(js, /refresh\.preview=demoMode/);
+  assert.match(js, /if \(!refresh\.allowed \|\| refresh\.preview\) return ''/);
+  assert.match(js, /if \(!refresh\.allowed \|\| refresh\.preview \|\| refresh\.busy \|\| !Auth\.token\) return/);
+});
