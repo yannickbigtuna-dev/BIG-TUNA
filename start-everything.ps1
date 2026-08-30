@@ -75,13 +75,14 @@ function Start-OllamaApiIfNeeded {
 function Invoke-Pm2App {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
-        [Parameter(Mandatory = $true)][string[]]$StartArgs
+        [Parameter(Mandatory = $true)][string[]]$StartArgs,
+        [Parameter(Mandatory = $true)][string[]]$RestartArgs
     )
 
     & $pm2 describe $Name *> $null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Restarting PM2 app: $Name"
-        & $pm2 restart $Name
+        & $pm2 @RestartArgs
     } else {
         Write-Host "Starting PM2 app: $Name"
         & $pm2 @StartArgs
@@ -95,8 +96,8 @@ Write-Host '=== BIG TUNA startup ==='
 Write-Host ''
 
 Start-OllamaApiIfNeeded
-Invoke-Pm2App -Name 'apps-server' -StartArgs @('start', 'C:\SERVER\ecosystem.config.cjs', '--update-env')
-Invoke-Pm2App -Name 'mcp-server' -StartArgs @('start', 'C:\SERVER\mcp-server\ecosystem.config.cjs')
+Invoke-Pm2App -Name 'apps-server' -StartArgs @('start', 'C:\SERVER\ecosystem.config.cjs', '--update-env') -RestartArgs @('restart', 'C:\SERVER\ecosystem.config.cjs', '--only', 'apps-server', '--update-env')
+Invoke-Pm2App -Name 'mcp-server' -StartArgs @('start', 'C:\SERVER\mcp-server\ecosystem.config.cjs') -RestartArgs @('restart', 'mcp-server')
 
 Write-Host 'Saving PM2 process list'
 & $pm2 save

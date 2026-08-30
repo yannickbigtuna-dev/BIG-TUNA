@@ -348,6 +348,8 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
 - [x] Confirm callback URL, base URL, scope return, and secret-file presence.
 - [x] Implement and review preflight validation with regression coverage.
 - [x] Back up live Strava state before any operational reload.
+- [x] Fix the canonical PM2 startup path so existing `apps-server` restarts
+      reload `ecosystem.config.cjs` and the gitignored `server.env`.
 - [ ] Reload the configured PM2 environment.
 - [ ] Verify local/public endpoints and complete a fresh browser OAuth pass.
 - [ ] Run full validation, selectively commit only repair files, and push `main`.
