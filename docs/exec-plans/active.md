@@ -391,4 +391,5 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
 - [x] Write implementation specification and disjoint ownership plan.
 - [x] Implement domain/rule-copy and recap/UI packages.
 - [x] Review combined diff and run independent acceptance checks.
-- [ ] Selectively commit/push and perform any authorized live restart.
+- [x] Selectively commit/push, restart through the elevated production task, and
+      verify rules, recap assets, authentication, MCP, and Cloudflare publicly.
