@@ -449,4 +449,4 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
 - [x] Write implementation specification and disjoint ownership plan.
 - [x] Implement backend and frontend packages.
 - [x] Review the combined diff and run independent security/acceptance checks.
-- [ ] Commit, push, restart the affected app process, and verify live behavior.
+- [x] Commit, push, restart the affected app process, and verify live behavior.
