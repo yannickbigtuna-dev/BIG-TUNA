@@ -310,3 +310,44 @@ commit or push, and report changed paths plus checks actually run.
 - [x] Review combined diff and run security/acceptance testing.
 - [x] Fix review findings and run full validation.
 - [ ] Selectively stage only feature changes, commit, and push `main`.
+
+## Active Repair — Strava OAuth Runtime Configuration
+
+### Goal and evidence
+
+Complete the existing Strava connection flow reliably. Live redacted PM2 logs on
+2026-08-30 show that Strava returned an authorization code and the requested
+`read,activity:read_all` scope, but token persistence failed because the running
+process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
+`server.env` contains a valid-length secret and the documented callback URL.
+
+### Proposed change and ownership
+
+- The implementer owns `lib/strava-challenge/crypto.js`,
+  `lib/strava-challenge/service.js`, and focused Strava tests only.
+- Add a side-effect-free secure-storage configuration check and require it while
+  preparing OAuth, before returning a Strava authorization URL.
+- Preserve the callback encryption, participant binding, single-use state,
+  scope checks, duplicate-athlete protection, and secret-safe responses/logs.
+- Root owns combined diff/security review, the live-state backup, operational
+  environment reload, browser verification, commit, and push.
+
+### Acceptance, risk, and rollback
+
+- Configured OAuth preparation and completion work with encrypted credentials.
+- A missing or too-short encryption secret fails before the user leaves for
+  Strava; no secret or OAuth credential appears in a response or log.
+- Existing success, missing-scope, expired/replayed-state, and duplicate-athlete
+  tests remain passing; focused Strava tests and `npm test` pass.
+- Back up `data/strava-challenge/` before reloading PM2. Do not edit live state.
+  Rollback is the repair commit plus the untouched timestamped state backup.
+
+### Progress
+
+- [x] Reproduce through redacted live logs and isolate the missing runtime secret.
+- [x] Confirm callback URL, base URL, scope return, and secret-file presence.
+- [x] Implement and review preflight validation with regression coverage.
+- [x] Back up live Strava state before any operational reload.
+- [ ] Reload the configured PM2 environment.
+- [ ] Verify local/public endpoints and complete a fresh browser OAuth pass.
+- [ ] Run full validation, selectively commit only repair files, and push `main`.

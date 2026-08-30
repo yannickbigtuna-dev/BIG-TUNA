@@ -74,8 +74,11 @@
   }).then(async response => {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const code = String(data.code || '').toLowerCase();
-      const message = code === 'missing_scope' ? 'The needed Strava activity permission was not granted. Request a new connection link and approve activity access.' : 'This connection link is invalid, expired, revoked, or has already been used.';
+      const message = response.status >= 500 && response.status <= 599
+        ? 'Strava connection is temporarily unavailable. Please contact the challenge administrator and try again later.'
+        : String(data.code || '').toLowerCase() === 'missing_scope'
+          ? 'The needed Strava activity permission was not granted. Request a new connection link and approve activity access.'
+          : 'This connection link is invalid, expired, revoked, or has already been used.';
       throw new Error(message);
     }
     renderReady(data);

@@ -30,3 +30,9 @@ test('connection page explains permissions, public display, revocation, and safe
   assert.match(page, /invalid, expired, revoked, or has already been used/);
   assert.match(page, /name="referrer" content="no-referrer"/);
 });
+
+test('connection page distinguishes temporary prepare failures from invalid connection links', () => {
+  assert.match(page, /response\.status >= 500 && response\.status <= 599/);
+  assert.match(page, /Strava connection is temporarily unavailable\. Please contact the challenge administrator and try again later\./);
+  assert.match(page, /This connection link is invalid, expired, revoked, or has already been used\./);
+});
