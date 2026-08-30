@@ -378,9 +378,9 @@ new use.
 - A week is Monday 00:00 through the next Monday 00:00 in
   `America/Halifax`. Activities are assigned by their UTC start instant converted
   to that timezone.
-- Runs and walks require 4,000 metres; swims require 3,000 metres.
-- gym/workout/weight activities and paddle/row activities require 1,800 seconds;
-  climbing requires 3,600 seconds.
+- Runs require 4,000 metres, walks require 2,000 metres, and swims require 3,000 metres.
+- Gym/workout/weight activities require 1,200 seconds; paddle/row activities
+  require 1,800 seconds; climbing requires 3,600 seconds.
 - Every qualifying activity is worth one activity, regardless of excess distance
   or duration.
 - More qualifying activities wins. If counts match, exact total qualifying

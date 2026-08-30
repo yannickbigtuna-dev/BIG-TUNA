@@ -41,3 +41,32 @@ test('arena board fixes Yannick red, Emma blue, has mobile three-track layout an
   assert.match(css, /\.sc-recap-line/);
   assert.match(css, /text-overflow:ellipsis/);
 });
+
+test('compact recaps show only qualifying activities as semantic, expandable bullet lists', () => {
+  assert.match(js, /a\.qualifies === true/);
+  assert.match(js, /qualifying\.slice\(0,5\)/);
+  assert.match(js, /Math\.max\(0,qualifying\.length-5\)/);
+  assert.match(js, /<ul class="sc-recap-list"/);
+  assert.match(js, /<li class="sc-recap-line"/);
+  assert.match(js, /No qualifying activities yet/);
+  assert.match(js, /\+\$\{remaining\} more/);
+  assert.match(js, /Show latest 5/);
+  assert.match(js, /aria-expanded="false"/);
+  assert.match(js, /aria-controls="\$\{listId\}"/);
+});
+
+test('compact recap expansion state is independent per athlete and its construction has no status markers', () => {
+  assert.match(js, /const recapExpanded = \{ yannick:false, emma:false \}/);
+  assert.match(js, /recapExpanded\[id\]=!recapExpanded\[id\]/);
+  const recapSource = js.match(/function recap[\s\S]*?function stats/)[0];
+  assert.doesNotMatch(recapSource, /sc-yes|sc-no|✓|✕/);
+  assert.match(js, /data-recap-toggle/);
+});
+
+test('compact recap bullets are explicit and preserve Yannick red and Emma blue with muted metrics', () => {
+  assert.match(css, /\.sc-recap-list \{ margin:0; padding:0; list-style:none; \}/);
+  assert.match(css, /\.sc-recap-line::before \{ content:'•'; \}/);
+  assert.match(css, /\.sc-recap--y \.sc-recap-line::before \{ color:var\(--c-red\); \}/);
+  assert.match(css, /\.sc-recap--e \.sc-recap-line::before \{ color:var\(--c-blue\); \}/);
+  assert.match(css, /\.sc-recap-metric \{ color:var\(--text-muted\); \}/);
+});

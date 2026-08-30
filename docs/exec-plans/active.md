@@ -137,8 +137,8 @@ derived from unique finalized weeks rather than incremented independently.
 
 - Fixed timezone: `America/Halifax`; weeks are `[Monday 00:00, next Monday
   00:00)` in that timezone, including DST transitions.
-- Distance thresholds: Run 4000m, Swim 3000m, Walk 4000m.
-- Time thresholds: Gym 1800s, Paddle/Row 1800s, Climbing 3600s.
+- Distance thresholds: Run 4000m, Swim 3000m, Walk 2000m.
+- Time thresholds: Gym 1200s, Paddle/Row 1800s, Climbing 3600s.
 - Official `sport_type` enum mapping is centralized. Run includes `Run`,
   `TrailRun`, `VirtualRun`; gym includes `Workout`, `WeightTraining`, `Crossfit`,
   `HighIntensityIntervalTraining`; paddle/row includes `Canoeing`, `Kayaking`,
@@ -248,7 +248,8 @@ commit or push, and report changed paths plus checks actually run.
 ## Acceptance checks
 
 1. Qualification boundaries pass exactly: 3.99/4.00/4.01km run; 2.99/3.00km
-   swim; 3.99/4.00km walk; 29:59/30:00 gym and paddle; 59:59/60:00 climb.
+   swim; 1.99/2.00km walk; 19:59/20:00 gym; 29:59/30:00 paddle;
+   59:59/60:00 climb.
 2. Count wins, both duration-tiebreaker directions, and exact true tie pass;
    non-qualifiers never affect count or qualifying time.
 3. Halifax week math passes Sunday/Monday and spring/fall DST boundaries.
@@ -355,3 +356,39 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
       paths after restart.
 - [ ] Complete a fresh browser OAuth approval/callback pass.
 - [x] Run full validation, selectively commit only repair files, and push `main`.
+
+## Active Rule and Recap Update
+
+### Goal and ownership
+
+- Count walks at 2,000 metres and gym/workout/weight activities at 1,200 seconds,
+  preserving every other qualification and scoring rule.
+- Re-evaluate active/unfinalized stored activities against the current rules at
+  read/calculation time so old normalized flags cannot delay the rule change;
+  finalized official snapshots remain immutable.
+- Domain implementer owns `lib/strava-challenge/domain.js`,
+  `test/strava-domain.test.js`, and Strava rule copy in `README.md`.
+- UI implementer owns `apps/strava-challenge.js`,
+  `apps/strava-challenge.css`, and `test/strava-public-ui.test.js`.
+- Root owns this plan, combined diff review, validation, selective commit/push,
+  and any separately authorized live restart.
+
+### Recap design and acceptance
+
+- Compact athlete recaps contain qualifying activities only, newest first.
+- Show five initially, then an independent accessible `+N more` control per
+  athlete with a way back to the latest five.
+- Use semantic bullet lists in fixed Yannick red / Emma blue; remove green checks,
+  red Xs, and qualification badges from the compact recap.
+- Boundary tests cover 1,999/2,000m walks and 1,199/1,200s gym while proving the
+  paddle threshold remains 1,800s. Focused and full suites must pass.
+- A stale current-week qualification flag is refreshed in public score/activity
+  output without mutating state; finalized week details remain stored as-is.
+
+### Progress
+
+- [x] Inspect thresholds, normalization, public DTO, recap rendering, and tests.
+- [x] Write implementation specification and disjoint ownership plan.
+- [x] Implement domain/rule-copy and recap/UI packages.
+- [x] Review combined diff and run independent acceptance checks.
+- [ ] Selectively commit/push and perform any authorized live restart.
