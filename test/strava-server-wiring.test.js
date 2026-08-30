@@ -35,7 +35,7 @@ test('OAuth and invitation paths use no-store/no-referrer headers and do not ret
   assert.match(server, /function setSensitiveResponseHeaders/);
   assert.match(server, /'Referrer-Policy', 'no-referrer'/);
   assert.match(server, /'Cache-Control', 'no-store'/);
-  assert.match(server, /\{ authorizationUrl: prepared\.authorizationUrl \}/);
+  assert.match(server, /participantId: prepared\.participantId, authorizationUrl: prepared\.authorizationUrl/);
   assert.match(server, /\{ ok: true, sent: Boolean\(result && result\.sent\) \}/);
   assert.match(server, /\{ ok: true, expiresAt: result && result\.expiresAt \|\| null \}/);
   assert.doesNotMatch(server, /jsonRes\(res, 200, prepared\)/);

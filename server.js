@@ -1510,7 +1510,7 @@ async function handleAPI(req, res, urlPath) {
     if (!inviteToken) return jsonRes(res, 400, { error: 'Connection link is invalid or expired' });
     try {
       const prepared = await service.prepareOAuth(inviteToken);
-      return jsonRes(res, 200, { authorizationUrl: prepared.authorizationUrl });
+      return jsonRes(res, 200, { participantId: prepared.participantId, authorizationUrl: prepared.authorizationUrl });
     } catch (error) {
       return challengeError(res, error, 'Connection link is invalid or expired');
     }
