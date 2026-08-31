@@ -3,6 +3,8 @@ const https  = require('https');
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const net    = require('net');
+const os     = require('os');
 const { fork }            = require('child_process');
 const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
@@ -85,6 +87,29 @@ const { createHomeKitLightBridge } = require('./lib/homekit-light-bridge');
 const geoip = require('geoip-lite');
 
 let homekitLightBridge = null;
+
+function resolveHomeKitBindAddress(env = process.env, networkInterfaces = os.networkInterfaces) {
+  const configuredAddress = typeof env.HOMEKIT_BIND_ADDRESS === 'string'
+    ? env.HOMEKIT_BIND_ADDRESS.trim()
+    : '';
+  if (net.isIP(configuredAddress) === 4) return configuredAddress;
+
+  const interfaceName = typeof env.HOMEKIT_BIND_INTERFACE === 'string' && env.HOMEKIT_BIND_INTERFACE.trim()
+    ? env.HOMEKIT_BIND_INTERFACE.trim()
+    : 'Wi-Fi';
+  const interfaces = typeof networkInterfaces === 'function' ? networkInterfaces() : {};
+  const adapter = interfaces && Array.isArray(interfaces[interfaceName])
+    ? interfaces[interfaceName]
+    : [];
+  const ipv4 = adapter.find(address => address
+    && address.internal !== true
+    && (address.family === 'IPv4' || address.family === 4)
+    && net.isIP(address.address) === 4);
+
+  // Passing the adapter name preserves HAP's prior behavior when no usable
+  // IPv4 address is available yet (for example, while Wi-Fi is reconnecting).
+  return ipv4 ? ipv4.address : interfaceName;
+}
 
 // The service deliberately owns all Strava credentials and durable challenge
 // state. Keep the server adapter small so public routes can never accidentally
@@ -282,9 +307,9 @@ function getLightsDeviceStatusPayload() {
 async function startHomeKitLightBridge() {
   const bridge = createHomeKitLightBridge({
     dataDir: path.join(LIGHTS_DIR, 'homekit'),
-    // Do not advertise the Tailscale address to Apple Home. The bridge is a
-    // physical-LAN accessory and must be discovered/reached over this adapter.
-    bind: process.env.HOMEKIT_BIND_INTERFACE || 'Wi-Fi',
+    // Advertise only the selected physical adapter's IPv4 address so Apple
+    // Home never receives Tailscale or IPv6 routes for this LAN accessory.
+    bind: resolveHomeKitBindAddress(),
     readOn: () => {
       const storedOn = readLightsState().on;
       return LIGHTS_DEVICE_INVERT_OUTPUT ? !storedOn : storedOn;
@@ -3938,6 +3963,7 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req, user, cols, rows));
 });
 
+if (require.main === module) {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n Server running at http://localhost:${PORT}`);
   console.log(` Apps folder: C:\\SERVER\\apps\\`);
@@ -3963,6 +3989,7 @@ server.on('error', err => {
   else console.error(err);
   process.exit(1);
 });
+}
 
 process.on('uncaughtException', err => {
   console.error('[uncaughtException]', err.stack || err.message);
@@ -3971,3 +3998,5 @@ process.on('uncaughtException', err => {
 process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
+
+module.exports = { resolveHomeKitBindAddress };
