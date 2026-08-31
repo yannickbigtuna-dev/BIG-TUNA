@@ -414,6 +414,8 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
 - Keep the compact latest-five preview strictly qualifying-only, give each card a
   subtle athlete-tinted background, and use plain activity names/metrics without
   checkmarks, X markers, or qualification badges.
+- Keep the manual refresh affordance compact: a text-only `Sync` action inline
+  beside the latest-updated timestamp, not a standalone panel.
 
 ### Ownership and approach
 

@@ -113,14 +113,13 @@ test('qualifying activity cards use Yannick and Emma tinted backgrounds rather t
   assert.doesNotMatch(css, /\.sc-yes|\.sc-no|\.sc-qual/);
 });
 
-test('authorised refresh is visibly placed immediately below the scoreboard with clear action copy', () => {
-  assert.match(js, /<section class="sc-refresh" aria-label="Strava activity refresh">/);
-  assert.match(js, /Update both Strava accounts/);
-  assert.match(js, /Sync Yannick \+ Emma now/);
-  assert.match(js, /Pulls the latest qualifying activities\. Available every 5 minutes\./);
-  assert.match(js, /<\/div>\$\{refreshControl\(\)\}<button class="btn btn-ghost sc-more"/);
-  assert.match(css, /\.sc-refresh \{ display:grid;[\s\S]*background:linear-gradient/);
-  assert.match(css, /\.sc-refresh-label \{ margin:0;/);
+test('authorised refresh is a compact inline Sync action beside Last updated, not a separate panel', () => {
+  assert.match(js, /<span class="sc-refresh" aria-label="Strava activity refresh">/);
+  assert.match(js, /\$\{refresh\.busy \? 'Syncing…' : 'Sync'\}/);
+  assert.match(js, /Last updated[\s\S]*\$\{refreshControl\(\)\}<\/div><\/div><button class="btn btn-ghost sc-more"/);
+  assert.doesNotMatch(js, /Update both Strava accounts|Sync Yannick \+ Emma now|Pulls the latest qualifying activities/);
+  assert.match(css, /\.sc-refresh \{ display:inline-flex; align-items:baseline;/);
+  assert.doesNotMatch(css, /\.sc-refresh-label|\.sc-refresh-help|\.sc-refresh \{[^}]*background:linear-gradient/);
 });
 
 test('manual refresh is never offered or enabled in the challenge demo preview', () => {
