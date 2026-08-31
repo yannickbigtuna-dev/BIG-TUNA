@@ -193,6 +193,22 @@
     filter: saturate(0.78);
   }
 
+  .homekit-panel {
+    width: min(100%, 420px);
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text);
+    text-align: left;
+  }
+
+  .homekit-panel[hidden] { display: none; }
+  .homekit-panel h2 { margin: 0; font-size: var(--font-size-sm); }
+  .homekit-panel p { margin: 7px 0 0; color: var(--text-muted); font-size: var(--font-size-xs); }
+  .homekit-code { font-family: var(--font-mono); color: var(--text); letter-spacing: .06em; }
+  .homekit-panel a { color: var(--accent); }
+
   @media (max-width: 520px) {
     main { padding: 24px 14px 34px; }
     .switch-wrap { width: min(72vw, 180px); }
@@ -211,6 +227,11 @@
         </button>
       </div>
     </div>
+    <section class="homekit-panel" id="homekit-panel" aria-labelledby="homekit-title" hidden>
+      <h2 id="homekit-title">Apple Home</h2>
+      <p id="homekit-status" role="status"></p>
+      <p><a href="/lights/apple-home-guide.html">Open the Apple Home connection guide</a></p>
+    </section>
   </section>
 </main>
 <script src="/topbar.js"></script>
@@ -220,6 +241,8 @@
   const TOKEN_KEY = 'auth_token';
   const USER_KEY = 'auth_user';
   const switchBtn = document.getElementById('switch');
+  const homekitPanel = document.getElementById('homekit-panel');
+  const homekitStatus = document.getElementById('homekit-status');
   const INVERT_WEBSITE_STATE = true;
 
   let currentOn = false;
@@ -232,6 +255,7 @@
   let authCheckSequence = 0;
   let authValidation = null;
   let stateLoadPromise = null;
+  let homekitLoadToken = '';
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   document.body.classList.toggle('standalone', isStandalone);
@@ -296,6 +320,31 @@
     document.body.classList.toggle('is-authed', canControl);
   }
 
+  async function loadHomeKitInfo() {
+    const token = verifiedToken;
+    if (!canControl || !token || token === homekitLoadToken) return;
+    homekitLoadToken = token;
+    try {
+      const res = await fetch('/api/lights/homekit', {
+        cache: 'no-store',
+        headers: { 'Authorization': 'Bearer ' + token },
+      });
+      if (!res.ok || token !== verifiedToken) return;
+      const data = await res.json();
+      if (!data || data.available !== true) {
+        homekitStatus.textContent = 'Apple Home bridge is unavailable on this server.';
+      } else if (data.paired === true) {
+        homekitStatus.textContent = `${data.name || 'BIG TUNA Lights'} is connected to Apple Home.`;
+      } else if (typeof data.setupCode === 'string') {
+        homekitStatus.textContent = `Ready to connect. Setup code: ${data.setupCode}`;
+        homekitStatus.classList.add('homekit-code');
+      }
+      homekitPanel.hidden = false;
+    } catch {
+      // Leave the pairing panel hidden on a transient request failure.
+    }
+  }
+
   function validateAccess(force = false) {
     const token = getToken();
     const cachedUser = getCachedUser();
@@ -353,6 +402,7 @@
       } finally {
         if (authValidation === validation) authValidation = null;
         updateAccess();
+        loadHomeKitInfo();
       }
     })();
     authValidation = validation;

@@ -1,0 +1,80 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { afterEach, test } = require('node:test');
+const { createHomeKitLightBridge, loadOrCreateConfig } = require('../lib/homekit-light-bridge');
+
+const temporaryDirs = [];
+afterEach(() => {
+  for (const dir of temporaryDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function temporaryDir() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'big-tuna-homekit-'));
+  temporaryDirs.push(dir);
+  return dir;
+}
+
+function fakeHap() {
+  const state = { characteristic: null, published: null, storagePath: null };
+  class Characteristic {
+    onGet(handler) { this.get = handler; return this; }
+    onSet(handler) { this.set = handler; return this; }
+    updateValue(value) { this.value = value; return this; }
+  }
+  class Accessory {
+    constructor() { this.isPaired = false; }
+    addService() { return { getCharacteristic: () => (state.characteristic = new Characteristic()) }; }
+    async publish(info) { state.published = info; }
+    paired() { return this.isPaired; }
+  }
+  return {
+    Accessory,
+    Service: { Lightbulb: 'lightbulb' },
+    Characteristic: { On: 'on' },
+    Categories: { LIGHTBULB: 5 },
+    HAPStorage: { setCustomStoragePath(value) { state.storagePath = value; } },
+    uuid: { generate(value) { return value; } },
+    state,
+  };
+}
+
+test('HomeKit On maps directly to physical ON and reads current physical state', async () => {
+  const hap = fakeHap();
+  let physicalOn = false;
+  const bridge = createHomeKitLightBridge({
+    dataDir: temporaryDir(), hap,
+    readOn: () => physicalOn,
+    writeOn: value => { physicalOn = value; },
+  });
+  await bridge.start();
+  assert.equal(await hap.state.characteristic.get(), false);
+  await hap.state.characteristic.set(true);
+  assert.equal(physicalOn, true);
+  assert.equal(hap.state.published.port, 51826);
+  assert.equal(hap.state.published.setupID, 'BTNA');
+});
+
+test('external physical state changes update the HomeKit characteristic', async () => {
+  const hap = fakeHap();
+  const bridge = createHomeKitLightBridge({
+    dataDir: temporaryDir(), hap, readOn: () => false, writeOn: () => {},
+  });
+  await bridge.start();
+  bridge.update(true);
+  assert.equal(hap.state.characteristic.value, true);
+  bridge.update(false);
+  assert.equal(hap.state.characteristic.value, false);
+});
+
+test('pairing secret is created once and remains stable', () => {
+  const dataDir = temporaryDir();
+  const first = loadOrCreateConfig(dataDir);
+  const second = loadOrCreateConfig(dataDir);
+  assert.equal(first.setupCode, second.setupCode);
+  assert.equal(first.username, second.username);
+  assert.match(first.setupCode, /^\d{3}-\d{2}-\d{3}$/);
+});

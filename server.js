@@ -80,7 +80,10 @@ const { createStravaChallenge } = require('./lib/strava-challenge');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
 const { createTriviaTopicPool } = require('./lib/trivia-topic-pool');
+const { createHomeKitLightBridge } = require('./lib/homekit-light-bridge');
 const geoip = require('geoip-lite');
+
+let homekitLightBridge = null;
 
 // The service deliberately owns all Strava credentials and durable challenge
 // state. Keep the server adapter small so public routes can never accidentally
@@ -227,6 +230,11 @@ function writeLightsState(on, updatedBy) {
   };
   atomicWrite(LIGHTS_STATE_FILE, state);
   broadcastLightsState(state);
+  // The ESP keeps its existing inverted wire contract. HomeKit works in the
+  // physical light's terms, so translate only at this server boundary.
+  if (homekitLightBridge) {
+    homekitLightBridge.update(LIGHTS_DEVICE_INVERT_OUTPUT ? !state.on : state.on);
+  }
   return state;
 }
 
@@ -268,6 +276,22 @@ function getLightsDeviceStatusPayload() {
     recentlyPolled: lastPoll > 0 && Date.now() - lastPoll <= LIGHTS_DEVICE_RECENT_MS,
     recentWindowMs: LIGHTS_DEVICE_RECENT_MS,
   };
+}
+
+async function startHomeKitLightBridge() {
+  const bridge = createHomeKitLightBridge({
+    dataDir: path.join(LIGHTS_DIR, 'homekit'),
+    readOn: () => {
+      const storedOn = readLightsState().on;
+      return LIGHTS_DEVICE_INVERT_OUTPUT ? !storedOn : storedOn;
+    },
+    writeOn: physicalOn => {
+      const storedOn = LIGHTS_DEVICE_INVERT_OUTPUT ? !physicalOn : physicalOn;
+      writeLightsState(storedOn, 'homekit');
+    },
+  });
+  await bridge.start();
+  homekitLightBridge = bridge;
 }
 
 // ── Lights auto-schedule (sunset → on, sunrise & 22:00 → off) ─────────────────
@@ -1741,6 +1765,18 @@ async function handleAPI(req, res, urlPath) {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
     return res.end(JSON.stringify({ on, updatedAt }));
+  }
+
+  // GET /api/lights/homekit - pairing status for the Lights owner only.
+  if (req.method === 'GET' && urlPath === '/api/lights/homekit') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+    if (!homekitLightBridge) {
+      return jsonRes(res, 200, { available: false, paired: false, name: 'BIG TUNA Lights' });
+    }
+    const info = homekitLightBridge.getPairingInfo();
+    return jsonRes(res, 200, info);
   }
 
   // POST /api/lights - only yannick can change the desired light state
@@ -3882,6 +3918,11 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(` Data folder: C:\\SERVER\\data\\\n`);
   assignmentCoach.startScheduler();
   startLightsScheduler();
+  startHomeKitLightBridge().catch(error => {
+    // HomeKit is a local convenience integration; leave the website and ESP
+    // polling service available if the port, mDNS, or HAP runtime is unavailable.
+    console.error(`[homekit] disabled: ${error && error.message ? error.message : 'startup failed'}`);
+  });
   emailCampaigns.startCampaignScheduler();
   if (stravaChallenge) {
     Promise.resolve(stravaChallenge.startScheduler()).catch(error => {

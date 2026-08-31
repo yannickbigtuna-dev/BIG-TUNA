@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Connect Apple Home · BIG TUNA Lights</title>
+<link rel="stylesheet" href="/styles/tokens.css">
+<style>
+  body { min-height: 100vh; padding: max(28px, env(safe-area-inset-top)) 18px 40px; background: var(--bg); color: var(--text); }
+  main { width: min(100%, 680px); margin: 56px auto 0; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  h1 { margin-top: 0; font-size: clamp(1.6rem, 7vw, 2.4rem); }
+  h2 { margin-top: 28px; font-size: var(--font-size-lg); }
+  p, li { color: var(--text-muted); line-height: 1.6; }
+  strong, code { color: var(--text); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connect Apple Home</h1>
+  <p>BIG TUNA Lights is a local HomeKit light. It controls the same desired state as the website; your ESP32 keeps polling the website exactly as it already does.</p>
+  <h2>Pair once</h2>
+  <ol>
+    <li>Put this iPhone and the BIG TUNA Windows server on the same normal home Wi-Fi/LAN. Do not use guest Wi-Fi or a VPN while pairing.</li>
+    <li>Sign in to BIG TUNA as <strong>yannick</strong> and open <a href="/lights/">Lights</a>. The Apple Home panel shows the setup code while the bridge is unpaired.</li>
+    <li>In Apple’s <strong>Home</strong> app, tap <strong>+</strong>, choose <strong>Add Accessory</strong>, then choose <strong>More options</strong> if the light is not suggested.</li>
+    <li>Select <strong>BIG TUNA Lights</strong>, enter the code from the Lights page, and choose a room.</li>
+    <li>Turn it on and off in Home. The relay follows on its normal ESP32 polling interval.</li>
+  </ol>
+  <p>After pairing, normal BIG TUNA restarts and updates keep the Apple Home relationship. With a HomePod or Apple TV configured as a Home Hub, you can control it away from home.</p>
+  <h2>If it does not appear</h2>
+  <ul>
+    <li>Confirm the phone and server are on the same LAN. Cloudflare/the public website cannot carry HomeKit discovery.</li>
+    <li>Allow inbound <strong>TCP 51826</strong> on Windows’ <strong>Private</strong> firewall profile and local multicast DNS (UDP 5353). Do not open either to the public Internet.</li>
+    <li>Restart the BIG TUNA server after installing the new dependency, wait about 30 seconds, then try <strong>More options</strong> again.</li>
+  </ul>
+  <p>Do not delete <code>data/lights/homekit/</code>: it contains the secure HomeKit pairing identity and deleting it requires a new pairing.</p>
+</main>
+</body>
+</html>
