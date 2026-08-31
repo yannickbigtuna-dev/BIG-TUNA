@@ -100,6 +100,16 @@ http://localhost:3000
 
 There is no build step. Changes to files in `apps/` are picked up on the next browser refresh. Changes to `server.js` require restarting the Node process.
 
+### Service restart convention
+
+When a requested or implemented change requires a running-service restart, Codex restarts only the affected service after validation when the user has given standing authorization. For changes to `server.js`, the affected PM2 process is `apps-server`:
+
+```powershell
+pm2 restart apps-server
+```
+
+This convention does not authorize unrelated service restarts, deployment actions, or Git pushes; those remain subject to the task's explicit safety and authorization requirements.
+
 Run the Node test suite with:
 
 ```powershell
