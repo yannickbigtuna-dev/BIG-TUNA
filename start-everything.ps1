@@ -72,6 +72,70 @@ function Start-OllamaApiIfNeeded {
     Start-Process -FilePath $ollamaExe -ArgumentList 'serve' -WindowStyle Hidden | Out-Null
 }
 
+function Get-ActiveWifiSsid {
+    param(
+        [Parameter(Mandatory = $true)]$Adapter
+    )
+
+    try {
+        # NetConnectionProfile.Name is Windows' NLM display name, which may not
+        # match the Wi-Fi SSID. Read the SSID from netsh and keep it scoped to
+        # the connected adapter so another Wi-Fi interface cannot be trusted.
+        $netshOutput = @(& netsh.exe wlan show interfaces 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $netshOutput.Count -eq 0) {
+            return $null
+        }
+
+        $interfaceBlocks = @()
+        $currentBlock = @()
+        foreach ($line in $netshOutput) {
+            if ($line -match '^\s*Name\s*:') {
+                if ($currentBlock.Count -gt 0) {
+                    $interfaceBlocks += ,$currentBlock
+                }
+                $currentBlock = @()
+            }
+
+            if ($currentBlock.Count -gt 0 -or $line -match '^\s*Name\s*:') {
+                $currentBlock += [string]$line
+            }
+        }
+        if ($currentBlock.Count -gt 0) {
+            $interfaceBlocks += ,$currentBlock
+        }
+
+        foreach ($interfaceBlock in $interfaceBlocks) {
+            $interfaceName = $null
+            foreach ($line in $interfaceBlock) {
+                $nameMatch = [regex]::Match([string]$line, '^\s*Name\s*:\s*(?<name>.+?)\s*$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                if ($nameMatch.Success) {
+                    $interfaceName = $nameMatch.Groups['name'].Value.Trim()
+                    break
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($interfaceName) -or $interfaceName -ine $Adapter.Name) {
+                continue
+            }
+
+            foreach ($line in $interfaceBlock) {
+                # Anchor this to SSID so the BSSID line is never mistaken for it.
+                $ssidMatch = [regex]::Match([string]$line, '^\s*SSID\s*:\s*(?<ssid>.+?)\s*$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                if ($ssidMatch.Success) {
+                    $ssid = $ssidMatch.Groups['ssid'].Value.Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($ssid)) {
+                        return $ssid
+                    }
+                }
+            }
+        }
+    } catch {
+        Write-Host "HomeKit LAN setup: could not determine active Wi-Fi SSID: $($_.Exception.Message)"
+    }
+
+    return $null
+}
+
 function Initialize-HomeKitLanAccess {
     $homeKitDirectory = Join-Path $root 'data\lights\homekit'
     $homeKitNetworkFile = Join-Path $homeKitDirectory 'homekit-network.json'
@@ -79,11 +143,14 @@ function Initialize-HomeKitLanAccess {
     try {
         New-Item -ItemType Directory -Path $homeKitDirectory -Force -ErrorAction Stop | Out-Null
 
-        $storedProfileName = $null
+        $storedSsid = $null
+        $legacyProfileName = $null
         if (Test-Path $homeKitNetworkFile) {
             $storedNetwork = Get-Content -Raw -Path $homeKitNetworkFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-            if ($storedNetwork.profileName -is [string] -and -not [string]::IsNullOrWhiteSpace($storedNetwork.profileName)) {
-                $storedProfileName = $storedNetwork.profileName
+            if ($storedNetwork.ssid -is [string] -and -not [string]::IsNullOrWhiteSpace($storedNetwork.ssid)) {
+                $storedSsid = $storedNetwork.ssid
+            } elseif ($storedNetwork.profileName -is [string] -and -not [string]::IsNullOrWhiteSpace($storedNetwork.profileName)) {
+                $legacyProfileName = $storedNetwork.profileName
             } else {
                 Write-Host 'HomeKit LAN setup: stored network marker is invalid; leaving network category unchanged.'
             }
@@ -97,22 +164,35 @@ function Initialize-HomeKitLanAccess {
                 $_.IPv4Connectivity -eq 'Internet' -or $_.IPv6Connectivity -eq 'Internet'
             } | Select-Object -First 1
         }
+        $activeWifiSsid = if ($activeWifi) {
+            Get-ActiveWifiSsid -Adapter $activeWifi
+        }
 
-        if ($storedProfileName) {
-            if ($activeProfile -and $activeProfile.Name -ceq $storedProfileName -and $activeProfile.NetworkCategory -ne 'Private') {
+        if ($storedSsid) {
+            if ($activeProfile -and $activeWifiSsid -ceq $storedSsid -and $activeProfile.NetworkCategory -ne 'Private') {
                 Set-NetConnectionProfile -InterfaceIndex $activeProfile.InterfaceIndex -NetworkCategory Private -ErrorAction Stop
-                Write-Host "HomeKit LAN setup: set stored Wi-Fi profile '$storedProfileName' to Private."
+                Write-Host "HomeKit LAN setup: set stored Wi-Fi SSID '$storedSsid' to Private."
             }
-        } elseif (-not (Test-Path $homeKitNetworkFile)) {
-
-            if ($activeProfile -and -not [string]::IsNullOrWhiteSpace($activeProfile.Name)) {
+        } elseif ($legacyProfileName) {
+            if ($activeProfile -and $activeWifiSsid -and $activeProfile.Name -ceq $legacyProfileName) {
                 if ($activeProfile.NetworkCategory -ne 'Private') {
                     Set-NetConnectionProfile -InterfaceIndex $activeProfile.InterfaceIndex -NetworkCategory Private -ErrorAction Stop
                 }
-                @{ profileName = $activeProfile.Name } | ConvertTo-Json | Set-Content -Path $homeKitNetworkFile -Encoding UTF8 -ErrorAction Stop
-                Write-Host "HomeKit LAN setup: trusted Wi-Fi profile '$($activeProfile.Name)' is Private."
+                @{ ssid = $activeWifiSsid } | ConvertTo-Json | Set-Content -Path $homeKitNetworkFile -Encoding UTF8 -ErrorAction Stop
+                Write-Host "HomeKit LAN setup: migrated trusted Wi-Fi marker to SSID '$activeWifiSsid'."
             } else {
-                Write-Host 'HomeKit LAN setup: no Internet-connected Wi-Fi profile found; leaving network category unchanged.'
+                Write-Host 'HomeKit LAN setup: legacy Wi-Fi marker does not match the active connection; leaving network category unchanged.'
+            }
+        } elseif (-not (Test-Path $homeKitNetworkFile)) {
+
+            if ($activeProfile -and -not [string]::IsNullOrWhiteSpace($activeWifiSsid)) {
+                if ($activeProfile.NetworkCategory -ne 'Private') {
+                    Set-NetConnectionProfile -InterfaceIndex $activeProfile.InterfaceIndex -NetworkCategory Private -ErrorAction Stop
+                }
+                @{ ssid = $activeWifiSsid } | ConvertTo-Json | Set-Content -Path $homeKitNetworkFile -Encoding UTF8 -ErrorAction Stop
+                Write-Host "HomeKit LAN setup: trusted Wi-Fi SSID '$activeWifiSsid' is Private."
+            } else {
+                Write-Host 'HomeKit LAN setup: no Internet-connected Wi-Fi SSID found; leaving network category unchanged.'
             }
         }
     } catch {

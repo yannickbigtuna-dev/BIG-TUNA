@@ -26,10 +26,11 @@ function fakeHap() {
     updateValue(value) { this.value = value; return this; }
   }
   class Accessory {
-    constructor() { this.isPaired = false; }
+    constructor() { this.isPaired = false; state.accessory = this; }
     addService() { return { getCharacteristic: () => (state.characteristic = new Characteristic()) }; }
     async publish(info) { state.published = info; }
     paired() { return this.isPaired; }
+    setupURI() { return 'X-HM://0023ISYWYBTNA'; }
   }
   return {
     Accessory,
@@ -50,12 +51,26 @@ test('HomeKit On maps directly to physical ON and reads current physical state',
     readOn: () => physicalOn,
     writeOn: value => { physicalOn = value; },
   });
+  assert.equal(bridge.getPairingInfo().setupUri, undefined);
   await bridge.start();
   assert.equal(await hap.state.characteristic.get(), false);
   await hap.state.characteristic.set(true);
   assert.equal(physicalOn, true);
   assert.equal(hap.state.published.port, 51826);
   assert.equal(hap.state.published.setupID, 'BTNA');
+  assert.deepEqual(bridge.getPairingInfo(), {
+    available: true,
+    paired: false,
+    name: 'BIG TUNA Lights',
+    setupCode: hap.state.published.pincode,
+    setupUri: 'X-HM://0023ISYWYBTNA',
+  });
+  hap.state.accessory.isPaired = true;
+  assert.deepEqual(bridge.getPairingInfo(), {
+    available: true,
+    paired: true,
+    name: 'BIG TUNA Lights',
+  });
 });
 
 test('external physical state changes update the HomeKit characteristic', async () => {

@@ -5,6 +5,7 @@ const path   = require('path');
 const crypto = require('crypto');
 const { fork }            = require('child_process');
 const { WebSocketServer } = require('ws');
+const QRCode = require('qrcode');
 
 const PORT        = 3000;
 const ROOT        = path.join(__dirname, 'apps');
@@ -1777,6 +1778,28 @@ async function handleAPI(req, res, urlPath) {
     }
     const info = homekitLightBridge.getPairingInfo();
     return jsonRes(res, 200, info);
+  }
+
+  // GET /api/lights/homekit/qr - a locally generated, owner-only HomeKit setup QR.
+  if (req.method === 'GET' && urlPath === '/api/lights/homekit/qr') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+    if (!homekitLightBridge) return jsonRes(res, 503, { error: 'Apple Home bridge is unavailable' });
+    const info = homekitLightBridge.getPairingInfo();
+    if (info.paired || typeof info.setupUri !== 'string') {
+      return jsonRes(res, 409, { error: 'Apple Home pairing is unavailable' });
+    }
+    try {
+      const svg = await QRCode.toString(info.setupUri, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+      res.writeHead(200, {
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      return res.end(svg);
+    } catch {
+      return jsonRes(res, 500, { error: 'Unable to create Apple Home QR code' });
+    }
   }
 
   // POST /api/lights - only yannick can change the desired light state

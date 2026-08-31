@@ -208,6 +208,15 @@
   .homekit-panel p { margin: 7px 0 0; color: var(--text-muted); font-size: var(--font-size-xs); }
   .homekit-code { font-family: var(--font-mono); color: var(--text); letter-spacing: .06em; }
   .homekit-panel a { color: var(--accent); }
+  .homekit-qr {
+    display: block;
+    width: min(100%, 260px);
+    aspect-ratio: 1;
+    margin: 14px auto 0;
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    background: #fff;
+  }
 
   @media (max-width: 520px) {
     main { padding: 24px 14px 34px; }
@@ -230,6 +239,9 @@
     <section class="homekit-panel" id="homekit-panel" aria-labelledby="homekit-title" hidden>
       <h2 id="homekit-title">Apple Home</h2>
       <p id="homekit-status" role="status"></p>
+      <img class="homekit-qr" id="homekit-qr" alt="Apple Home setup QR code" hidden>
+      <p id="homekit-scan-guidance" hidden>In the Home app, tap +, choose Add Accessory, then point the camera at this code. You do not need More Options.</p>
+      <p id="homekit-fallback" hidden>Fallback code: <span class="homekit-code" id="homekit-code"></span></p>
       <p><a href="/lights/apple-home-guide.html">Open the Apple Home connection guide</a></p>
     </section>
   </section>
@@ -243,6 +255,10 @@
   const switchBtn = document.getElementById('switch');
   const homekitPanel = document.getElementById('homekit-panel');
   const homekitStatus = document.getElementById('homekit-status');
+  const homekitQr = document.getElementById('homekit-qr');
+  const homekitScanGuidance = document.getElementById('homekit-scan-guidance');
+  const homekitFallback = document.getElementById('homekit-fallback');
+  const homekitCode = document.getElementById('homekit-code');
   const INVERT_WEBSITE_STATE = true;
 
   let currentOn = false;
@@ -256,6 +272,7 @@
   let authValidation = null;
   let stateLoadPromise = null;
   let homekitLoadToken = '';
+  let homekitQrObjectUrl = '';
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   document.body.classList.toggle('standalone', isStandalone);
@@ -307,8 +324,41 @@
     authCheckSequence++;
     verifiedToken = '';
     authValidation = null;
+    clearHomeKitQr();
     if (clearSession) clearCachedSession();
     updateAccess();
+  }
+
+  function clearHomeKitQr() {
+    if (homekitQrObjectUrl) URL.revokeObjectURL(homekitQrObjectUrl);
+    homekitQrObjectUrl = '';
+    homekitQr.removeAttribute('src');
+    homekitQr.hidden = true;
+    homekitScanGuidance.hidden = true;
+    homekitFallback.hidden = true;
+    homekitCode.textContent = '';
+  }
+
+  async function loadHomeKitQr(token) {
+    try {
+      const res = await fetch('/api/lights/homekit/qr', {
+        cache: 'no-store',
+        headers: { 'Authorization': 'Bearer ' + token },
+      });
+      if (!res.ok || token !== verifiedToken || !canControl) return;
+      const objectUrl = URL.createObjectURL(await res.blob());
+      if (token !== verifiedToken || !canControl) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      homekitQrObjectUrl = objectUrl;
+      homekitQr.src = objectUrl;
+      homekitQr.hidden = false;
+      homekitScanGuidance.hidden = false;
+      homekitFallback.hidden = false;
+    } catch {
+      // Keep the numeric fallback visible if QR generation is briefly unavailable.
+    }
   }
 
   // Top status dot: green only when a live yannick session has been verified.
@@ -324,6 +374,7 @@
     const token = verifiedToken;
     if (!canControl || !token || token === homekitLoadToken) return;
     homekitLoadToken = token;
+    clearHomeKitQr();
     try {
       const res = await fetch('/api/lights/homekit', {
         cache: 'no-store',
@@ -336,8 +387,10 @@
       } else if (data.paired === true) {
         homekitStatus.textContent = `${data.name || 'BIG TUNA Lights'} is connected to Apple Home.`;
       } else if (typeof data.setupCode === 'string') {
-        homekitStatus.textContent = `Ready to connect. Setup code: ${data.setupCode}`;
-        homekitStatus.classList.add('homekit-code');
+        homekitStatus.textContent = 'Ready to connect. Scan this code with Apple Home.';
+        homekitCode.textContent = data.setupCode;
+        homekitFallback.hidden = false;
+        await loadHomeKitQr(token);
       }
       homekitPanel.hidden = false;
     } catch {
