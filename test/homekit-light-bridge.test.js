@@ -37,6 +37,7 @@ function fakeHap() {
     Service: { Lightbulb: 'lightbulb' },
     Characteristic: { On: 'on' },
     Categories: { LIGHTBULB: 5 },
+    MDNSAdvertiser: { CIAO: 'ciao' },
     HAPStorage: { setCustomStoragePath(value) { state.storagePath = value; } },
     uuid: { generate(value) { return value; } },
     state,
@@ -57,7 +58,8 @@ test('HomeKit On maps directly to physical ON and reads current physical state',
   await hap.state.characteristic.set(true);
   assert.equal(physicalOn, true);
   assert.equal(hap.state.published.port, 51826);
-  assert.equal(hap.state.published.bind, '192.168.2.10');
+  assert.deepEqual(hap.state.published.bind, ['0.0.0.0', '192.168.2.10']);
+  assert.equal(hap.state.published.advertiser, 'ciao');
   assert.equal(hap.state.published.setupID, 'BTNA');
   assert.deepEqual(bridge.getPairingInfo(), {
     available: true,
@@ -85,6 +87,15 @@ test('external physical state changes update the HomeKit characteristic', async 
   assert.equal(hap.state.characteristic.value, true);
   bridge.update(false);
   assert.equal(hap.state.characteristic.value, false);
+});
+
+test('non-IPv4 interface bind remains unchanged', async () => {
+  const hap = fakeHap();
+  const bridge = createHomeKitLightBridge({
+    dataDir: temporaryDir(), hap, bind: 'Wi-Fi', readOn: () => false, writeOn: () => {},
+  });
+  await bridge.start();
+  assert.equal(hap.state.published.bind, 'Wi-Fi');
 });
 
 test('pairing secret is created once and remains stable', () => {
