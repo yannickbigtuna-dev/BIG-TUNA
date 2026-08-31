@@ -199,7 +199,7 @@ Run it directly if needed:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\SERVER\start-everything.ps1
 ```
 
-The git reloader polls `origin/main` every 10 seconds and pulls when GitHub has a newer commit.
+The git reloader polls `origin/main` every 10 seconds and pulls when GitHub has a newer commit. After a successful pull it refreshes production dependencies with `npm install --omit=dev --no-audit --no-fund` before restarting `apps-server`; if that refresh fails, it leaves the current server process running.
 
 The startup script also attempts to start the local Ollama API in the background without blocking the rest of the stack.
 

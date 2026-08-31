@@ -34,6 +34,13 @@ while ($true) {
         Write-Host "Update found. Pulling changes..."
         git pull --ff-only origin main
         if ($LASTEXITCODE -eq 0) {
+            Write-Host "Refreshing production dependencies..."
+            npm install --omit=dev --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Production dependency refresh failed; leaving apps-server running its current version."
+                Start-Sleep -Seconds 10
+                continue
+            }
             Write-Host "Restarting apps-server so server.js changes take effect..."
             & $pm2 restart apps-server
             Write-Host "Updated."
