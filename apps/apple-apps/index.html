@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Apple App Factory</title>
+  <link rel="stylesheet" href="/styles/tokens.css">
+  <link rel="stylesheet" href="/apple-apps/style.css">
+</head>
+<body>
+  <header class="factory-header">
+    <div><p class="eyebrow">Private distribution</p><h1>Apple App Factory</h1></div>
+    <div data-auth-widget></div>
+  </header>
+  <main>
+    <section class="notice" aria-label="Important installation limitation">
+      <strong>Free Apple signatures expire after seven days.</strong>
+      Safari can download an IPA but cannot install a free-signed IPA directly. Use the documented local installer and complete Apple-required prompts yourself.
+    </section>
+    <p id="status" role="status">Checking your private catalogue…</p>
+    <section id="catalogue" class="catalogue" aria-live="polite"></section>
+  </main>
+  <script src="/auth.js"></script>
+  <script src="/apple-apps/app.js"></script>
+</body>
+</html>

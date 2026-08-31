@@ -14,6 +14,7 @@ The main server is a plain Node.js HTTP server with no web framework. It serves 
 - [One-Click Startup](#one-click-startup)
 - [Cloudflare Tunnel](#cloudflare-tunnel)
 - [Adding Apps](#adding-apps)
+- [Apple App Factory](#apple-app-factory)
 - [Shared Frontend Libraries](#shared-frontend-libraries)
 - [Data Storage](#data-storage)
 - [API Overview](#api-overview)
@@ -277,6 +278,12 @@ Recommended app template:
   });
 </script>
 ```
+
+## Apple App Factory
+
+Describe a private native Apple app or change in plain English, for example: “Create a private iPhone app called Trail Log with an Apple Watch companion and a Home Screen widget.” Codex uses the durable spec and workflow in [docs/APPLE_APP_FACTORY.md](docs/APPLE_APP_FACTORY.md) to generate, test, version, cloud-build, privately publish, and prepare the local installation handoff.
+
+This is intentionally honest about Apple’s free Personal Team: it is seven-day testing on registered devices, not App Store/TestFlight distribution; Safari cannot directly install the generated IPA; and Watch/widget installer support is not claimed until a physical-device acceptance run succeeds. Start with the [free-signing rules](docs/APPLE_FREE_SIGNING.md) and [installation guide](docs/IPHONE_AND_WATCH_INSTALLATION.md).
 
 ## Shared Frontend Libraries
 

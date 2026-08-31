@@ -10,6 +10,8 @@ BIG-TUNA is a personal self-hosted website at `yannickmorgans.ca`. It runs on a 
 
 ## Mandatory Workflow
 
+Current user and task restrictions narrow permissions and override conflicting default Git or deployment operations, but do not weaken mandatory safety or coordination requirements; pre-existing modified and untracked files are user-owned and must not be discarded, overwritten, or cleaned.
+
 1. Run `git pull origin main` before making changes.
 2. The root thread uses the most capable configured model as architect, coordinator, integration owner, and final reviewer.
 3. The architect must inspect only the files needed after reading this context, then produce a thorough pre-code implementation spec covering scope, constraints, ownership, approach, and concrete acceptance checks.
@@ -36,6 +38,10 @@ Do not force push or rewrite history. If `git pull` produces a merge conflict, s
 +-- .codex/config.toml        # Codex root-thread model, permissions, and concurrency configuration
 +-- .codex/agents/implementer.toml # Lighter project implementer-agent configuration
 +-- .codex/agents/tester.toml # Project tester-agent configuration for independent validation
++-- .codex/skills/*/SKILL.md  # Task-specific Codex procedures
++-- docs/AI-WORKFLOW.md       # Supplemental task routing and FAST/STANDARD/DEEP modes
++-- docs/agents/*.md          # Supplemental specialist role guides
++-- docs/exec-plans/active.md # Shared active plan for broad or deployment/data work
 +-- README.md                 # User/deployment documentation
 +-- CLAUDE.md                 # Older assistant context; may overlap with this file
 +-- server.js                 # Main app/API/static server, CommonJS, port 3000
@@ -779,3 +785,33 @@ Update this file whenever a change would affect future Codex decisions, especial
 - Changed live deployment workflow.
 
 Small visual copy edits or isolated bug fixes usually do not need a context update unless they reveal a durable convention.
+
+## Strava Challenge
+
+- The public homepage mounts the Yannick (fixed red) vs Emma (fixed blue) Strava Cup
+  at `#strava-challenge`; its compact default view is scoreboard plus five activity
+  recap lines per athlete. Expanded activities, statistics, history, and week detail
+  are behind More.
+- `lib/strava-challenge/` owns durable file-backed state in
+  `data/strava-challenge/state.json`, OAuth credentials (AES-GCM encrypted), Strava
+  synchronization, scoring, and Monday finalization. Never expose service state;
+  public serializers explicitly allowlist output.
+- Public API: `/api/strava-challenge/public` and `/api/strava-challenge/public/weeks/:weekStart`.
+  Challenge administration is Yannick-only under `/api/admin/strava-challenge/*`.
+  Invitation tokens are fragment-only, hashed server-side, and separate from OAuth state.
+
+## Apple App Factory
+
+- Reusable native source/template and operating specs live under `ios/app-factory/`.
+  Future Apple work must read `docs/APPLE_APP_FACTORY.md` and the app's
+  `ios/app-factory/specs/<slug>.yml` first; preserve its identity, enabled targets,
+  data format, and app-group value across updates.
+- `.github/workflows/apple-app-factory.yml` builds unsigned IPAs on GitHub macOS.
+  It has no Apple credentials; private SSH deployment is main-only and disabled until
+  all explicitly configured secrets, including a pinned known-hosts entry, exist.
+- Release payloads live in ignored `data/apple-app-factory/releases/`, not static
+  `apps/`. `/api/apple-app-factory/*` is session- and configured-owner-authenticated,
+  with strict path/symlink protection; `/apple-apps/` is only its UI shell.
+- Free Personal Team limits (three apps/device, three devices, ten App IDs, seven-day
+  expiry) apply. Watch installer support and privileged capabilities remain unverified
+  until documented physical-device acceptance checks pass.

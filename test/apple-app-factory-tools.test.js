@@ -1,0 +1,121 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync, spawnSync } = require('child_process');
+const test = require('node:test');
+
+const root = path.resolve(__dirname, '..');
+const tools = path.join(root, 'ios', 'app-factory', 'tools');
+const { validateSpec } = require(path.join(tools, 'factory-lib'));
+function fixture() { return { app: { name: 'Trail Log', slug: 'trail-log', bundleId: 'ca.example.traillog', bundleIdNamespace: 'ca.example', iconSource: 'assets/trail-log.png', minimumIOS: '17.0', minimumWatchOS: '10.0', version: '1.0.0', build: 1, theme: { accentHex: '#0A84FF', backgroundHex: '#FFFFFF' } }, targets: { iphone: true, homeScreenWidget: true, lockScreenWidget: true, liveActivities: true, watchMode: 'companion', watchWidgets: true, watchComplications: true, watchConnectivity: true }, capabilities: { appGroups: true, healthKit: false, workoutKit: false, coreMotion: false, location: false, bluetooth: false, notifications: false, backgroundRefresh: false, siri: false, haptics: false, watchConnectivity: true }, appGroupId: 'group.ca.example.traillog', privacy: {}, factory: { bundleIdentifiers: { iphoneApp: 'ca.example.traillog', homeWidget: 'ca.example.traillog.widget', lockScreenWidget: 'ca.example.traillog.widget', liveActivityWidget: 'ca.example.traillog.widget', watchApp: 'ca.example.traillog.watchapp', watchExtension: null, watchWidget: 'ca.example.traillog.watchwidget' }, data: { storageMethod: 'local-codable', schemaVersion: 1, migrationStrategy: 'Migrate before changing data.', exportOrBackup: 'in-app export', homeServerApi: { baseUrl: null, authMode: 'none' } }, distribution: { access: 'private-owner-authenticated', url: null, releaseRoot: 'data/apple-app-factory/releases' }, lastSuccessfulBuild: { status: 'never-built', ciRunUrl: null, completedAt: null, ipaSha256: null }, knownLimitations: ['Free signatures expire after seven days.'] } }; }
+function run(script, args) { return execFileSync(process.execPath, [path.join(tools, script), ...args], { cwd: root, encoding: 'utf8' }); }
+function crc32(buffer) {
+  let value = 0xffffffff;
+  for (const byte of buffer) { value ^= byte; for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ (0xedb88320 & -(value & 1)); }
+  return (value ^ 0xffffffff) >>> 0;
+}
+function makeZip(file, entries) {
+  const records = [], central = []; let offset = 0;
+  for (const entryValue of entries) {
+    const entry = typeof entryValue === 'string' ? { name: entryValue, content: 'x' } : entryValue;
+    const nameBuffer = Buffer.from(entry.name), body = Buffer.from(entry.content), crc = crc32(body);
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt32LE(crc, 14); local.writeUInt32LE(body.length, 18); local.writeUInt32LE(body.length, 22); local.writeUInt16LE(nameBuffer.length, 26);
+    records.push(local, nameBuffer, body);
+    const centralEntry = Buffer.alloc(46); centralEntry.writeUInt32LE(0x02014b50, 0); centralEntry.writeUInt16LE(20, 4); centralEntry.writeUInt16LE(20, 6); centralEntry.writeUInt32LE(crc, 16); centralEntry.writeUInt32LE(body.length, 20); centralEntry.writeUInt32LE(body.length, 24); centralEntry.writeUInt16LE(nameBuffer.length, 28); centralEntry.writeUInt32LE(offset, 42);
+    central.push(centralEntry, nameBuffer); offset += local.length + nameBuffer.length + body.length;
+  }
+  const centralBytes = Buffer.concat(central), end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(centralBytes.length, 12); end.writeUInt32LE(offset, 16);
+  fs.writeFileSync(file, Buffer.concat([...records, centralBytes, end]));
+}
+
+test('factory tooling validates, generates, bumps, and creates metadata without credentials', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-'));
+  const spec = path.join(directory, 'trail-log.yml');
+  fs.writeFileSync(spec, `${JSON.stringify(fixture(), null, 2)}\n`);
+  const validation = JSON.parse(run('validate-app-spec.js', [spec]));
+  assert.equal(validation.ok, true);
+  const generated = path.join(directory, 'generated');
+  run('generate-project.js', ['--spec', spec, '--output', generated]);
+  const targets = JSON.parse(fs.readFileSync(path.join(generated, '.factory-targets.json'), 'utf8'));
+  assert.equal(targets.targets.watchWidgets, true);
+  const projectYml = fs.readFileSync(path.join(generated, 'project.yml'), 'utf8');
+  assert.match(projectYml, /AppWatchWidget/);
+  assert.match(fs.readFileSync(path.join(generated, 'Sources', 'Widget', 'FactoryWidget.swift'), 'utf8'), /FactoryLiveActivity\(\)/);
+  assert.match(fs.readFileSync(path.join(generated, 'Generated', 'FactoryAppConfiguration.swift'), 'utf8'), /accentHex = "#0A84FF"/);
+  const bumped = JSON.parse(run('bump-version.js', ['--spec', spec]));
+  assert.deepEqual({ version: bumped.version, build: bumped.build }, { version: '1.0.1', build: 2 });
+  const ipa = path.join(directory, 'unsigned.ipa'); fs.writeFileSync(ipa, 'not a production IPA');
+  const release = path.join(directory, 'release');
+  const output = JSON.parse(run('create-release-metadata.js', ['--spec', spec, '--ipa', ipa, '--output', release]));
+  assert.equal(output.ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(release, 'manifest.json'), 'utf8')).app.build, 2);
+});
+
+test('factory tooling rejects target combinations instead of silently changing them', () => {
+  const invalid = fixture(); invalid.targets.watchMode = 'none';
+  assert.throws(() => validateSpec(invalid), /Watch widgets, complications, and WatchConnectivity require a Watch app/);
+});
+
+test('factory tooling requires operating metadata and rejects unimplemented capability switches', () => {
+  const clone = () => JSON.parse(JSON.stringify(fixture()));
+  for (const remove of [
+    spec => delete spec.app.bundleIdNamespace,
+    spec => delete spec.app.iconSource,
+    spec => delete spec.app.theme,
+    spec => delete spec.factory.bundleIdentifiers,
+    spec => delete spec.factory.data,
+    spec => delete spec.factory.distribution,
+    spec => delete spec.factory.lastSuccessfulBuild,
+    spec => delete spec.factory.knownLimitations
+  ]) {
+    const spec = clone(); remove(spec); assert.throws(() => validateSpec(spec));
+  }
+  const invalidTheme = clone(); invalidTheme.app.theme.accentHex = 'blue';
+  assert.throws(() => validateSpec(invalidTheme), /hexadecimal colour/);
+  for (const capability of ['coreMotion', 'healthKit', 'workoutKit', 'location', 'bluetooth', 'notifications', 'backgroundRefresh', 'siri', 'haptics']) {
+    const unsupported = clone(); unsupported.capabilities[capability] = true;
+    assert.throws(() => validateSpec(unsupported), /not implemented by the reusable template/);
+  }
+});
+
+test('generator omits Lock Screen families when the specification disables them', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-lock-'));
+  const spec = fixture(); spec.targets.lockScreenWidget = false; spec.targets.liveActivities = false; spec.factory.bundleIdentifiers.lockScreenWidget = null; spec.factory.bundleIdentifiers.liveActivityWidget = null;
+  const specPath = path.join(directory, 'trail-log.yml'); fs.writeFileSync(specPath, JSON.stringify(spec));
+  const output = path.join(directory, 'generated'); run('generate-project.js', ['--spec', specPath, '--output', output]);
+  const widget = fs.readFileSync(path.join(output, 'Sources', 'Widget', 'FactoryWidget.swift'), 'utf8');
+  assert.doesNotMatch(widget, /accessoryCircular|accessoryRectangular|accessoryInline/);
+});
+
+test('IPA inspection requires the generated host, widget, and Watch product paths', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-ipa-'));
+  const targetManifest = path.join(directory, '.factory-targets.json');
+  const generated = fixture();
+  fs.writeFileSync(targetManifest, JSON.stringify({ app: generated.app, targets: generated.targets, bundleIds: { iphone: generated.app.bundleId, widget: `${generated.app.bundleId}.widget`, watch: `${generated.app.bundleId}.watchapp`, watchWidget: `${generated.app.bundleId}.watchwidget` } }));
+  const plist = identifier => `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${identifier}</string></dict></plist>`;
+  const correct = [
+    { name: 'Payload/Trail Log.app/Info.plist', content: plist('ca.example.traillog') },
+    { name: 'Payload/Trail Log.app/PlugIns/Trail Log Widgets.appex/Info.plist', content: plist('ca.example.traillog.widget') },
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/Info.plist', content: plist('ca.example.traillog.watchapp') },
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/PlugIns/Trail Log Watch Widgets.appex/Info.plist', content: plist('ca.example.traillog.watchwidget') }
+  ];
+  const ipa = path.join(directory, 'correct.ipa'); makeZip(ipa, correct);
+  assert.equal(JSON.parse(run('inspect-ipa.js', ['--ipa', ipa, '--targets', targetManifest])).ok, true);
+  for (const [label, files] of [
+    ['host', correct.map(value => ({ ...value, name: value.name.replaceAll('Trail Log.app', 'Wrong.app') }))],
+    ['widget', correct.map(value => ({ ...value, name: value.name.replace('Trail Log Widgets.appex', 'Wrong Widgets.appex') }))],
+    ['watch', correct.map(value => ({ ...value, name: value.name.replace('Trail Log Watch.app', 'Wrong Watch.app') }))]
+  ]) {
+    const wrong = path.join(directory, `${label}.ipa`); makeZip(wrong, files);
+    const result = spawnSync(process.execPath, [path.join(tools, 'inspect-ipa.js'), '--ipa', wrong, '--targets', targetManifest], { cwd: root, encoding: 'utf8' });
+    assert.notEqual(result.status, 0);
+    assert.match(`${result.stdout}${result.stderr}`, /wrong-identity|generated/);
+  }
+  const wrongIdentifier = path.join(directory, 'wrong-identifier.ipa');
+  makeZip(wrongIdentifier, correct.map(value => value.name.includes('Trail Log Widgets') ? { ...value, content: plist('ca.example.wrong') } : value));
+  const identifierResult = spawnSync(process.execPath, [path.join(tools, 'inspect-ipa.js'), '--ipa', wrongIdentifier, '--targets', targetManifest], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(identifierResult.status, 0);
+  assert.match(`${identifierResult.stdout}${identifierResult.stderr}`, /CFBundleIdentifier is ca\.example\.wrong/);
+});

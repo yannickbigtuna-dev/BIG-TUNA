@@ -1,0 +1,20 @@
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
+.factory-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 24px clamp(18px, 5vw, 72px); border-bottom: 1px solid var(--border); }
+.eyebrow { margin: 0 0 4px; color: var(--text-dim); font-size: .72rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(1.5rem, 5vw, 2.4rem); letter-spacing: -.04em; }
+main { width: min(980px, calc(100% - 32px)); margin: 28px auto 72px; }
+.notice, .app-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.notice { padding: 16px; color: var(--text-muted); line-height: 1.5; }
+.notice strong { color: var(--text); display: block; margin-bottom: 4px; }
+#status { color: var(--text-dim); min-height: 1.4em; margin: 22px 2px 14px; }
+.catalogue { display: grid; gap: 14px; }
+.app-card { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 16px; padding: 16px; }
+.icon, .icon-placeholder { width: 64px; height: 64px; border-radius: 14px; background: var(--surface-3); object-fit: cover; }
+.icon-placeholder { display: grid; place-items: center; color: var(--text-dim); font-weight: 800; }
+.app-card h2 { margin: 0; font-size: 1.1rem; }.meta, .notes { margin: 6px 0; color: var(--text-muted); font-size: .9rem; line-height: 1.45; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }.tag { color: var(--text-dim); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 4px 8px; font-size: .72rem; }
+.download { display: inline-block; margin-top: 5px; color: var(--on-accent); background: var(--accent); border-radius: var(--radius-sm); padding: 10px 13px; text-decoration: none; font-weight: 800; font-size: .85rem; }
+.download:hover, .download:focus-visible { background: var(--accent-hover); outline: none; box-shadow: var(--ring); }
+.checksum { margin: 10px 0 0; color: var(--text-dim); font: .73rem var(--font-mono); overflow-wrap: anywhere; }
+@media (max-width: 520px) { .factory-header { align-items: flex-start; }.app-card { grid-template-columns: 1fr; }.icon, .icon-placeholder { width: 56px; height: 56px; } }

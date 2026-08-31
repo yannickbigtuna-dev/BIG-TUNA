@@ -22,3 +22,9 @@ apps/lights/downloads/big-tuna-lights-mac.zip
 # separately). This also covers per-user Brightspace credentials and browser
 # profiles under data/assignments/, which must never be committed.
 data/
+
+# Apple App Factory local/cloud release inputs and deployment configuration.
+# Published IPA payloads remain outside the static apps/ tree and are never
+# source-controlled.
+.apple-app-factory/
+artifacts/apple-app-factory/

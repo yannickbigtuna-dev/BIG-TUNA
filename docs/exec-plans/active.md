@@ -455,3 +455,56 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
 - [x] Implement backend and frontend packages.
 - [x] Review the combined diff and run independent security/acceptance checks.
 - [x] Commit, push, restart the affected app process, and verify live behavior.
+
+---
+
+# Apple App Factory (DEEP) — active plan
+
+## Goal
+
+Add a durable, private-by-default factory for native Swift/SwiftUI iPhone and Apple Watch projects. It must create deterministic unsigned build artifacts on GitHub-hosted macOS, retain the full target bundle, publish only after integrity checks, and give future Codex sessions an explicit operating contract. Apple credentials, signed IPAs, and live deployment destinations remain outside Git.
+
+## Existing behavior and constraints
+
+- `server.js` is a plain Node static/API server; `apps/` is public static content and `data/` is ignored production state.
+- The existing `ios/big-tuna-lights-widget` project is XcodeGen-based and has an iPhone app plus WidgetKit extension, but no Watch target or CI build.
+- GitHub macOS workflows package existing unsigned desktop applications. The Windows host auto-pulls `main` and restarts `apps-server`; it has no configured inbound CI deployment credential.
+- The working tree contains unrelated user-owned modifications/untracked files. This work must not replace or clean them.
+- A free Apple Personal Team is for own-device testing only: seven-day profile, three installed apps/device, three devices, ten App IDs. It cannot provide App Store/TestFlight/ad-hoc distribution or cloud-held signing credentials.
+
+## Scope and ownership
+
+1. **Factory documentation and policy (implementer A):** `docs/APPLE_*.md`, `ios/app-factory/README.md`, `ios/app-factory/specs/APP_SPEC_TEMPLATE.yml`, release-note template, root-agent section and README section only. Document verified limitations, human steps, capability gates, and future-session rules.
+2. **Native template and local tooling (implementer B):** `ios/app-factory/template/**`, `ios/app-factory/tools/**`, `ios/app-factory/.env.example`, and focused tooling tests only. Provide deterministic XcodeGen project generation, target toggles, config validation, versioning, IPA/archive inspection, checksums, release records, and a minimal PowerShell Sideloadly launcher that deliberately stops before a GUI-only action.
+3. **CI and private distribution surface (implementer C):** `.github/workflows/apple-app-factory.yml`, `apps/apple-apps/**`, `scripts/apple-app-factory/**`, `server.js`, `server.env.example`, and `.gitignore` only. Build unsigned artifacts, validate/release them with immutable paths, and serve an authenticated owner-only catalogue/download flow from a configurable non-public release root. No deployment is executed.
+
+## Architecture
+
+- App specifications live in Git under `ios/app-factory/specs/<slug>.yml`; identity and target selection are immutable after first release except through explicit migration records.
+- A generator creates XcodeGen input from a specification; build CI runs XcodeGen, Swift checks/tests, unsigned archive, IPA/extension inspection, SHA-256, and produces artifacts/logs. It can upload to a server only when narrowly scoped SSH secrets are deliberately supplied; without them it preserves GitHub artifacts and does not change `latest`.
+- The home server reads artifacts from its ignored `data/apple-app-factory/releases` root. Owner-authenticated API endpoints expose the catalogue and a browser download route only to the account configured in environment, so no release content becomes public by accident. Static `apps/apple-apps/` is UI code only.
+- The web UI makes clear that Safari cannot install a free-signed IPA directly. It offers verified downloads and optionally source metadata only after a compatible installer has been physically validated with the requested Watch bundle.
+- Capabilities are selected explicitly per spec and the build fails rather than silently dropping unsupported extensions/entitlements. Free-provisioning compatibility is documented as a gate, not assumed from a successful unsigned build.
+
+## Risks and rollback
+
+- Apple/installer limitations can prevent signed installation of widgets or Watch components despite a structurally correct IPA. No claim of support is made until physical acceptance testing.
+- SSH deployment is disabled by default; server release-root configuration, inbound auth, and any CI secret must be supplied by the owner. Failed builds/uploads must never overwrite an existing `latest` release.
+- Server route changes are owner-authenticated and constrained to validated slugs/files below one release root. Rollback is removal of this change; existing app/API/data behavior is unaffected.
+
+## Acceptance checks
+
+- Validate every sample/spec/workflow/JSON configuration with the provided scripts and parser checks.
+- Run tooling help/validation/version/checksum routines on the local Windows host without Apple credentials.
+- Run relevant Node tests and syntax checks; exercise the release catalogue API in a non-mutating test harness where feasible.
+- Inspect the generated target graph and archive inspection logic to confirm iPhone, widget, and optional Watch bundle paths are checked—not stripped.
+- Review actual combined diff for secrets, accidental public access, unsafe paths, and unrelated files. Independently security-review release routes and SSH deployment configuration.
+- Do not claim a GitHub macOS build, device install, Watch install, signing refresh, or server upload passed until that external action is actually run with user-provided access/device.
+
+## Progress
+
+- [x] Inventory repository, current status, service/deployment flow, and existing iOS project.
+- [x] Verify current Apple Personal Team limits and installer documentation from primary sources.
+- [x] Implement disjoint documentation, template/tooling, and CI/distribution packages.
+- [x] Run local validation and independent security/acceptance review.
+- [x] Root review and corrective loop complete. Commit/push deliberately withheld: this live auto-pull repository has unrelated pre-existing work and the private deployment receiver/credentials are intentionally not configured.

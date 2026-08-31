@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "app": {
+    "name": "Example App",
+    "slug": "example-app",
+    "bundleId": "com.example.privateapps.exampleapp",
+    "bundleIdNamespace": "com.example.privateapps",
+    "iconSource": "assets/example-app-icon.png",
+    "minimumIOS": "17.0",
+    "minimumWatchOS": "10.0",
+    "version": "0.1.0",
+    "build": 1,
+    "theme": { "accentHex": "#0A84FF", "backgroundHex": "#FFFFFF" }
+  },
+  "targets": {
+    "iphone": true,
+    "homeScreenWidget": false,
+    "lockScreenWidget": false,
+    "liveActivities": false,
+    "watchMode": "none",
+    "watchWidgets": false,
+    "watchComplications": false,
+    "watchConnectivity": false
+  },
+  "capabilities": {
+    "appGroups": false,
+    "healthKit": false,
+    "workoutKit": false,
+    "coreMotion": false,
+    "location": false,
+    "bluetooth": false,
+    "notifications": false,
+    "backgroundRefresh": false,
+    "siri": false,
+    "haptics": false,
+    "watchConnectivity": false
+  },
+  "appGroupId": null,
+  "privacy": {},
+  "factory": {
+    "released": false,
+    "bundleIdentifiers": {
+      "iphoneApp": "com.example.privateapps.exampleapp",
+      "homeWidget": null,
+      "lockScreenWidget": null,
+      "liveActivityWidget": null,
+      "watchApp": null,
+      "watchExtension": null,
+      "watchWidget": null
+    },
+    "data": {
+      "storageMethod": "local-codable",
+      "schemaVersion": 1,
+      "migrationStrategy": "Add backward-compatible migrations and an export before changing persisted data.",
+      "exportOrBackup": "in-app export",
+      "homeServerApi": { "baseUrl": null, "authMode": "none" }
+    },
+    "distribution": {
+      "access": "private-owner-authenticated",
+      "url": null,
+      "releaseRoot": "data/apple-app-factory/releases"
+    },
+    "lastSuccessfulBuild": {
+      "status": "never-built",
+      "ciRunUrl": null,
+      "completedAt": null,
+      "ipaSha256": null
+    },
+    "physicalAcceptance": {
+      "iphone": "not-tested",
+      "widgets": "not-requested",
+      "watchInstallation": "not-requested",
+      "watchComplications": "not-requested",
+      "testedOS": null,
+      "installer": null,
+      "signedAt": null,
+      "expectedExpiry": null
+    },
+    "knownLimitations": [
+      "Free Personal Team signing expires after seven days.",
+      "Apple Watch IPA installer support is unverified until physical acceptance passes."
+    ]
+  }
+}

@@ -30,6 +30,10 @@ const EMAIL_CAMPAIGNS_DIR    = path.join(EMAIL_DIR, 'campaigns');
 const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const PASSWORD_RESETS_FILE = path.join(DATA, 'password-resets.json');
+// Apple App Factory release payloads deliberately live outside the static apps
+// tree.  The optional override is for a separately mounted, gitignored volume;
+// do not point it at the repository or a web-root.
+const APPLE_APP_FACTORY_DEFAULT_RELEASE_ROOT = path.join(DATA, 'apple-app-factory', 'releases');
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const ACCOUNT_EMAIL_FROM = 'no-reply@yannickmorgans.ca'; // sender for reset/test emails (Assignment Coach keeps its own ASSIGNMENTS_FROM_EMAIL)
 // 1x1 transparent GIF served by the email open-tracking pixel — always returned
@@ -682,6 +686,223 @@ function parseBody(req) {
 function getToken(req) {
   const auth = req.headers['authorization'] || '';
   return auth.startsWith('Bearer ') ? auth.slice(7) : null;
+}
+
+// ── Apple App Factory private distribution ────────────────────────────────
+// This is intentionally a small read-only surface.  A valid site session is
+// necessary but not sufficient: the exact configured owner must also match.
+// Release files are never reachable through the static server.
+const APPLE_APP_FACTORY_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const APPLE_APP_FACTORY_VERSION_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/;
+const APPLE_APP_FACTORY_MAX_JSON_BYTES = 1024 * 1024;
+
+function appleAppFactoryConfig() {
+  const ownerUsername = String(process.env.APPLE_APP_FACTORY_OWNER_USERNAME || '').trim().toLowerCase();
+  const configuredRoot = String(process.env.APPLE_APP_FACTORY_RELEASE_ROOT || '').trim();
+  // A relative override would be surprising and can escape the intended data
+  // location when the process working directory changes, so accept absolutes
+  // only. The safe default remains under ignored data/.
+  const releaseRoot = configuredRoot && path.isAbsolute(configuredRoot)
+    ? path.resolve(configuredRoot)
+    : APPLE_APP_FACTORY_DEFAULT_RELEASE_ROOT;
+  return { ownerUsername, releaseRoot };
+}
+
+function isAppleAppFactorySlug(value) {
+  return typeof value === 'string' && APPLE_APP_FACTORY_SLUG_RE.test(value);
+}
+
+function isAppleAppFactoryVersion(value) {
+  return typeof value === 'string' && APPLE_APP_FACTORY_VERSION_RE.test(value);
+}
+
+function appleAppFactoryOwner(req, res) {
+  const config = appleAppFactoryConfig();
+  // A missing explicit owner makes the feature unavailable rather than
+  // accidentally granting it to an account with a familiar username.
+  if (!config.ownerUsername) {
+    jsonRes(res, 503, { error: 'Apple App Factory owner access is not configured' });
+    return null;
+  }
+  const user = getSessionUser(getToken(req));
+  if (!user) {
+    jsonRes(res, 401, { error: 'Not authenticated' });
+    return null;
+  }
+  if (String(user.username || '').trim().toLowerCase() !== config.ownerUsername) {
+    jsonRes(res, 403, { error: 'Forbidden' });
+    return null;
+  }
+  return config;
+}
+
+function appleAppFactoryPath(releaseRoot, ...parts) {
+  try {
+    const resolvedRoot = fs.realpathSync.native(path.resolve(releaseRoot));
+    const candidate = path.resolve(resolvedRoot, ...parts);
+    if (!candidate.startsWith(resolvedRoot + path.sep)) return null;
+    // Do not merely rely on lexical containment: a symlink below a trusted
+    // release root could otherwise point at an arbitrary host file. Every
+    // component must be a real directory/file under the real release root.
+    const relative = path.relative(resolvedRoot, candidate);
+    let current = resolvedRoot;
+    for (const component of relative.split(path.sep)) {
+      if (!component) continue;
+      current = path.join(current, component);
+      if (fs.lstatSync(current).isSymbolicLink()) return null;
+    }
+    const realCandidate = fs.realpathSync.native(candidate);
+    return realCandidate.startsWith(resolvedRoot + path.sep) ? realCandidate : null;
+  } catch {
+    return null;
+  }
+}
+
+function readAppleAppFactoryJson(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size > APPLE_APP_FACTORY_MAX_JSON_BYTES) return null;
+    const value = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function appleAppFactoryText(value, max = 240) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : '';
+}
+
+function appleAppFactoryStringList(value, maxItems = 16, maxLength = 80) {
+  return Array.isArray(value)
+    ? value.filter(item => typeof item === 'string').slice(0, maxItems).map(item => item.trim().slice(0, maxLength)).filter(Boolean)
+    : [];
+}
+
+function readAppleAppFactoryManifest(releaseRoot, slug) {
+  if (!isAppleAppFactorySlug(slug)) return null;
+  const manifestPath = appleAppFactoryPath(releaseRoot, slug, 'manifest.json');
+  const manifest = manifestPath && readAppleAppFactoryJson(manifestPath);
+  if (!manifest) return null;
+  // The directory is authoritative. Reject a mismatched manifest instead of
+  // allowing a release publisher to make one app impersonate another.
+  if (manifest.slug && manifest.slug !== slug) return null;
+  return manifest;
+}
+
+function appleAppFactoryReleaseNotes(releaseRoot, slug) {
+  try {
+    const filePath = appleAppFactoryPath(releaseRoot, slug, 'release-notes.txt');
+    const stat = filePath && fs.statSync(filePath);
+    return stat && stat.isFile() && stat.size <= 64 * 1024 ? fs.readFileSync(filePath, 'utf8').trim().slice(0, 12_000) : '';
+  } catch { return ''; }
+}
+
+function appleAppFactoryReleaseHistory(releaseRoot, slug) {
+  if (!releaseRoot) return [];
+  const releasesDir = appleAppFactoryPath(releaseRoot, slug, 'releases');
+  try {
+    return fs.readdirSync(releasesDir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && isAppleAppFactoryVersion(entry.name))
+      .map(entry => {
+        const manifest = readAppleAppFactoryJson(appleAppFactoryPath(releaseRoot, slug, 'releases', entry.name, 'manifest.json'));
+        if (!manifest) return null;
+        const release = manifest.release && typeof manifest.release === 'object' ? manifest.release : manifest;
+        const app = manifest.app && typeof manifest.app === 'object' ? manifest.app : manifest;
+        return {
+          version: appleAppFactoryText(release.version || manifest.version || app.version || entry.name, 64),
+          build: appleAppFactoryText(release.build || manifest.build || app.build, 64),
+          releaseDate: appleAppFactoryText(release.releaseDate || manifest.releaseDate, 64),
+          sha256: appleAppFactoryText(release.sha256 || manifest.sha256, 128),
+        };
+      }).filter(Boolean)
+      .sort((a, b) => String(b.releaseDate).localeCompare(String(a.releaseDate))).slice(0, 30);
+  } catch { return []; }
+}
+
+function appleAppFactoryPublicRecord(slug, manifest, releaseRoot = null) {
+  const release = manifest.release && typeof manifest.release === 'object' ? manifest.release : manifest;
+  const app = manifest.app && typeof manifest.app === 'object' ? manifest.app : manifest;
+  const targets = manifest.targets && typeof manifest.targets === 'object' ? manifest.targets : {};
+  const components = appleAppFactoryStringList(manifest.components || manifest.enabledTargets);
+  if (!components.length) {
+    if (targets.homeScreenWidget || targets.lockScreenWidget) components.push('Home Screen / Lock Screen widgets');
+    if (targets.liveActivities) components.push('Live Activities');
+    if (targets.watchMode && targets.watchMode !== 'none') components.push(targets.watchMode === 'independent' ? 'Independent Apple Watch app' : 'Apple Watch companion app');
+    if (targets.watchWidgets) components.push('Watch widgets / complications');
+  }
+  return {
+    slug,
+    name: appleAppFactoryText(manifest.name || manifest.appName || app.name, 120) || slug,
+    version: appleAppFactoryText(release.version || manifest.version || app.version, 64),
+    build: appleAppFactoryText(release.build || manifest.build || app.build, 64),
+    releaseDate: appleAppFactoryText(release.releaseDate || manifest.releaseDate, 64),
+    minimumIOS: appleAppFactoryText(manifest.minimumIOS || manifest.minimumIos || app.minimumIOS, 32),
+    minimumWatchOS: appleAppFactoryText(manifest.minimumWatchOS || manifest.minimumWatchOs || app.minimumWatchOS, 32),
+    components,
+    sha256: appleAppFactoryText(release.sha256 || manifest.sha256, 128),
+    releaseNotes: appleAppFactoryText(release.releaseNotes || manifest.releaseNotes || (releaseRoot && appleAppFactoryReleaseNotes(releaseRoot, slug)), 12_000),
+    installationStatus: appleAppFactoryText(manifest.installationStatus, 240),
+    buildStatus: appleAppFactoryText(manifest.buildStatus, 80) || 'published',
+    releases: appleAppFactoryReleaseHistory(releaseRoot, slug),
+  };
+}
+
+function listAppleAppFactoryApps(releaseRoot) {
+  try {
+    return fs.readdirSync(releaseRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && isAppleAppFactorySlug(entry.name))
+      .map(entry => {
+        const manifest = readAppleAppFactoryManifest(releaseRoot, entry.name);
+        return manifest ? appleAppFactoryPublicRecord(entry.name, manifest, releaseRoot) : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
+function appleAppFactoryReleaseIpa(releaseRoot, slug, version) {
+  if (!isAppleAppFactorySlug(slug)) return null;
+  let immutableVersion = version;
+  if (version === 'latest') {
+    const latestManifest = readAppleAppFactoryManifest(releaseRoot, slug);
+    const latestRelease = latestManifest && latestManifest.release && typeof latestManifest.release === 'object'
+      ? latestManifest.release : latestManifest;
+    const latestApp = latestManifest && latestManifest.app && typeof latestManifest.app === 'object'
+      ? latestManifest.app : latestManifest;
+    immutableVersion = latestRelease && (latestRelease.version || latestManifest.version || latestApp.version);
+  }
+  if (!isAppleAppFactoryVersion(immutableVersion)) return null;
+  const releaseManifestPath = appleAppFactoryPath(releaseRoot, slug, 'releases', immutableVersion, 'manifest.json');
+  const releaseManifest = releaseManifestPath && readAppleAppFactoryJson(releaseManifestPath);
+  const ipaFile = releaseManifest && appleAppFactoryText(releaseManifest.ipaFile || releaseManifest.artifact || releaseManifest.ipa, 180);
+  // A release manifest may select only a basename. This preserves names such as
+  // "My App.ipa" while ruling out traversal and non-IPA payloads.
+  if (!ipaFile || path.basename(ipaFile) !== ipaFile || !ipaFile.toLowerCase().endsWith('.ipa')) return null;
+  return appleAppFactoryPath(releaseRoot, slug, 'releases', immutableVersion, ipaFile);
+}
+
+function sendAppleAppFactoryFile(res, filePath, filename, contentType, download = true) {
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return jsonRes(res, 404, { error: 'Release file not found' });
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': stat.size,
+      'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${String(filename).replace(/[^A-Za-z0-9._ -]/g, '_')}"`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+    });
+    fs.createReadStream(filePath).on('error', () => {
+      if (!res.headersSent) jsonRes(res, 500, { error: 'Release download failed' });
+      else res.destroy();
+    }).pipe(res);
+  } catch {
+    return jsonRes(res, 404, { error: 'Release file not found' });
+  }
 }
 
 function jsonRes(res, status, data) {
@@ -1579,6 +1800,50 @@ function parsePbestPDF(buf) {
 
 // ── API router ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res, urlPath) {
+
+  // Apple App Factory: browser code is public, but every release response is
+  // owner-authenticated and read from a non-static release root.
+  if (urlPath === '/api/apple-app-factory/catalog' && req.method === 'GET') {
+    setSensitiveResponseHeaders(res);
+    const config = appleAppFactoryOwner(req, res);
+    if (!config) return;
+    return jsonRes(res, 200, {
+      apps: listAppleAppFactoryApps(config.releaseRoot),
+      releaseRootConfigured: true,
+      directSafariInstallSupported: false,
+    });
+  }
+
+  const appleAppFactoryAppMatch = urlPath.match(/^\/api\/apple-app-factory\/apps\/([a-z0-9][a-z0-9-]{0,63})$/);
+  if (appleAppFactoryAppMatch && req.method === 'GET') {
+    setSensitiveResponseHeaders(res);
+    const config = appleAppFactoryOwner(req, res);
+    if (!config) return;
+    const slug = appleAppFactoryAppMatch[1];
+    const manifest = readAppleAppFactoryManifest(config.releaseRoot, slug);
+    if (!manifest) return jsonRes(res, 404, { error: 'App release not found' });
+    return jsonRes(res, 200, appleAppFactoryPublicRecord(slug, manifest, config.releaseRoot));
+  }
+
+  const appleAppFactoryIconMatch = urlPath.match(/^\/api\/apple-app-factory\/apps\/([a-z0-9][a-z0-9-]{0,63})\/icon$/);
+  if (appleAppFactoryIconMatch && req.method === 'GET') {
+    setSensitiveResponseHeaders(res);
+    const config = appleAppFactoryOwner(req, res);
+    if (!config) return;
+    const iconPath = appleAppFactoryPath(config.releaseRoot, appleAppFactoryIconMatch[1], 'icon.png');
+    return sendAppleAppFactoryFile(res, iconPath, `${appleAppFactoryIconMatch[1]}.png`, 'image/png', false);
+  }
+
+  const appleAppFactoryDownloadMatch = urlPath.match(/^\/api\/apple-app-factory\/apps\/([a-z0-9][a-z0-9-]{0,63})\/download\/(latest|[A-Za-z0-9][A-Za-z0-9._-]{0,63})$/);
+  if (appleAppFactoryDownloadMatch && req.method === 'GET') {
+    setSensitiveResponseHeaders(res);
+    const config = appleAppFactoryOwner(req, res);
+    if (!config) return;
+    const [slug, version] = appleAppFactoryDownloadMatch.slice(1);
+    const ipaPath = appleAppFactoryReleaseIpa(config.releaseRoot, slug, version);
+    if (!ipaPath) return jsonRes(res, 404, { error: 'Release download not found' });
+    return sendAppleAppFactoryFile(res, ipaPath, `${slug}-${version}.ipa`, 'application/octet-stream');
+  }
 
   // ── Public Yannick vs Emma Strava Challenge ─────────────────────────────
   if (req.method === 'GET' && urlPath === '/api/strava-challenge/public') {

@@ -1,0 +1,8 @@
+## Delegation workflow
+
+When asked to fix or improve part of the codebase:
+1. Investigate the relevant code yourself and diagnose the actual problem — don't delegate the diagnosis.
+2. Write a short, specific fix plan (files, functions, expected change).
+3. Delegate the implementation to the `implementer` subagent, giving it the diagnosis + plan verbatim.
+4. If multiple independent fixes are needed, spawn multiple `implementer` subagents in parallel.
+5. Review the diff the subagent reports before telling the user the task is done.

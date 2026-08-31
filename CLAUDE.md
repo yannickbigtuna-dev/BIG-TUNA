@@ -11,22 +11,29 @@ At the start of every session:
 1. Run `git pull origin main` first.
 2. Read `CODEX_CONTEXT.md` before making changes. It is the persistent project map shared with Codex — keep it as the single source of truth for both agents.
 
-### Multi-agent workflow for every requested change
+### Delegation workflow
 
-Every change must be engineered and planned before any code is written, then built, then independently tested. Use this loop:
+Diagnose every requested change yourself first — never delegate the diagnosis. Then pick a track based on size:
 
-1. **Architect (plan with the best model).** Drive the planning pass with the most capable Claude model available (Opus — currently `claude-opus-4-8`) acting as the architect and top-level coordinator. The architect inspects the request, gathers the minimum required repo context, and writes a thorough implementation spec **before any coding starts**.
-2. The spec must be detailed enough to double as the acceptance and testing checklist for the later validation pass.
-3. **Dispatch to sub-agents (build with efficient models).** Delegate the actual implementation to sub-agents running cheaper, more efficient models (e.g. Sonnet `claude-sonnet-4-6`, or Haiku `claude-haiku-4-5-20251001` for simple tasks), each given a clear task prompt derived directly from the spec. Use the `Agent` tool to spawn them.
-4. **Tester (validate with the most capable model).** After the sub-agents report back, run a dedicated testing/validation agent on the most capable model available (Opus — `claude-opus-4-8`). The tester verifies the implementation against the architect's spec, runs/inspects the relevant tests, checks for regressions, and confirms the work behaves as intended.
-5. **Feedback loop.** If tests fail or the work is incomplete, incorrect, or weak, send specific feedback from the tester to a **new** sub-agent pass and rebuild. Repeat implement → report → test → feedback until the work fully meets the architect's original spec. Do not ship work that has not passed the tester against the spec.
+**Small, well-scoped fixes (the common case):**
+1. Investigate the relevant code and diagnose the actual problem.
+2. Write a short, specific fix plan (files, functions, expected change).
+3. Delegate the implementation to the `implementer` subagent, giving it the diagnosis + plan verbatim.
+4. If multiple independent fixes are needed, spawn multiple `implementer` subagents in parallel.
+5. Review the diff the subagent reports before telling the user the task is done.
+
+**Larger or architectural changes** (new features, multi-file refactors, anything touching data formats, APIs, deployment, or security assumptions) — use a heavier three-stage loop instead:
+1. **Architect.** Plan with the most capable Claude model available (Opus), acting as architect/coordinator. Inspect the request, gather the minimum repo context, and write a thorough implementation spec **before any coding starts**. The spec must be detailed enough to double as the acceptance/testing checklist.
+2. **Build.** Delegate implementation to efficient-model sub-agents (e.g. the `implementer` subagent) using Sonnet, or Haiku for simple tasks, each given a task prompt derived directly from the spec.
+3. **Test.** Run a dedicated validation pass on the most capable model available. Verify the implementation against the spec, run/inspect relevant tests, check for regressions.
+4. **Feedback loop.** If validation fails or the work is incomplete, send specific feedback to a **new** sub-agent pass and rebuild. Repeat build → test → feedback until the work fully meets the spec. Do not ship work that hasn't passed this validation pass.
 
 ### Finishing every requested change
 
 1. Make the requested edits.
 2. Update `CODEX_CONTEXT.md` in the same change if architecture, routes, data formats, deployment, app conventions, dependencies, security assumptions, or coding standards changed.
 3. Run `git status` and `git diff`.
-4. If the change is complete and has passed the tester, commit with a clear message.
+4. If the change is complete — and, for larger changes, has passed the validation pass — commit with a clear message.
 5. Push to main using `git push origin main`.
 6. Tell the user what changed and that it was pushed.
 
@@ -75,7 +82,7 @@ Each app lives in `apps/{app-name}/index.html`. Adding a new app is just droppin
 
 **App accent color convention:** every app is themed to a single rainbow token from `tokens.css` (`--c-red` … `--c-pink`). An app's in-app accent — the `color` set for it in `topbar.js`, which becomes `--accent` on that route — **must be the same rainbow token as its icon/tile on the homepage grid** (`apps/index.html`, the `--tile` on its `.card`). Set the same token in both places so the launcher tile and the app's interior share one identity. (Example: Trivia is `--c-yellow` on the homepage tile and as its route accent.)
 
-Current apps: `workout-timer`, `quiz-app`, `trivia`, `psych-sheet`, `list-maker`, `world-map`, `pace-calculator`.
+Current apps: `assignments`, `capitals-quiz`, `climb-tracker`, `eco-ai`, `emma`, `lights`, `list-maker`, `pace-calculator`, `psych-sheet`, `quiz-app`, `terminal`, `trivia`, `weather`, `workout-timer`, `world-map`.
 
 ### Shared frontend libraries (served at root)
 

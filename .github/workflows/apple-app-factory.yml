@@ -1,0 +1,189 @@
+name: Apple App Factory
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_slug:
+        description: Stable app slug from ios/app-factory/specs
+        required: true
+        type: string
+      release_notes_path:
+        description: Optional repository-relative release notes text file
+        required: false
+        type: string
+
+# No signing, release, or repository-write permission is needed. Deployment is
+# separately gated on explicitly configured SSH secrets below.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      APP_SLUG: ${{ inputs.app_slug }}
+      RELEASE_NOTES_PATH: ${{ inputs.release_notes_path }}
+    outputs:
+      slug: ${{ steps.identity.outputs.slug }}
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate requested app and specification
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$APP_SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$ ]] || { echo 'Invalid app slug.' >&2; exit 2; }
+          spec="ios/app-factory/specs/${APP_SLUG}.yml"
+          test -f "$spec"
+          node ios/app-factory/tools/validate-app-spec.js "$spec"
+          version="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); process.stdout.write(String(s.app && s.app.version || ''))" "$spec")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Spec version must be semantic X.Y.Z.' >&2; exit 2; }
+          echo "slug=$APP_SLUG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate deterministic Xcode project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .factory-build "$RUNNER_TEMP/apple-app-factory/release-input" "$RUNNER_TEMP/apple-app-factory/logs"
+          node ios/app-factory/tools/generate-project.js --spec "ios/app-factory/specs/${APP_SLUG}.yml" --output ".factory-build/${APP_SLUG}"
+          xcodegen generate --spec ".factory-build/${APP_SLUG}/project.yml" --project ".factory-build/${APP_SLUG}" | tee "$RUNNER_TEMP/apple-app-factory/logs/xcodegen.log"
+
+      - name: Build every generated target without signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          project="$(find ".factory-build/${APP_SLUG}" -maxdepth 1 -name '*.xcodeproj' -print -quit)"
+          test -n "$project"
+          # Build all app/extension targets. The target graph records the exact
+          # enabled components for subsequent IPA inspection.
+          xcodebuild -project "$project" -target App -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/build-App.log"
+          if node -e "process.exit(require(process.argv[1]).targets.homeScreenWidget ? 0 : 1)" ".factory-build/${APP_SLUG}/.factory-targets.json"; then
+            xcodebuild -project "$project" -target AppWidget -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/build-AppWidget.log"
+          fi
+          if node -e "process.exit(require(process.argv[1]).targets.watchMode !== 'none' ? 0 : 1)" ".factory-build/${APP_SLUG}/.factory-targets.json"; then
+            xcodebuild -project "$project" -target AppWatch -configuration Release -sdk watchos CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/build-AppWatch.log"
+          fi
+          if node -e "process.exit(require(process.argv[1]).targets.watchWidgets ? 0 : 1)" ".factory-build/${APP_SLUG}/.factory-targets.json"; then
+            xcodebuild -project "$project" -target AppWatchWidget -configuration Release -sdk watchos CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/build-AppWatchWidget.log"
+          fi
+          xcodebuild -project "$project" -scheme App -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/scheme-build.log"
+          xcodebuild -project "$project" -scheme App -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO archive -archivePath "$RUNNER_TEMP/apple-app-factory/${APP_SLUG}.xcarchive" | tee "$RUNNER_TEMP/apple-app-factory/logs/archive.log"
+
+      - name: Package unsigned IPA and verify embedded components
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/apple-app-factory/${APP_SLUG}.xcarchive"
+          app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app"
+          package="$RUNNER_TEMP/apple-app-factory/package"
+          mkdir -p "$package/Payload"
+          cp -R "$app" "$package/Payload/"
+          ipa="$RUNNER_TEMP/apple-app-factory/release-input/${APP_SLUG}.ipa"
+          (cd "$package" && /usr/bin/zip -qry "$ipa" Payload)
+          unzip -l "$ipa" | tee "$RUNNER_TEMP/apple-app-factory/logs/ipa-contents.log"
+          node ios/app-factory/tools/inspect-ipa.js --ipa "$ipa" --targets ".factory-build/${APP_SLUG}/.factory-targets.json"
+
+      - name: Create release metadata and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--spec "ios/app-factory/specs/${APP_SLUG}.yml" --ipa "$RUNNER_TEMP/apple-app-factory/release-input/${APP_SLUG}.ipa" --output "$RUNNER_TEMP/apple-app-factory/release-input")
+          if [[ -n "$RELEASE_NOTES_PATH" ]]; then
+            [[ "$RELEASE_NOTES_PATH" != /* && "$RELEASE_NOTES_PATH" != *".."* && -f "$RELEASE_NOTES_PATH" ]] || { echo 'Unsafe release notes path.' >&2; exit 2; }
+            args+=(--notes "$RELEASE_NOTES_PATH")
+          fi
+          node ios/app-factory/tools/create-release-metadata.js "${args[@]}"
+          shasum -a 256 "$RUNNER_TEMP/apple-app-factory/release-input/${APP_SLUG}.ipa" | tee "$RUNNER_TEMP/apple-app-factory/release-input/sha256.txt"
+
+      - name: Upload unsigned release input
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-app-factory-${{ steps.identity.outputs.slug }}-${{ steps.identity.outputs.version }}
+          path: ${{ runner.temp }}/apple-app-factory/release-input
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-app-factory-logs-${{ github.run_id }}
+          path: ${{ runner.temp }}/apple-app-factory/logs
+          if-no-files-found: warn
+          retention-days: 14
+
+  deploy-private-release:
+    needs: build
+    # SSH is opt-in. No missing secret is treated as a successful publication.
+    if: ${{ needs.build.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: apple-app-factory-private-deploy
+    steps:
+      - name: Gate optional private deployment
+        id: deployment-gate
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_USER }}
+          DEPLOY_ROOT: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_ROOT }}
+          DEPLOY_REPO: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_REPO }}
+          DEPLOY_KEY: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$DEPLOY_HOST" && -n "$DEPLOY_USER" && -n "$DEPLOY_ROOT" && -n "$DEPLOY_REPO" && -n "$DEPLOY_KEY" && -n "$DEPLOY_KNOWN_HOSTS" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+            echo 'Private deployment is configured.'
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Private deployment is not configured; retaining GitHub artifacts only.'
+          fi
+      - if: ${{ steps.deployment-gate.outputs.enabled == 'true' }}
+        uses: actions/checkout@v4
+      - if: ${{ steps.deployment-gate.outputs.enabled == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: apple-app-factory-${{ needs.build.outputs.slug }}-${{ needs.build.outputs.version }}
+          path: release-input
+      - name: Configure restricted deploy key
+        if: ${{ steps.deployment-gate.outputs.enabled == 'true' }}
+        shell: bash
+        env:
+          DEPLOY_KEY: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_SSH_KEY }}
+          APPLE_APP_FACTORY_DEPLOY_HOST: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/apple-app-factory
+          chmod 600 ~/.ssh/apple-app-factory
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Upload, verify, then promote immutable release
+        if: ${{ steps.deployment-gate.outputs.enabled == 'true' }}
+        shell: bash
+        env:
+          APPLE_APP_FACTORY_DEPLOY_HOST: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_HOST }}
+          APPLE_APP_FACTORY_DEPLOY_USER: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_USER }}
+          APPLE_APP_FACTORY_DEPLOY_ROOT: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_ROOT }}
+          APPLE_APP_FACTORY_DEPLOY_REPO: ${{ secrets.APPLE_APP_FACTORY_DEPLOY_REPO }}
+        run: |
+          set -euo pipefail
+          destination="$APPLE_APP_FACTORY_DEPLOY_USER@$APPLE_APP_FACTORY_DEPLOY_HOST"
+          incoming="${APPLE_APP_FACTORY_DEPLOY_ROOT}/.incoming/${{ github.run_id }}-${{ needs.build.outputs.slug }}"
+          ssh -i ~/.ssh/apple-app-factory -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts "$destination" "mkdir -p '$incoming'"
+          scp -i ~/.ssh/apple-app-factory -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -r release-input/. "$destination:$incoming/"
+          ssh -i ~/.ssh/apple-app-factory -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts "$destination" "node '$APPLE_APP_FACTORY_DEPLOY_REPO/scripts/apple-app-factory/publish-release.mjs' --source '$incoming' --release-root '$APPLE_APP_FACTORY_DEPLOY_ROOT' --slug '${{ needs.build.outputs.slug }}' --version '${{ needs.build.outputs.version }}'"
