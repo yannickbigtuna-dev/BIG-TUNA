@@ -72,6 +72,75 @@ function Start-OllamaApiIfNeeded {
     Start-Process -FilePath $ollamaExe -ArgumentList 'serve' -WindowStyle Hidden | Out-Null
 }
 
+function Initialize-HomeKitLanAccess {
+    $homeKitDirectory = Join-Path $root 'data\lights\homekit'
+    $homeKitNetworkFile = Join-Path $homeKitDirectory 'homekit-network.json'
+
+    try {
+        New-Item -ItemType Directory -Path $homeKitDirectory -Force -ErrorAction Stop | Out-Null
+
+        $storedProfileName = $null
+        if (Test-Path $homeKitNetworkFile) {
+            $storedNetwork = Get-Content -Raw -Path $homeKitNetworkFile -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($storedNetwork.profileName -is [string] -and -not [string]::IsNullOrWhiteSpace($storedNetwork.profileName)) {
+                $storedProfileName = $storedNetwork.profileName
+            } else {
+                Write-Host 'HomeKit LAN setup: stored network marker is invalid; leaving network category unchanged.'
+            }
+        }
+
+        $activeWifi = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object {
+            $_.Status -eq 'Up' -and ($_.NdisPhysicalMedium -eq '802.11' -or $_.MediaType -eq 'Native 802.11')
+        } | Select-Object -First 1
+        $activeProfile = if ($activeWifi) {
+            Get-NetConnectionProfile -InterfaceIndex $activeWifi.ifIndex -ErrorAction Stop | Where-Object {
+                $_.IPv4Connectivity -eq 'Internet' -or $_.IPv6Connectivity -eq 'Internet'
+            } | Select-Object -First 1
+        }
+
+        if ($storedProfileName) {
+            if ($activeProfile -and $activeProfile.Name -ceq $storedProfileName -and $activeProfile.NetworkCategory -ne 'Private') {
+                Set-NetConnectionProfile -InterfaceIndex $activeProfile.InterfaceIndex -NetworkCategory Private -ErrorAction Stop
+                Write-Host "HomeKit LAN setup: set stored Wi-Fi profile '$storedProfileName' to Private."
+            }
+        } elseif (-not (Test-Path $homeKitNetworkFile)) {
+
+            if ($activeProfile -and -not [string]::IsNullOrWhiteSpace($activeProfile.Name)) {
+                if ($activeProfile.NetworkCategory -ne 'Private') {
+                    Set-NetConnectionProfile -InterfaceIndex $activeProfile.InterfaceIndex -NetworkCategory Private -ErrorAction Stop
+                }
+                @{ profileName = $activeProfile.Name } | ConvertTo-Json | Set-Content -Path $homeKitNetworkFile -Encoding UTF8 -ErrorAction Stop
+                Write-Host "HomeKit LAN setup: trusted Wi-Fi profile '$($activeProfile.Name)' is Private."
+            } else {
+                Write-Host 'HomeKit LAN setup: no Internet-connected Wi-Fi profile found; leaving network category unchanged.'
+            }
+        }
+    } catch {
+        Write-Host "HomeKit LAN setup network error: $($_.Exception.Message)"
+    }
+
+    try {
+        $homeKitRules = @(
+            @{ DisplayName = 'BIG TUNA HomeKit TCP (Private LAN)'; Protocol = 'TCP'; LocalPort = 51826 },
+            @{ DisplayName = 'BIG TUNA HomeKit mDNS (Private LAN)'; Protocol = 'UDP'; LocalPort = 5353 }
+        )
+
+        foreach ($ruleDefinition in $homeKitRules) {
+            $rules = @(Get-NetFirewallRule -DisplayName $ruleDefinition.DisplayName -ErrorAction SilentlyContinue)
+            if ($rules.Count -eq 0) {
+                New-NetFirewallRule -DisplayName $ruleDefinition.DisplayName -Direction Inbound -Action Allow -Enabled True -Profile Private -Protocol $ruleDefinition.Protocol -LocalPort $ruleDefinition.LocalPort -RemoteAddress LocalSubnet -ErrorAction Stop | Out-Null
+            } else {
+                $rules | Set-NetFirewallRule -Direction Inbound -Action Allow -Enabled True -Profile Private -ErrorAction Stop
+                $rules | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -Protocol $ruleDefinition.Protocol -LocalPort $ruleDefinition.LocalPort -ErrorAction Stop
+                $rules | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress LocalSubnet -ErrorAction Stop
+            }
+        }
+        Write-Host 'HomeKit LAN firewall rules are enabled for the Private local subnet.'
+    } catch {
+        Write-Host "HomeKit LAN setup firewall error: $($_.Exception.Message)"
+    }
+}
+
 function Invoke-Pm2App {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -96,6 +165,7 @@ Write-Host '=== BIG TUNA startup ==='
 Write-Host ''
 
 Start-OllamaApiIfNeeded
+Initialize-HomeKitLanAccess
 Invoke-Pm2App -Name 'apps-server' -StartArgs @('start', 'C:\SERVER\ecosystem.config.cjs', '--update-env') -RestartArgs @('restart', 'C:\SERVER\ecosystem.config.cjs', '--only', 'apps-server', '--update-env')
 Invoke-Pm2App -Name 'mcp-server' -StartArgs @('start', 'C:\SERVER\mcp-server\ecosystem.config.cjs') -RestartArgs @('restart', 'mcp-server')
 

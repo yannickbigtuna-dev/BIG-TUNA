@@ -31,8 +31,8 @@
   <h2>If it does not appear</h2>
   <ul>
     <li>Confirm the phone and server are on the same LAN. Cloudflare/the public website cannot carry HomeKit discovery.</li>
-    <li>Allow inbound <strong>TCP 51826</strong> on Windows’ <strong>Private</strong> firewall profile and local multicast DNS (UDP 5353). Do not open either to the public Internet.</li>
-    <li>Restart the BIG TUNA server after installing the new dependency, wait about 30 seconds, then try <strong>More options</strong> again.</li>
+    <li>The BIG TUNA startup task configures the trusted home Wi-Fi profile and the restricted local HomeKit firewall rules automatically. It never opens HomeKit to the public Internet.</li>
+    <li>Restart the BIG TUNA server, wait about 30 seconds, then try <strong>More options</strong> again. If the server has moved to a different Wi-Fi network, restart it while connected to that trusted network.</li>
   </ul>
   <p>Do not delete <code>data/lights/homekit/</code>: it contains the secure HomeKit pairing identity and deleting it requires a new pairing.</p>
 </main>

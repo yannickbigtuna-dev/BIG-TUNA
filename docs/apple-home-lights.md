@@ -15,8 +15,8 @@ After pairing, Apple Home stores the encrypted relationship. You do not need to 
 ## If Apple Home cannot find it
 
 - Confirm the phone and server are on the same LAN; HomeKit discovery cannot cross the public website/Cloudflare Tunnel.
-- The server needs inbound **TCP port 51826** allowed on the Windows **Private** firewall profile, plus local multicast DNS (UDP 5353). A typical home/private Windows network already permits local mDNS; do not open either port to the public Internet.
-- Restart the BIG TUNA server after installing its new Node dependency, then wait about 30 seconds and try **More options** again.
+- The elevated BIG TUNA startup task configures the trusted home Wi-Fi profile and narrowly scoped Windows rules automatically: inbound TCP 51826 and UDP 5353 only on the Private profile and only from the local subnet. It never opens HomeKit to the public Internet.
+- Restart the BIG TUNA server, wait about 30 seconds, then try **More options** again. If the server has moved to a different Wi-Fi network, restart it while connected to the trusted network.
 - If the Home app says the accessory is already paired, do not delete `data/lights/homekit/` casually: that deletes the pairing identity and requires re-pairing. Use the same Apple Home home/account that performed the original pairing.
 
 ## Security notes
