@@ -411,6 +411,9 @@ process did not have `STRAVA_CHALLENGE_CRYPTO_SECRET`. The gitignored
 - Treat the control as a quiet rink-side maintenance action: use the established
   glass scoreboard, shared typography/color tokens, a 44px touch target, clear
   focus, and an accessible status message. Do not add a new visual language.
+- Keep the compact latest-five preview strictly qualifying-only, give each card a
+  subtle athlete-tinted background, and use plain activity names/metrics without
+  checkmarks, X markers, or qualification badges.
 
 ### Ownership and approach
 

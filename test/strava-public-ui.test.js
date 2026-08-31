@@ -24,7 +24,6 @@ test('public interface keeps secondary content behind More while retaining publi
   assert.match(js, /\?week=/);
   assert.match(js, /Yannick/);
   assert.match(js, /Emma/);
-  assert.match(js, /NOT QUALIFIED/);
   assert.match(js, /TIME TIEBREAKER/);
   assert.match(js, /sc-more-content/);
   assert.match(js, /expanded = false/);
@@ -97,6 +96,31 @@ test('manual refresh control uses existing scoreboard tokens with a 44px accessi
   assert.match(css, /\.sc-refresh-status--success \{ color:var\(--success\); \}/);
   assert.match(css, /\.sc-refresh-status--cooldown,\.sc-refresh-status--warning \{ color:var\(--warning\); \}/);
   assert.match(css, /\.sc-refresh-status--error \{ color:var\(--danger\); \}/);
+});
+
+test('activity previews and detailed feeds contain qualifying activities only, without check or x status markers', () => {
+  assert.match(js, /function qualifyingActivities\(items\) \{ return \(items \|\| \[\]\)\.filter\(a => a\.qualifies === true\)/);
+  assert.match(js, /qualifyingActivities\(w\.activities\)\.map\(activity\)/);
+  assert.match(js, /const activities = qualifyingActivities\(w\.activities \|\| Object\.values/);
+  const activitySource = js.match(/function activity[\s\S]*?function recap/)[0];
+  assert.doesNotMatch(activitySource, /sc-yes|sc-no|sc-qual|✓|✕|NOT QUALIFIED/);
+  assert.match(activitySource, /sc-activity--\$\{p\.klass\}/);
+});
+
+test('qualifying activity cards use Yannick and Emma tinted backgrounds rather than success or failure treatments', () => {
+  assert.match(css, /\.sc-activity--y\{background:color-mix\(in srgb,var\(--c-red\) 9%,transparent\)\}/);
+  assert.match(css, /\.sc-activity--e\{background:color-mix\(in srgb,var\(--c-blue\) 9%,transparent\)\}/);
+  assert.doesNotMatch(css, /\.sc-yes|\.sc-no|\.sc-qual/);
+});
+
+test('authorised refresh is visibly placed immediately below the scoreboard with clear action copy', () => {
+  assert.match(js, /<section class="sc-refresh" aria-label="Strava activity refresh">/);
+  assert.match(js, /Update both Strava accounts/);
+  assert.match(js, /Sync Yannick \+ Emma now/);
+  assert.match(js, /Pulls the latest qualifying activities\. Available every 5 minutes\./);
+  assert.match(js, /<\/div>\$\{refreshControl\(\)\}<button class="btn btn-ghost sc-more"/);
+  assert.match(css, /\.sc-refresh \{ display:grid;[\s\S]*background:linear-gradient/);
+  assert.match(css, /\.sc-refresh-label \{ margin:0;/);
 });
 
 test('manual refresh is never offered or enabled in the challenge demo preview', () => {
