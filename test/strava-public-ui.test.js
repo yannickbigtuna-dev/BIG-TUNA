@@ -9,7 +9,7 @@ const js = fs.readFileSync(path.join(root, 'apps', 'strava-challenge.js'), 'utf8
 const css = fs.readFileSync(path.join(root, 'apps', 'strava-challenge.css'), 'utf8');
 
 test('homepage replaces the clock with the public Strava Cup mount without removing existing tools', () => {
-  assert.match(html, /strava-challenge\.css\?v=10198c6/);
+  assert.match(html, /strava-challenge\.css\?v=score-font-20260830/);
   assert.match(html, /id="strava-challenge"/);
   assert.doesNotMatch(html, /id="clock"/);
   assert.match(html, /id="ask-emma"/);
@@ -39,6 +39,14 @@ test('arena board fixes Yannick red, Emma blue, has mobile three-track layout an
   assert.match(css, /max-width: 360px/);
   assert.match(css, /\.sc-recap-line/);
   assert.match(css, /text-overflow:ellipsis/);
+});
+
+test('large scoreboard numerals use the UI font so zero has no monospace slash treatment', () => {
+  assert.match(css, /\.sc-score \{ font-family:var\(--font-ui\);[\s\S]*font-variant-numeric:normal/);
+  assert.match(css, /\.sc-week-score \{ font-family:var\(--font-ui\);[\s\S]*font-variant-numeric:normal/);
+  assert.match(css, /\.sc-detail-score strong\{font:var\(--weight-black\) var\(--text-2xl\) var\(--font-ui\);font-variant-numeric:normal\}/);
+  assert.doesNotMatch(css, /\.sc-score \{ font-family:var\(--font-mono\)/);
+  assert.doesNotMatch(css, /\.sc-week-score \{ font-family:var\(--font-mono\)/);
 });
 
 test('compact recaps show only qualifying activities as semantic, expandable bullet lists', () => {
@@ -71,7 +79,7 @@ test('compact recap bullets are explicit and preserve Yannick red and Emma blue 
 });
 
 test('manual activity refresh is auth-gated, bearer-authenticated, and refreshes the public dashboard', () => {
-  assert.match(html, /<script src="\/auth\.js"><\/script>\s*<script src="\/strava-challenge\.js\?v=10198c6"><\/script>/);
+  assert.match(html, /<script src="\/auth\.js"><\/script>\s*<script src="\/strava-challenge\.js\?v=score-font-20260830"><\/script>/);
   assert.match(js, /new Set\(\['yannick', 'fishyemma'\]\)/);
   assert.match(js, /String\(user && user\.username \|\| ''\)\.trim\(\)\.toLowerCase\(\)/);
   assert.match(js, /Auth\.onReady\(user =>/);
