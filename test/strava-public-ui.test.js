@@ -9,7 +9,7 @@ const js = fs.readFileSync(path.join(root, 'apps', 'strava-challenge.js'), 'utf8
 const css = fs.readFileSync(path.join(root, 'apps', 'strava-challenge.css'), 'utf8');
 
 test('homepage replaces the clock with the public Strava Cup mount without removing existing tools', () => {
-  assert.match(html, /strava-challenge\.css/);
+  assert.match(html, /strava-challenge\.css\?v=9b870c5/);
   assert.match(html, /id="strava-challenge"/);
   assert.doesNotMatch(html, /id="clock"/);
   assert.match(html, /id="ask-emma"/);
@@ -71,7 +71,7 @@ test('compact recap bullets are explicit and preserve Yannick red and Emma blue 
 });
 
 test('manual activity refresh is auth-gated, bearer-authenticated, and refreshes the public dashboard', () => {
-  assert.match(html, /<script src="\/auth\.js"><\/script>\s*<script src="\/strava-challenge\.js"><\/script>/);
+  assert.match(html, /<script src="\/auth\.js"><\/script>\s*<script src="\/strava-challenge\.js\?v=9b870c5"><\/script>/);
   assert.match(js, /new Set\(\['yannick', 'fishyemma'\]\)/);
   assert.match(js, /String\(user && user\.username \|\| ''\)\.trim\(\)\.toLowerCase\(\)/);
   assert.match(js, /Auth\.onReady\(user =>/);
