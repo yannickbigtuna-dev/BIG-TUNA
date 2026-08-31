@@ -47,7 +47,7 @@ test('HomeKit On maps directly to physical ON and reads current physical state',
   const hap = fakeHap();
   let physicalOn = false;
   const bridge = createHomeKitLightBridge({
-    dataDir: temporaryDir(), hap,
+    dataDir: temporaryDir(), hap, bind: '192.168.2.10',
     readOn: () => physicalOn,
     writeOn: value => { physicalOn = value; },
   });
@@ -57,6 +57,7 @@ test('HomeKit On maps directly to physical ON and reads current physical state',
   await hap.state.characteristic.set(true);
   assert.equal(physicalOn, true);
   assert.equal(hap.state.published.port, 51826);
+  assert.equal(hap.state.published.bind, '192.168.2.10');
   assert.equal(hap.state.published.setupID, 'BTNA');
   assert.deepEqual(bridge.getPairingInfo(), {
     available: true,
@@ -76,9 +77,10 @@ test('HomeKit On maps directly to physical ON and reads current physical state',
 test('external physical state changes update the HomeKit characteristic', async () => {
   const hap = fakeHap();
   const bridge = createHomeKitLightBridge({
-    dataDir: temporaryDir(), hap, readOn: () => false, writeOn: () => {},
+    dataDir: temporaryDir(), hap, bind: ['192.168.2.10', 'Wi-Fi'], readOn: () => false, writeOn: () => {},
   });
   await bridge.start();
+  assert.deepEqual(hap.state.published.bind, ['192.168.2.10', 'Wi-Fi']);
   bridge.update(true);
   assert.equal(hap.state.characteristic.value, true);
   bridge.update(false);
@@ -92,4 +94,18 @@ test('pairing secret is created once and remains stable', () => {
   assert.equal(first.setupCode, second.setupCode);
   assert.equal(first.username, second.username);
   assert.match(first.setupCode, /^\d{3}-\d{2}-\d{3}$/);
+});
+
+test('HomeKit bridge requires a nonempty bind interface or address', () => {
+  const requiredOptions = {
+    dataDir: temporaryDir(),
+    readOn: () => false,
+    writeOn: () => {},
+  };
+  for (const bind of [undefined, null, '', '   ', [], ['192.168.2.10', ''], [51826]]) {
+    assert.throws(
+      () => createHomeKitLightBridge({ ...requiredOptions, bind }),
+      /requires a nonempty bind interface or address/,
+    );
+  }
 });

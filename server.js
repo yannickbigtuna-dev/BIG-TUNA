@@ -282,6 +282,9 @@ function getLightsDeviceStatusPayload() {
 async function startHomeKitLightBridge() {
   const bridge = createHomeKitLightBridge({
     dataDir: path.join(LIGHTS_DIR, 'homekit'),
+    // Do not advertise the Tailscale address to Apple Home. The bridge is a
+    // physical-LAN accessory and must be discovered/reached over this adapter.
+    bind: process.env.HOMEKIT_BIND_INTERFACE || 'Wi-Fi',
     readOn: () => {
       const storedOn = readLightsState().on;
       return LIGHTS_DEVICE_INVERT_OUTPUT ? !storedOn : storedOn;
