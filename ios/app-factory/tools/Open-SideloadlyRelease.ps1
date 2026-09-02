@@ -9,7 +9,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ($PSCmdlet.ParameterSetName -eq 'Slug') {
-    if ([string]::IsNullOrWhiteSpace($ReleaseRoot)) { throw 'Set APPLE_APP_FACTORY_RELEASE_ROOT locally or provide -Ipa and -ChecksumPath.' }
+    if ([string]::IsNullOrWhiteSpace($ReleaseRoot)) {
+        $repositoryRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')
+        $ReleaseRoot = Join-Path $repositoryRoot 'data\apple-app-factory\releases'
+    }
     $release = Resolve-Path -LiteralPath (Join-Path $ReleaseRoot $Slug)
     $ipaPath = Join-Path $release 'latest.ipa'
     if ([string]::IsNullOrWhiteSpace($ChecksumPath)) { $ChecksumPath = Join-Path $release 'sha256.txt' }
@@ -27,6 +30,8 @@ $expected = (($checksumLine -split '\s+')[0]).ToLowerInvariant()
 $actual = (Get-FileHash -LiteralPath $ipaPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -ne $expected) { throw 'SHA-256 verification failed. Do not open this IPA in Sideloadly.' }
 
+Start-Process explorer.exe -ArgumentList "/select,`"$ipaPath`""
+
 if ([string]::IsNullOrWhiteSpace($SideloadlyPath)) {
     $candidates = @(
         (Join-Path $env:ProgramFiles 'Sideloadly\Sideloadly.exe'),
@@ -41,7 +46,6 @@ if (-not $SideloadlyPath -or -not (Test-Path -LiteralPath $SideloadlyPath)) {
 # Sideloadly has no supported command-line automation contract. Deliberately do
 # not pass an IPA, Apple Account, password, or two-factor code to it. Explorer
 # selects the verified file and Sideloadly opens its normal GUI for the one final click.
-Start-Process explorer.exe -ArgumentList "/select,`"$ipaPath`""
 Start-Process -FilePath $SideloadlyPath
 if (Test-Path -LiteralPath $manifestPath) {
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json

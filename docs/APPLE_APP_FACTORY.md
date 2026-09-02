@@ -55,7 +55,11 @@ For health/workout/location/Bluetooth/notifications, add only the necessary capa
 4. A server upload occurs only when owner-supplied, directory-scoped deployment secrets are configured. Otherwise CI artifacts remain in GitHub and `latest` is unchanged.
 5. A Windows launcher finds the newest verified IPA and opens it in the selected installer. It never automates credentials, 2FA, trust, Developer Mode, or a GUI control that has no supported command interface.
 
-The current repo prepares this pipeline but has not yet exercised a cloud macOS job, private upload, free signing, iPhone installation, or Watch installation. Those remain explicit acceptance gates.
+The BIG TUNA Lights 1.1.0 (2) product completed the cloud macOS build, unsigned
+archive packaging, and component inspection in run 33631213210 on 2026-09-02.
+Its checksum-verified artifact was promoted into local private release storage.
+Free signing, iPhone installation, and Watch delivery remain explicit physical
+acceptance gates.
 
 ## Plain-English prompts
 

@@ -35,10 +35,16 @@ Until every item passes for a concrete release, mark Watch delivery as **unverif
 When a new IPA is ready, run the factory launcher supplied by the tooling package:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ios\app-factory\tools\Open-SideloadlyRelease.ps1 -Slug <app-slug>
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ios\app-factory\tools\Open-SideloadlyRelease.ps1 -Slug big-tuna-lights
 ```
 
-It verifies the newest release checksum and opens the intended IPA in Sideloadly where supported. Sideloadly has no documented CLI contract used by this factory: the final human action is to select the connected device/account in its GUI and click **Start**. Then complete any Apple trust/2FA/Developer Mode prompt. If a Watch bundle is not visibly retained or installed, stop and record the failure—do not substitute a stripped IPA.
+From the Windows repository checkout, the launcher automatically uses the local
+private-release directory, verifies the newest checksum, and selects the IPA in
+Explorer. It also opens Sideloadly when installed. The final human action is to
+drag the selected IPA into Sideloadly, choose the connected iPhone and Apple
+Account, and click **Start**. Complete Apple’s trust, 2FA, and Developer Mode
+prompts on the trusted PC/device. If a Watch bundle is not visibly retained or
+installed, stop and record the failure—do not substitute a stripped IPA.
 
 ## Data-preserving updates
 
