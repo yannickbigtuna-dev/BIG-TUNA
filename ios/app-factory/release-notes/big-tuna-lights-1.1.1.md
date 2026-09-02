@@ -1,6 +1,6 @@
 # BIG TUNA Lights 1.1.1 (3)
 
-Release date: pending build
+Release date: 2026-09-02
 
 ## Changed
 
@@ -19,7 +19,7 @@ Release date: pending build
 
 - Minimum iOS: 18.0
 - Minimum watchOS: 26.0
-- SHA-256: pending build
+- SHA-256: `bbfecaf44e6ac2fe85d8650c1aca783f113507224cc999136503e1b22fd6f2e7`
 
 ## Installation and free-signing notice
 
@@ -32,8 +32,8 @@ This is a private Personal-Team test release. It cannot install directly from Sa
 
 ## Validation status
 
-- CI build: pending
-- IPA target inspection: pending
+- CI build: passed ([run 33696632964](https://github.com/yannickbigtuna-dev/BIG-TUNA/actions/runs/33696632964))
+- IPA target inspection: passed
 - iPhone physical test: not tested
 - Home Screen widget and Control Center discovery: not tested
 - Watch physical test: not tested

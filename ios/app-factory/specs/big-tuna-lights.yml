@@ -70,10 +70,10 @@
       "releaseRoot": "data/apple-app-factory/releases"
     },
     "lastSuccessfulBuild": {
-      "status": "not-built",
-      "ciRunUrl": null,
-      "completedAt": null,
-      "ipaSha256": null
+      "status": "unsigned-ci-build-passed",
+      "ciRunUrl": "https://github.com/yannickbigtuna-dev/BIG-TUNA/actions/runs/33696632964",
+      "completedAt": "2026-09-02T23:48:36Z",
+      "ipaSha256": "bbfecaf44e6ac2fe85d8650c1aca783f113507224cc999136503e1b22fd6f2e7"
     },
     "physicalAcceptance": {
       "iphone": "not-tested",

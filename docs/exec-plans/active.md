@@ -620,5 +620,5 @@ bundle identifiers for the host identifier Sideloadly derives while signing.
 - [x] Write implementation specification and isolated ownership package.
 - [x] Implement and review the versioned release change.
 - [x] Run local validation and independent acceptance review.
-- [ ] Build, inspect, download, and open the prepared artifact.
-- [ ] Commit and push; do not deploy or restart the website.
+- [x] Build, inspect, download, and open the prepared artifact.
+- [x] Commit and push; do not deploy or restart the website.
