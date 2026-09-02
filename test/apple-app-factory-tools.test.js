@@ -228,6 +228,8 @@ test('Apple factory packages nested bundles with credential-free ad-hoc signatur
   assert.match(workflow, /sideloadly_personal_team_suffix:/);
   assert.match(workflow, /\[\[ -z "\$SIDELOADLY_PERSONAL_TEAM_SUFFIX" \|\| "\$SIDELOADLY_PERSONAL_TEAM_SUFFIX" =~ \^\[A-Z0-9\]\{10\}\$ \]\]/);
   assert.match(script, /\/usr\/libexec\/PlistBuddy/);
+  assert.match(script, /JSON\.parse\(fs\.readFileSync\(process\.argv\[1\], 'utf8'\)\)/);
+  assert.doesNotMatch(script, /const target=require\(process\.argv\[1\]\)/);
   assert.ok(script.indexOf('rewrite_embedded_bundle_id()') < script.indexOf('sign_bundle()'));
   assert.match(script, /--sideloadly-host-bundle-id/);
   assert.match(workflow, /sideloadly_prepared: \$\{\{ steps\.identity\.outputs\.sideloadly_prepared \}\}/);
