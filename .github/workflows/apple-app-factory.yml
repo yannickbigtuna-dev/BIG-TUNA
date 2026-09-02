@@ -11,6 +11,10 @@ on:
         description: Optional repository-relative release notes text file
         required: false
         type: string
+      sideloadly_personal_team_suffix:
+        description: Optional 10-character uppercase Sideloadly Personal Team suffix for embedded bundle preparation
+        required: false
+        type: string
 
 # No Apple identity, provisioning profile, release, or repository-write
 # permission is needed. Deployment is separately gated on explicitly configured
@@ -25,9 +29,11 @@ jobs:
     env:
       APP_SLUG: ${{ inputs.app_slug }}
       RELEASE_NOTES_PATH: ${{ inputs.release_notes_path }}
+      SIDELOADLY_PERSONAL_TEAM_SUFFIX: ${{ inputs.sideloadly_personal_team_suffix }}
     outputs:
       slug: ${{ steps.identity.outputs.slug }}
       version: ${{ steps.identity.outputs.version }}
+      sideloadly_prepared: ${{ steps.identity.outputs.sideloadly_prepared }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,7 +47,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          LC_ALL=C
           [[ "$APP_SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$ ]] || { echo 'Invalid app slug.' >&2; exit 2; }
+          [[ -z "$SIDELOADLY_PERSONAL_TEAM_SUFFIX" || "$SIDELOADLY_PERSONAL_TEAM_SUFFIX" =~ ^[A-Z0-9]{10}$ ]] || { echo 'Sideloadly Personal Team suffix must be empty or exactly 10 uppercase ASCII alphanumeric characters.' >&2; exit 2; }
           spec="ios/app-factory/specs/${APP_SLUG}.yml"
           test -f "$spec"
           node ios/app-factory/tools/validate-app-spec.js "$spec"
@@ -49,6 +57,11 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Spec version must be semantic X.Y.Z.' >&2; exit 2; }
           echo "slug=$APP_SLUG" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ -n "$SIDELOADLY_PERSONAL_TEAM_SUFFIX" ]]; then
+            echo 'sideloadly_prepared=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'sideloadly_prepared=false' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -89,6 +102,69 @@ jobs:
           archive="$RUNNER_TEMP/apple-app-factory/${APP_SLUG}.xcarchive"
           app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$app"
+          targets=".factory-build/${APP_SLUG}/.factory-targets.json"
+
+          target_value() {
+            node -e "const target=require(process.argv[1]); let value=target; for (const key of process.argv[2].split('.')) value=value == null ? undefined : value[key]; process.stdout.write(value == null ? '' : String(value));" "$targets" "$1"
+          }
+          plist_value() {
+            local plist="$1" key="$2" value
+            value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null)" || { echo "Missing $key in $plist." >&2; exit 2; }
+            test -n "$value" || { echo "Empty $key in $plist." >&2; exit 2; }
+            printf '%s' "$value"
+          }
+          plist_set() {
+            local plist="$1" key="$2" value="$3"
+            /usr/libexec/PlistBuddy -c "Set :$key $value" "$plist"
+          }
+          require_expected_bundle() {
+            local plist="$1" expected="$2" label="$3" actual
+            test -f "$plist" || { echo "Missing expected $label Info.plist." >&2; exit 2; }
+            test -n "$expected" || { echo "Target manifest has no expected bundle ID for $label." >&2; exit 2; }
+            actual="$(plist_value "$plist" CFBundleIdentifier)"
+            [[ "$actual" == "$expected" ]] || { echo "$label has unexpected CFBundleIdentifier." >&2; exit 2; }
+          }
+
+          host_plist="$app/Info.plist"
+          host_bundle_id="$(plist_value "$host_plist" CFBundleIdentifier)"
+          require_expected_bundle "$host_plist" "$(target_value bundleIds.iphone)" 'iPhone host app'
+          widget_plist="$app/PlugIns/$(target_value app.name) Widgets.appex/Info.plist"
+          watch_plist="$app/Watch/$(target_value app.name) Watch.app/Info.plist"
+          watch_widget_plist="$app/Watch/$(target_value app.name) Watch.app/PlugIns/$(target_value app.name) Watch Widgets.appex/Info.plist"
+          if [[ "$(target_value targets.homeScreenWidget)" == true || "$(target_value targets.iphoneControls)" == true ]]; then
+            require_expected_bundle "$widget_plist" "$(target_value bundleIds.widget)" 'iPhone WidgetKit extension'
+          fi
+          if [[ "$(target_value targets.watchMode)" != none ]]; then
+            require_expected_bundle "$watch_plist" "$(target_value bundleIds.watch)" 'Apple Watch app'
+            [[ "$(plist_value "$watch_plist" WKCompanionAppBundleIdentifier)" == "$host_bundle_id" ]] || { echo 'Apple Watch app has an unexpected WKCompanionAppBundleIdentifier.' >&2; exit 2; }
+          fi
+          if [[ "$(target_value targets.watchWidgets)" == true ]]; then
+            require_expected_bundle "$watch_widget_plist" "$(target_value bundleIds.watchWidget)" 'Apple Watch widget extension'
+          fi
+
+          # Sideloadly may append its Personal Team suffix to only the iPhone
+          # host identifier. Prepare its embedded hierarchy before signing so
+          # those identifiers and the companion pointer already agree.
+          if [[ -n "$SIDELOADLY_PERSONAL_TEAM_SUFFIX" ]]; then
+            sideloadly_host_bundle_id="${host_bundle_id}.${SIDELOADLY_PERSONAL_TEAM_SUFFIX}"
+            rewrite_embedded_bundle_id() {
+              local plist="$1" current rewritten
+              current="$(plist_value "$plist" CFBundleIdentifier)"
+              [[ "$current" == "$host_bundle_id".* ]] || { echo "Embedded CFBundleIdentifier does not begin with the iPhone host bundle ID: $plist" >&2; exit 2; }
+              rewritten="${sideloadly_host_bundle_id}${current#"$host_bundle_id"}"
+              plist_set "$plist" CFBundleIdentifier "$rewritten"
+            }
+            while IFS= read -r -d '' extension; do
+              rewrite_embedded_bundle_id "$extension/Info.plist"
+            done < <(find "$app" -type d -name '*.appex' -print0)
+            if [[ -d "$app/Watch" ]]; then
+              while IFS= read -r -d '' watch_app; do
+                rewrite_embedded_bundle_id "$watch_app/Info.plist"
+                plist_set "$watch_app/Info.plist" WKCompanionAppBundleIdentifier "$sideloadly_host_bundle_id"
+              done < <(find "$app/Watch" -type d -name '*.app' -print0)
+            fi
+            [[ "$(plist_value "$host_plist" CFBundleIdentifier)" == "$host_bundle_id" ]] || { echo 'Sideloadly preparation must not change the iPhone host CFBundleIdentifier.' >&2; exit 2; }
+          fi
 
           # The archive is built without an Apple identity. Re-sign each nested
           # code bundle with the ad-hoc identity so their metadata remains
@@ -117,7 +193,11 @@ jobs:
           ipa="$RUNNER_TEMP/apple-app-factory/release-input/${APP_SLUG}.ipa"
           (cd "$package" && /usr/bin/zip -qry "$ipa" Payload)
           unzip -l "$ipa" | tee "$RUNNER_TEMP/apple-app-factory/logs/ipa-contents.log"
-          node ios/app-factory/tools/inspect-ipa.js --ipa "$ipa" --targets ".factory-build/${APP_SLUG}/.factory-targets.json"
+          inspect_args=(--ipa "$ipa" --targets "$targets")
+          if [[ -n "$SIDELOADLY_PERSONAL_TEAM_SUFFIX" ]]; then
+            inspect_args+=(--sideloadly-host-bundle-id "$sideloadly_host_bundle_id")
+          fi
+          node ios/app-factory/tools/inspect-ipa.js "${inspect_args[@]}"
 
       - name: Create release metadata and checksums
         shell: bash
@@ -129,6 +209,10 @@ jobs:
             args+=(--notes "$RELEASE_NOTES_PATH")
           fi
           node ios/app-factory/tools/create-release-metadata.js "${args[@]}"
+          if [[ -n "$SIDELOADLY_PERSONAL_TEAM_SUFFIX" ]]; then
+            canonical_host_bundle_id="$(node -e "const s=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); process.stdout.write(s.app.bundleId)" "ios/app-factory/specs/${APP_SLUG}.yml")"
+            node -e "const fs=require('fs'); const manifest=process.argv[1], host=process.argv[2]; const document=JSON.parse(fs.readFileSync(manifest, 'utf8')); document.sideloadlyPreparation={derivedHostBundleId:host, purpose:'Noncanonical metadata preparation for the owner-controlled local re-signing workflow; never promote as a canonical release.'}; fs.writeFileSync(manifest, JSON.stringify(document, null, 2) + '\\n');" "$RUNNER_TEMP/apple-app-factory/release-input/manifest.json" "${canonical_host_bundle_id}.${SIDELOADLY_PERSONAL_TEAM_SUFFIX}"
+          fi
           shasum -a 256 "$RUNNER_TEMP/apple-app-factory/release-input/${APP_SLUG}.ipa" | tee "$RUNNER_TEMP/apple-app-factory/release-input/sha256.txt"
 
       - name: Upload credential-free ad-hoc release input
@@ -151,7 +235,7 @@ jobs:
   deploy-private-release:
     needs: build
     # SSH is opt-in. No missing secret is treated as a successful publication.
-    if: ${{ needs.build.result == 'success' && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.build.result == 'success' && needs.build.outputs.sideloadly_prepared != 'true' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     environment: apple-app-factory-private-deploy
     steps:

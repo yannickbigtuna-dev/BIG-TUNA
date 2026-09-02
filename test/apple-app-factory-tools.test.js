@@ -184,6 +184,36 @@ test('IPA inspection requires the generated host, widget, and Watch product path
   assert.match(`${identifierResult.stdout}${identifierResult.stderr}`, /CFBundleIdentifier is ca\.example\.wrong/);
 });
 
+test('IPA inspection validates an optional Sideloadly-prepared embedded hierarchy', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-sideloadly-ipa-'));
+  const targetManifest = path.join(directory, '.factory-targets.json');
+  const generated = fixture();
+  fs.writeFileSync(targetManifest, JSON.stringify({ app: generated.app, targets: generated.targets, bundleIds: { iphone: generated.app.bundleId, widget: `${generated.app.bundleId}.widget`, watch: `${generated.app.bundleId}.watchapp`, watchWidget: `${generated.app.bundleId}.watchapp.widget` }, targetEvidence: { iphoneWidgetExtension: `${generated.app.bundleId}.widget`, iphoneControlExtension: null, watchWidgetExtension: `${generated.app.bundleId}.watchapp.widget`, watchControlExtension: null } }));
+  const suffix = 'A1B2C3D4E5';
+  const futureHost = `${generated.app.bundleId}.${suffix}`;
+  const plist = (identifier, companion = null) => `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${identifier}</string>${companion === null ? '' : `<key>WKCompanionAppBundleIdentifier</key><string>${companion}</string>`}</dict></plist>`;
+  const entries = [
+    { name: 'Payload/Trail Log.app/Info.plist', content: plist(generated.app.bundleId) },
+    { name: 'Payload/Trail Log.app/PlugIns/Trail Log Widgets.appex/Info.plist', content: plist(`${futureHost}.widget`) },
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/Info.plist', content: plist(`${futureHost}.watchapp`, futureHost) },
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/PlugIns/Trail Log Watch Widgets.appex/Info.plist', content: plist(`${futureHost}.watchapp.widget`) }
+  ];
+  const ipa = path.join(directory, 'sideloadly.ipa'); makeZip(ipa, entries);
+  const report = JSON.parse(run('inspect-ipa.js', ['--ipa', ipa, '--targets', targetManifest, '--sideloadly-host-bundle-id', futureHost]));
+  assert.equal(report.sideloadlyHostBundleId, futureHost);
+  const wrongCompanion = path.join(directory, 'wrong-companion.ipa');
+  makeZip(wrongCompanion, entries.map(entry => entry.name.includes('Trail Log Watch.app/Info.plist') ? { ...entry, content: plist(`${futureHost}.watchapp`, generated.app.bundleId) } : entry));
+  const companionResult = spawnSync(process.execPath, [path.join(tools, 'inspect-ipa.js'), '--ipa', wrongCompanion, '--targets', targetManifest, '--sideloadly-host-bundle-id', futureHost], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(companionResult.status, 0);
+  assert.match(`${companionResult.stdout}${companionResult.stderr}`, /WKCompanionAppBundleIdentifier/);
+  const invalidSuffixResult = spawnSync(process.execPath, [path.join(tools, 'inspect-ipa.js'), '--ipa', ipa, '--targets', targetManifest, '--sideloadly-host-bundle-id', `${generated.app.bundleId}.lowercase1`], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(invalidSuffixResult.status, 0);
+  assert.match(`${invalidSuffixResult.stdout}${invalidSuffixResult.stderr}`, /10-character uppercase ASCII alphanumeric suffix/);
+  const insertedSegmentResult = spawnSync(process.execPath, [path.join(tools, 'inspect-ipa.js'), '--ipa', ipa, '--targets', targetManifest, '--sideloadly-host-bundle-id', `${generated.app.bundleId}.EXTRA.${suffix}`], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(insertedSegmentResult.status, 0);
+  assert.match(`${insertedSegmentResult.stdout}${insertedSegmentResult.stderr}`, /exactly one 10-character uppercase ASCII alphanumeric suffix/);
+});
+
 test('Apple factory packages nested bundles with credential-free ad-hoc signatures before their parents', () => {
   const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'apple-app-factory.yml'), 'utf8');
   const packageStep = workflow.match(/- name: Package credential-free ad-hoc IPA and verify embedded components\n([\s\S]*?)(?=\n      - name: Create release metadata)/);
@@ -195,5 +225,13 @@ test('Apple factory packages nested bundles with credential-free ad-hoc signatur
   assert.match(script, /find "\$app\/Watch" -depth -type d -name '\*\.app' -print0/);
   assert.ok(script.indexOf("find \"$app\" -depth -type d -name '*.appex' -print0") < script.indexOf("find \"$app/Watch\" -depth -type d -name '*.app' -print0"));
   assert.ok(script.indexOf("find \"$app/Watch\" -depth -type d -name '*.app' -print0") < script.indexOf('sign_bundle "$app"'));
-  assert.doesNotMatch(script, /CODE_SIGN_IDENTITY|CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PROVISIONING_PROFILE|allowProvisioning|APPLE_ID|APPLE_PASSWORD|APP_SPECIFIC_PASSWORD|DEVICE_ID|Personal Team/i);
+  assert.match(workflow, /sideloadly_personal_team_suffix:/);
+  assert.match(workflow, /\[\[ -z "\$SIDELOADLY_PERSONAL_TEAM_SUFFIX" \|\| "\$SIDELOADLY_PERSONAL_TEAM_SUFFIX" =~ \^\[A-Z0-9\]\{10\}\$ \]\]/);
+  assert.match(script, /\/usr\/libexec\/PlistBuddy/);
+  assert.ok(script.indexOf('rewrite_embedded_bundle_id()') < script.indexOf('sign_bundle()'));
+  assert.match(script, /--sideloadly-host-bundle-id/);
+  assert.match(workflow, /sideloadly_prepared: \$\{\{ steps\.identity\.outputs\.sideloadly_prepared \}\}/);
+  assert.match(workflow, /needs\.build\.outputs\.sideloadly_prepared != 'true'/);
+  assert.match(workflow, /document\.sideloadlyPreparation=\{derivedHostBundleId:host, purpose:'Noncanonical metadata preparation for the owner-controlled local re-signing workflow; never promote as a canonical release\.'/);
+  assert.doesNotMatch(script, /CODE_SIGN_IDENTITY|CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PROVISIONING_PROFILE|allowProvisioning|APPLE_ID|APPLE_PASSWORD|APP_SPECIFIC_PASSWORD|DEVICE_ID/i);
 });

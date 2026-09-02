@@ -832,7 +832,10 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
 - `.github/workflows/apple-app-factory.yml` builds without Apple signing, then applies
   credential-free ad-hoc signatures to nested extensions, the embedded Watch app, and
   the iPhone host solely to preserve bundle metadata for owner-controlled local
-  re-signing. It has no Apple credentials; private SSH deployment is main-only and disabled until
+  re-signing. Its optional, validated Sideloadly Personal Team suffix prepares only
+  embedded bundle identifiers and the Watch companion pointer while retaining the
+  original iPhone host identifier; these noncanonical derivatives are annotated and
+  excluded from private deployment/promotion. It has no Apple credentials; private SSH deployment is main-only and disabled until
   all explicitly configured secrets, including a pinned known-hosts entry, exist.
 - Specs may set `factory.sourceProject` to a validated repository-relative `ios/...`
   XcodeGen product directory. Generation copies it only into a fresh build output,
