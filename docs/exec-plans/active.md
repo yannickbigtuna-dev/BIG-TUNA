@@ -508,3 +508,66 @@ Add a durable, private-by-default factory for native Swift/SwiftUI iPhone and Ap
 - [x] Implement disjoint documentation, template/tooling, and CI/distribution packages.
 - [x] Run local validation and independent security/acceptance review.
 - [x] Root review and corrective loop complete. Commit/push deliberately withheld: this live auto-pull repository has unrelated pre-existing work and the private deployment receiver/credentials are intentionally not configured.
+
+## Active Extension — BIG TUNA Lights native Apple family
+
+### Goal and mode
+
+Implement the existing BIG TUNA Lights native project end to end in DEEP mode while preserving its released identity and every existing website, HomeKit, scheduler, and ESP client. Deliver a native iPhone switch matching the Lights page, a small interactive Home Screen widget, an iPhone Control Center toggle, a companion Watch app, Watch complication/Smart Stack widget, and a watchOS 26 control for Control Center, Smart Stack, and Apple Watch Ultra Action button placement.
+
+Apple does not expose an app-icon-sized 1x1 Home Screen WidgetKit family. The requested 1x1 surface is therefore the system control; the Home Screen surface is `.systemSmall`, the square size occupying the familiar small-widget footprint. The implementation must not claim a physical install, Watch delivery, or seven-day refresh result until those checks are run on the owner's devices.
+
+### Stable identity and compatibility constraints
+
+- Preserve iPhone bundle ID `ca.yannickmorgans.bigtuna.lights`, widget/control extension ID `ca.yannickmorgans.bigtuna.lights.widget`, and App Group `group.ca.yannickmorgans.bigtuna.lights`.
+- Add deterministic Watch IDs `ca.yannickmorgans.bigtuna.lights.watchapp` and `ca.yannickmorgans.bigtuna.lights.watchwidget`; record all IDs and observed Personal Team consumption in the durable factory spec.
+- Keep `GET/POST /api/lights`, `/api/lights/events`, `/api/lights/device`, `/api/lights/device/status`, HomeKit state propagation, inverted stored-state semantics, and scheduled changes compatible.
+- Native surfaces operate on explicit physical light state. Inversion is centralized in one server/native boundary and is covered by tests.
+- Existing untracked `server.env.backup-*` files are user-owned and must remain untouched and uncommitted.
+
+### Architecture and data contract
+
+- Add an owner-only versioned native endpoint that returns physical desired state, last physical reported state when known, relay recency, revision/update time, and safe availability metadata.
+- Mutations accept an explicit physical target plus a bounded unique command ID. The server serializes updates and journals recent command results so network retries remain idempotent across restarts and cannot double-cycle the relay.
+- Exchange the temporary website login for a revocable Lights-only bearer token; never place passwords or full-site sessions in extensions or Watch storage. Share only the scoped token through the existing App Group, transfer it to the paired Watch through WatchConnectivity, and clear it everywhere on logout/401. No Apple credential or signing material enters Git, CI, or the server.
+- The iPhone app uses native SwiftUI, not a WebView. Its signature visual is the physical wall plate/paddle: dark raised room when off, warm cone/plate when on, upper screw for verified control access, lower screw for recent relay heartbeat. Motion is limited to the paddle and ambient transition and respects reduced-motion settings.
+- Widget/control intents never foreground the app. They fetch authoritative state, submit an idempotent explicit target, persist only confirmed results, and reload widget/control state. Cached state is labeled unavailable/stale on failure rather than displayed as a confirmed command.
+- The Watch app is a companion target with direct HTTPS control when network is available and WatchConnectivity for credential/current-state transfer. The complication is glanceable status/launcher; the watchOS control is the guaranteed no-open action surface.
+
+### Disjoint implementation ownership
+
+- Server implementer owns `lib/lights-native-control.js`, `server.js`, and new focused native-lights route/domain tests only.
+- Factory implementer owns `ios/app-factory/tools/**`, the spec schema/template, relevant generic factory template files, and `test/apple-app-factory-tools.test.js`; add explicit iPhone/watch control declarations and archive evidence without product UI work.
+- iPhone implementer owns `ios/big-tuna-lights-widget/BigTunaLights/**`, `BigTunaLightsWidget/**`, `Shared/**`, `project.yml`, and that app's README; implement iPhone app/widget/control and shared client/state.
+- Watch implementer owns new `ios/big-tuna-lights-widget/BigTunaLightsWatch/**` and `BigTunaLightsWatchWidget/**` paths only; implement Watch app, connectivity receiver, widget/complications, and control against the shared contract.
+- Root owns this plan, durable app spec, CI/workflow integration, documentation/context updates, combined diff and security review, integration fixes, final validation, commit, and push. Implementers must preserve concurrent/user edits, stay within ownership, not commit or push, and report changed paths and checks.
+
+### Acceptance checks
+
+1. Existing website, schedule, HomeKit, SSE, and device route tests remain green and their payload contracts do not change.
+2. Native read maps stored inversion correctly and reports desired, reported, heartbeat, revision, and timestamp without leaking secrets.
+3. Native mutation returns 401/403 appropriately, rejects malformed/oversized IDs and bodies, is idempotent under repeated command IDs, and produces one relay transition under concurrent/retried requests.
+4. App sign-in verifies the owner, logout/401 clears extension and Watch access, and no password or Apple/signing secret is persisted or committed.
+5. iPhone app renders and controls on/off, signed-out, offline, pending, stale, and relay-offline states with VoiceOver labels, useful errors, and reduced motion.
+6. `.systemSmall` widget and iPhone control show confirmed status and toggle through App Intents with `openAppWhenRun=false`.
+7. Watch app, accessory widget families, complication, and watchOS control are present in the generated target graph and use the same physical-state contract; Control Center/Smart Stack/Action-button availability is gated to watchOS 26.
+8. Factory validation rejects missing control IDs/targets, deterministic generation includes every enabled component, and archive inspection fails when any requested iPhone/Watch extension is absent.
+9. Run JavaScript syntax checks, focused lights/factory tests, generated-project validation, full `npm test`, secret scan, `git diff`, and `git status`. Run macOS compilation through the configured GitHub workflow when available; do not claim simulator/device success from Windows structural checks.
+10. Physical release gate records iOS/watchOS, installer version, archive contents, actual App ID use, sign date/expiry, iPhone app/widget/control behavior, Watch installation/app/complication/widget/control behavior, offline/reconnect, restart persistence, and day-5-to-7 refresh behavior.
+
+### Risks and rollback
+
+- Free Personal Team profiles expire after seven days and multi-bundle Watch installation remains unverified. Keep all surfaces declared and fail the release rather than stripping a target.
+- Widget timelines are opportunistic without APNs. Interactions refresh immediately; external state may display the last confirmed value until WidgetKit permits another refresh.
+- App Group access may fail provisioning. Validate the profile and never weaken storage silently; the shared credential is limited to Lights and is revoked on logout/401.
+- Rollback is the single feature commit. The server API addition is additive, existing device and website routes remain available, and no live data migration or deployment restart is required by the code change itself.
+
+### Progress
+
+- [x] Read Apple factory/signing/capability/installation/distribution/troubleshooting guidance and current Apple platform documentation.
+- [x] Inspect the Lights page, server routes, existing native app/widget, factory generator/inspector, and relevant tests.
+- [x] Write implementation specification and disjoint ownership plan.
+- [x] Implement server, factory, iPhone, and Watch packages.
+- [x] Review combined diff and run independent security/acceptance testing.
+- [x] Correct findings and complete full validation.
+- [x] Commit and push `main`; do not restart or otherwise deploy the live server without separate explicit authorization.

@@ -4,34 +4,39 @@ options:
 settings:
   base:
     SWIFT_VERSION: 5.9
-    IPHONEOS_DEPLOYMENT_TARGET: 17.0
-    MARKETING_VERSION: 1.0
-    CURRENT_PROJECT_VERSION: 1
+    IPHONEOS_DEPLOYMENT_TARGET: 18.0
+    MARKETING_VERSION: 1.1.0
+    CURRENT_PROJECT_VERSION: 2
     CODE_SIGN_STYLE: Automatic
 targets:
-  BigTunaLights:
+  App:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: BigTunaLights
       - path: Shared
+      - path: Assets.xcassets
     entitlements:
       path: BigTunaLights/BigTunaLights.entitlements
     dependencies:
-      - target: BigTunaLightsWidget
+      - target: AppWidget
+        embed: true
+      - target: AppWatch
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights
         PRODUCT_NAME: BIG TUNA Lights
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: BIG TUNA Lights
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-  BigTunaLightsWidget:
+  AppWidget:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: BigTunaLightsWidget
       - path: Shared
@@ -40,6 +45,40 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights.widget
-        PRODUCT_NAME: BIG TUNA Lights Widget
+        PRODUCT_NAME: BIG TUNA Lights Widgets
         INFOPLIST_FILE: BigTunaLightsWidget/Info.plist
+        SKIP_INSTALL: YES
+  AppWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: BigTunaLightsWatch
+    entitlements:
+      path: BigTunaLightsWatch/BigTunaLightsWatch.entitlements
+    dependencies:
+      - target: AppWatchWidget
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights.watchapp
+        PRODUCT_NAME: BIG TUNA Lights Watch
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: BIG TUNA Lights
+        INFOPLIST_KEY_WKApplication: YES
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: ca.yannickmorgans.bigtuna.lights
+  AppWatchWidget:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: BigTunaLightsWatchWidget
+      - path: BigTunaLightsWatch/Shared
+    entitlements:
+      path: BigTunaLightsWatchWidget/BigTunaLightsWatchWidget.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights.watchwidget
+        PRODUCT_NAME: BIG TUNA Lights Watch Widgets
+        INFOPLIST_FILE: BigTunaLightsWatchWidget/Info.plist
         SKIP_INSTALL: YES

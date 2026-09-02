@@ -11,7 +11,11 @@ const QRCode = require('qrcode');
 
 const PORT        = 3000;
 const ROOT        = path.join(__dirname, 'apps');
-const DATA        = path.join(__dirname, 'data');
+// Test harnesses may use an isolated data directory. Production keeps the
+// existing repository-local data path unless this explicit server setting is set.
+const DATA        = process.env.BIG_TUNA_DATA_DIR
+  ? path.resolve(process.env.BIG_TUNA_DATA_DIR)
+  : path.join(__dirname, 'data');
 const CLIMBS_DIR  = path.join(DATA, 'climbs');
 const SETTINGS_DIR = path.join(DATA, 'settings');
 const APPDATA_DIR = path.join(DATA, 'appdata');
@@ -42,9 +46,12 @@ const ACCOUNT_EMAIL_FROM = 'no-reply@yannickmorgans.ca'; // sender for reset/tes
 const TRANSPARENT_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64');
 const LIGHTS_STATE_FILE = path.join(LIGHTS_DIR, 'state.json');
 const LIGHTS_DEVICE_STATUS_FILE = path.join(LIGHTS_DIR, 'device-status.json');
+const LIGHTS_NATIVE_COMMANDS_FILE = path.join(LIGHTS_DIR, 'native-commands.json');
+const LIGHTS_NATIVE_SESSIONS_FILE = path.join(LIGHTS_DIR, 'native-sessions.json');
 const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
 const LIGHTS_DEVICE_INVERT_OUTPUT = true;
+const LIGHTS_DEVICE_API_TOKEN = String(process.env.LIGHTS_DEVICE_API_TOKEN || '');
 // Auto-schedule: lights ON at sunset, OFF at sunrise and at 22:00 local.
 const LIGHTS_LAT = 44.6488;            // Halifax, NS
 const LIGHTS_LON = -63.5752;
@@ -88,6 +95,7 @@ const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
 const { createTriviaTopicPool } = require('./lib/trivia-topic-pool');
 const { createHomeKitLightBridge } = require('./lib/homekit-light-bridge');
+const { createNativeLightsControl } = require('./lib/lights-native-control');
 const geoip = require('geoip-lite');
 
 let homekitLightBridge = null;
@@ -204,6 +212,7 @@ if (!fs.existsSync(LIGHTS_STATE_FILE)) {
     on: false,
     updatedAt: new Date().toISOString(),
     updatedBy: 'device',
+    revision: 0,
   }, null, 2));
 }
 
@@ -246,17 +255,20 @@ function readLightsState() {
       on: raw.on === true,
       updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
       updatedBy: typeof raw.updatedBy === 'string' ? raw.updatedBy : 'device',
+      revision: Number.isSafeInteger(raw.revision) && raw.revision >= 0 ? raw.revision : 0,
     };
   } catch {
-    return { on: false, updatedAt: new Date(0).toISOString(), updatedBy: 'device' };
+    return { on: false, updatedAt: new Date(0).toISOString(), updatedBy: 'device', revision: 0 };
   }
 }
 
 function writeLightsState(on, updatedBy) {
+  const previous = readLightsState();
   const state = {
     on: on === true,
     updatedAt: new Date().toISOString(),
     updatedBy: updatedBy || 'device',
+    revision: previous.revision + 1,
   };
   atomicWrite(LIGHTS_STATE_FILE, state);
   broadcastLightsState(state);
@@ -279,34 +291,56 @@ function readLightsDeviceStatus() {
       on: raw.on === true,
       receivedAt: typeof raw.receivedAt === 'string' ? raw.receivedAt : '',
       polledAt: typeof raw.polledAt === 'string' ? raw.polledAt : '',
+      trustedOn: typeof raw.trustedOn === 'boolean' ? raw.trustedOn : null,
+      trustedReceivedAt: typeof raw.trustedReceivedAt === 'string' ? raw.trustedReceivedAt : '',
+      trustedPolledAt: typeof raw.trustedPolledAt === 'string' ? raw.trustedPolledAt : '',
     };
   } catch {
-    return { on: false, receivedAt: '', polledAt: '' };
+    return { on: false, receivedAt: '', polledAt: '', trustedOn: null, trustedReceivedAt: '', trustedPolledAt: '' };
   }
 }
 
-function markLightsDevicePolled() {
+function markLightsDevicePolled(trusted) {
   const status = readLightsDeviceStatus();
   const now = Date.now();
   const lastPoll = Date.parse(status.polledAt) || 0;
   if (now - lastPoll < 1000) return status;
 
-  const updated = { ...status, polledAt: new Date(now).toISOString() };
+  const timestamp = new Date(now).toISOString();
+  const updated = { ...status, polledAt: timestamp, ...(trusted ? { trustedPolledAt: timestamp } : {}) };
   writeLightsDeviceStatus(updated);
   return updated;
 }
 
 function getLightsDeviceStatusPayload() {
   const status = readLightsDeviceStatus();
-  const lastPoll = Date.parse(status.polledAt) || 0;
+  const lastPoll = Date.parse(status.trustedPolledAt) || 0;
   return {
-    on: status.on,
-    receivedAt: status.receivedAt,
-    polledAt: status.polledAt,
+    on: status.trustedOn,
+    receivedAt: status.trustedReceivedAt,
+    polledAt: status.trustedPolledAt,
     recentlyPolled: lastPoll > 0 && Date.now() - lastPoll <= LIGHTS_DEVICE_RECENT_MS,
     recentWindowMs: LIGHTS_DEVICE_RECENT_MS,
   };
 }
+
+// Native Apple clients always operate in physical-light terms. This adapter
+// deliberately leaves the public website and ESP relay contracts untouched.
+const nativeLightsControl = createNativeLightsControl({
+  readDesired: readLightsState,
+  writeDesired: writeLightsState,
+  readDeviceStatus: () => {
+    const status = readLightsDeviceStatus();
+    return { on: status.trustedOn, receivedAt: status.trustedReceivedAt, polledAt: status.trustedPolledAt };
+  },
+  invertOutput: LIGHTS_DEVICE_INVERT_OUTPUT,
+  recentWindowMs: LIGHTS_DEVICE_RECENT_MS,
+  loadCommands: () => {
+    try { const value = JSON.parse(fs.readFileSync(LIGHTS_NATIVE_COMMANDS_FILE, 'utf8')); return Array.isArray(value) ? value : []; }
+    catch { return []; }
+  },
+  saveCommands: commands => atomicWrite(LIGHTS_NATIVE_COMMANDS_FILE, commands),
+});
 
 async function startHomeKitLightBridge() {
   const bridge = createHomeKitLightBridge({
@@ -430,6 +464,23 @@ function getSessionUser(token) {
   const session  = sessions.find(s => s.token === token && new Date(s.expiresAt) > new Date());
   if (!session) return null;
   return readUsers().find(u => u.id === session.userId) || null;
+}
+
+function readNativeLightsSessions() {
+  try { const value = JSON.parse(fs.readFileSync(LIGHTS_NATIVE_SESSIONS_FILE, 'utf8')); return Array.isArray(value) ? value : []; }
+  catch { return []; }
+}
+
+function writeNativeLightsSessions(sessions) {
+  const now = Date.now();
+  atomicWrite(LIGHTS_NATIVE_SESSIONS_FILE, sessions.filter(session => Date.parse(session.expiresAt) > now).slice(-32));
+}
+
+function getNativeLightsUser(token) {
+  const websiteUser = getSessionUser(token);
+  if (websiteUser) return websiteUser;
+  const session = readNativeLightsSessions().find(item => safeTokenEqual(item.token, token) && Date.parse(item.expiresAt) > Date.now());
+  return session ? readUsers().find(user => user.id === session.userId) || null : null;
 }
 
 // ── Password resets ──────────────────────────────────────────────────────────
@@ -681,6 +732,55 @@ function parseBody(req) {
     req.on('end',  () => { try { resolve(JSON.parse(body)); } catch { resolve({}); } });
     req.on('error', () => resolve({}));
   });
+}
+
+function parseBoundedJson(req, maxBytes = 2048) {
+  return new Promise((resolve, reject) => {
+    const declared = Number(req.headers['content-length']);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      const error = new Error('Request body is too large');
+      error.code = 'BODY_TOO_LARGE';
+      req.resume();
+      reject(error);
+      return;
+    }
+    let size = 0;
+    const chunks = [];
+    let settled = false;
+    req.on('data', chunk => {
+      if (settled) return;
+      size += chunk.length;
+      if (size > maxBytes) {
+        settled = true;
+        const error = new Error('Request body is too large');
+        error.code = 'BODY_TOO_LARGE';
+        reject(error);
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (settled) return;
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch {
+        const error = new Error('Request body must be valid JSON');
+        error.code = 'INVALID_JSON';
+        reject(error);
+      }
+    });
+    req.on('error', error => { if (!settled) reject(error); });
+  });
+}
+
+function safeTokenEqual(actual, expected) {
+  if (!actual || !expected) return false;
+  const left = Buffer.from(String(actual));
+  const right = Buffer.from(String(expected));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function hasValidLightsDeviceToken(req) {
+  return safeTokenEqual(req.headers['x-big-tuna-device-token'], LIGHTS_DEVICE_API_TOKEN);
 }
 
 function getToken(req) {
@@ -2028,6 +2128,63 @@ async function handleAPI(req, res, urlPath) {
     return radarJsonRes(res, await getYhzRadarPayload());
   }
 
+  // Exchange a normal website login for a revocable, least-privilege token.
+  // Apple extensions persist only this Lights-scoped credential.
+  if (req.method === 'POST' && urlPath === '/api/lights/native/v1/session') {
+    const websiteToken = getToken(req);
+    const user = getSessionUser(websiteToken);
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (String(user.username || '').toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+    const token = generateToken();
+    const sessions = readNativeLightsSessions();
+    sessions.push({ token, userId: user.id, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() });
+    writeNativeLightsSessions(sessions);
+    return jsonRes(res, 200, { token, username: user.username });
+  }
+
+  if (req.method === 'DELETE' && urlPath === '/api/lights/native/v1/session') {
+    const token = getToken(req);
+    if (token) writeNativeLightsSessions(readNativeLightsSessions().filter(session => !safeTokenEqual(session.token, token)));
+    return jsonRes(res, 200, { ok: true });
+  }
+
+  // Versioned native surface for the iPhone/Watch app. It is intentionally
+  // separate from the public website and ESP endpoints so neither contract is
+  // changed by native-client state terminology.
+  if ((req.method === 'GET' || req.method === 'PUT') && urlPath === '/api/lights/native/v1') {
+    const user = getNativeLightsUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (String(user.username || '').toLowerCase() !== 'yannick') {
+      return jsonRes(res, 403, { error: 'Forbidden' });
+    }
+    if (req.method === 'GET') return jsonRes(res, 200, nativeLightsControl.getState());
+
+    try {
+      const body = await parseBoundedJson(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).some(key => key !== 'physicalOn' && key !== 'commandId')
+          || typeof body.physicalOn !== 'boolean') {
+        return jsonRes(res, 400, { error: 'Body must contain only physicalOn and commandId' });
+      }
+      const state = await nativeLightsControl.setTarget({
+        targetOn: body.physicalOn,
+        commandId: body.commandId,
+        updatedBy: user.username,
+      });
+      return jsonRes(res, 200, state);
+    } catch (error) {
+      if (error && (error.code === 'INVALID_TARGET' || error.code === 'INVALID_COMMAND_ID')) {
+        return jsonRes(res, 400, { error: error.message });
+      }
+      if (error && error.code === 'COMMAND_ID_CONFLICT') {
+        return jsonRes(res, 409, { error: error.message });
+      }
+      if (error && error.code === 'BODY_TOO_LARGE') return jsonRes(res, 413, { error: error.message });
+      if (error && error.code === 'INVALID_JSON') return jsonRes(res, 400, { error: error.message });
+      throw error;
+    }
+  }
+
   // GET /api/lights/events - public live desired light state stream
   if (req.method === 'GET' && urlPath === '/api/lights/events') {
     res.writeHead(200, {
@@ -2112,7 +2269,9 @@ async function handleAPI(req, res, urlPath) {
 
   // GET /api/lights/device - ESP8266 polling endpoint for desired state
   if (req.method === 'GET' && urlPath === '/api/lights/device') {
-    markLightsDevicePolled();
+    const trusted = hasValidLightsDeviceToken(req);
+    if (LIGHTS_DEVICE_API_TOKEN && !trusted) return jsonRes(res, 401, { error: 'Device authentication required' });
+    markLightsDevicePolled(trusted);
     const { on, updatedAt } = readLightsState();
     const deviceOn = LIGHTS_DEVICE_INVERT_OUTPUT ? !on : on;
     res.writeHead(200, {
@@ -2129,18 +2288,28 @@ async function handleAPI(req, res, urlPath) {
 
   // POST /api/lights/device/status - optional relay heartbeat/status
   if (req.method === 'POST' && urlPath === '/api/lights/device/status') {
-    const body = await parseBody(req);
-    if (!body || typeof body.on !== 'boolean') {
-      return jsonRes(res, 400, { error: 'on must be boolean' });
+    const trusted = hasValidLightsDeviceToken(req);
+    if (LIGHTS_DEVICE_API_TOKEN && !trusted) return jsonRes(res, 401, { error: 'Device authentication required' });
+    try {
+      const body = await parseBoundedJson(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).some(key => key !== 'on') || typeof body.on !== 'boolean') {
+        return jsonRes(res, 400, { error: 'Body must contain only on' });
+      }
+      const timestamp = new Date().toISOString();
+      const status = {
+        ...readLightsDeviceStatus(),
+        on: body.on,
+        receivedAt: timestamp,
+        ...(trusted ? { trustedOn: body.on, trustedReceivedAt: timestamp } : {}),
+      };
+      writeLightsDeviceStatus(status);
+      return jsonRes(res, 200, { ok: true, trusted });
+    } catch (error) {
+      if (error && error.code === 'BODY_TOO_LARGE') return jsonRes(res, 413, { error: error.message });
+      if (error && error.code === 'INVALID_JSON') return jsonRes(res, 400, { error: error.message });
+      throw error;
     }
-
-    const status = {
-      ...readLightsDeviceStatus(),
-      on: body.on,
-      receivedAt: new Date().toISOString(),
-    };
-    writeLightsDeviceStatus(status);
-    return jsonRes(res, 200, { ok: true });
   }
 
   // POST /api/auth/register
@@ -4264,4 +4433,4 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
 
-module.exports = { resolveHomeKitBindAddress };
+module.exports = { server, resolveHomeKitBindAddress };

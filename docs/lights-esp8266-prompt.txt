@@ -11,12 +11,12 @@ Hardware:
 
 Network configuration:
 - Use ESP8266WiFi.h and ESP8266HTTPClient.h.
-- Define WIFI_SSID and WIFI_PASSWORD constants at the top as placeholders.
+- Define WIFI_SSID, WIFI_PASSWORD, and LIGHTS_DEVICE_API_TOKEN constants at the top as placeholders.
 - The website base URL is https://yannickmorgans.ca.
 
 Website API:
 - Poll GET https://yannickmorgans.ca/api/lights/device.
-- No device secret or Authorization header is required.
+- Send the shared device secret in the `X-Big-Tuna-Device-Token` header. The exact same random value must be configured as `LIGHTS_DEVICE_API_TOKEN` in the server environment; never commit the real value.
 - Each GET request also updates the website's device poll timestamp, which the Lights page uses to show whether the device has polled in the last 5 seconds.
 - The successful response is JSON with this shape:
   { "on": true or false, "updatedAt": "ISO timestamp", "pollAfterMs": 250 }
@@ -28,6 +28,7 @@ Website API:
 Device status reporting:
 - After applying a new state, POST to https://yannickmorgans.ca/api/lights/device/status.
 - Send Content-Type: application/json.
+- Send the same `X-Big-Tuna-Device-Token` header.
 - Send a JSON body with the relay's actual state:
   { "on": true }
   or

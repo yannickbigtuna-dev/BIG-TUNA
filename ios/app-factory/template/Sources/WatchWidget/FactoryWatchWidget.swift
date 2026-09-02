@@ -24,5 +24,8 @@ struct FactoryWatchWidget: Widget {
 
 @main
 struct FactoryWatchWidgetBundle: WidgetBundle {
-    var body: some Widget { FactoryWatchWidget() }
+    var body: some Widget {
+        FactoryWatchWidget()
+        // WATCH_CONTROL_WIDGET
+    }
 }

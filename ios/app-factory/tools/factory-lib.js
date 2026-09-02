@@ -37,6 +37,19 @@ function int(value, label) { if (!Number.isInteger(value) || value < 1) fail(`${
 function nullableString(value, label) { if (value !== null && typeof value !== 'string') fail(`${label} must be a string or null`); return value; }
 function hex(value, label) { if (!/^#[0-9a-fA-F]{6}$/.test(str(value, label))) fail(`${label} must be a six-digit hexadecimal colour, for example #0A84FF`); return value; }
 function appleBundleId(namespace, suffix) { return suffix ? `${namespace}.${suffix}` : namespace; }
+function majorVersion(value, label) {
+  const result = str(value, label);
+  if (!/^\d+(?:\.\d+){1,2}$/.test(result)) fail(`${label} must be a numeric platform version such as 18.0`);
+  return Number.parseInt(result.split('.')[0], 10);
+}
+function sourceProjectPath(value, label) {
+  if (value === null || value === undefined) return null;
+  const result = str(value, label).replace(/\\/g, '/');
+  if (!/^ios\/[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/.test(result) || result.includes('..')) {
+    fail(`${label} must be a repository-relative directory below ios/ without traversal`);
+  }
+  return result;
+}
 
 function validateSpec(spec, source = 'spec') {
   object(spec, source);
@@ -52,12 +65,19 @@ function validateSpec(spec, source = 'spec') {
   str(app.minimumWatchOS, 'app.minimumWatchOS');
   version(app.version, 'app.version'); int(app.build, 'app.build');
   const targets = object(required(spec.targets, 'targets'), 'targets');
-  for (const name of ['iphone', 'homeScreenWidget', 'lockScreenWidget', 'liveActivities', 'watchWidgets', 'watchComplications', 'watchConnectivity']) bool(required(targets[name], `targets.${name}`), `targets.${name}`);
+  // Control flags were added after schema version 1. Missing flags are false so
+  // existing durable specs remain valid without silently opting into a target.
+  for (const name of ['iphoneControls', 'watchControls']) if (targets[name] === undefined) targets[name] = false;
+  for (const name of ['iphone', 'homeScreenWidget', 'lockScreenWidget', 'liveActivities', 'iphoneControls', 'watchWidgets', 'watchComplications', 'watchControls', 'watchConnectivity']) bool(required(targets[name], `targets.${name}`), `targets.${name}`);
   if (!['none', 'companion', 'independent'].includes(str(targets.watchMode, 'targets.watchMode'))) fail('targets.watchMode must be none, companion, or independent');
   if (!targets.iphone) fail('targets.iphone must remain enabled: every factory project has an iPhone host');
   if ((targets.lockScreenWidget || targets.liveActivities) && !targets.homeScreenWidget) fail('Lock Screen widgets and Live Activities require targets.homeScreenWidget=true');
   if ((targets.watchWidgets || targets.watchComplications || targets.watchConnectivity) && targets.watchMode === 'none') fail('Watch widgets, complications, and WatchConnectivity require a Watch app');
   if (targets.watchComplications && !targets.watchWidgets) fail('Watch complications require targets.watchWidgets=true');
+  if (targets.iphoneControls && majorVersion(app.minimumIOS, 'app.minimumIOS') < 18) fail('targets.iphoneControls requires app.minimumIOS 18.0 or later');
+  if (targets.watchControls && targets.watchMode === 'none') fail('targets.watchControls requires a Watch app');
+  if (targets.watchControls && !targets.watchWidgets) fail('targets.watchControls requires targets.watchWidgets=true because controls live in the existing Watch widget extension');
+  if (targets.watchControls && majorVersion(app.minimumWatchOS, 'app.minimumWatchOS') < 26) fail('targets.watchControls requires app.minimumWatchOS 26.0 or later');
   const capabilities = object(spec.capabilities || {}, 'capabilities');
   for (const key of Object.keys(capabilities)) {
     if (!capabilityNames.has(key)) fail(`capabilities.${key} is not supported by this template; add explicit template support before requesting it`);
@@ -74,6 +94,7 @@ function validateSpec(spec, source = 'spec') {
   const requiredPrivacy = { healthKit: ['healthShare', 'healthUpdate'], location: ['locationWhenInUse'], bluetooth: ['bluetooth'], notifications: [] };
   for (const capability of Object.keys(requiredPrivacy)) if (capabilities[capability]) for (const key of requiredPrivacy[capability]) str(privacy[key], `privacy.${key} is required when capabilities.${capability}=true`);
   const factory = object(required(spec.factory, 'factory'), 'factory');
+  const sourceProject = sourceProjectPath(factory.sourceProject, 'factory.sourceProject');
   const factoryBundles = object(required(factory.bundleIdentifiers, 'factory.bundleIdentifiers'), 'factory.bundleIdentifiers');
   for (const key of ['iphoneApp', 'homeWidget', 'lockScreenWidget', 'liveActivityWidget', 'watchApp', 'watchExtension', 'watchWidget']) nullableString(property(factoryBundles, key, `factory.bundleIdentifiers.${key}`), `factory.bundleIdentifiers.${key}`);
   const ids = bundleIds(spec);
@@ -94,6 +115,8 @@ function validateSpec(spec, source = 'spec') {
   const distribution = object(required(factory.distribution, 'factory.distribution'), 'factory.distribution'); str(distribution.access, 'factory.distribution.access'); nullableString(property(distribution, 'url', 'factory.distribution.url'), 'factory.distribution.url'); str(distribution.releaseRoot, 'factory.distribution.releaseRoot');
   const lastBuild = object(required(factory.lastSuccessfulBuild, 'factory.lastSuccessfulBuild'), 'factory.lastSuccessfulBuild'); str(lastBuild.status, 'factory.lastSuccessfulBuild.status'); nullableString(property(lastBuild, 'ciRunUrl', 'factory.lastSuccessfulBuild.ciRunUrl'), 'factory.lastSuccessfulBuild.ciRunUrl'); nullableString(property(lastBuild, 'completedAt', 'factory.lastSuccessfulBuild.completedAt'), 'factory.lastSuccessfulBuild.completedAt'); nullableString(property(lastBuild, 'ipaSha256', 'factory.lastSuccessfulBuild.ipaSha256'), 'factory.lastSuccessfulBuild.ipaSha256');
   if (!Array.isArray(factory.knownLimitations) || factory.knownLimitations.some(value => typeof value !== 'string' || !value.trim())) fail('factory.knownLimitations must be an array of non-empty strings');
+  // Normalise optional source-project mode for deterministic manifest output.
+  factory.sourceProject = sourceProject;
   return spec;
 }
 

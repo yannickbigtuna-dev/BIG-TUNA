@@ -369,11 +369,12 @@ Desktop app source:
 
 iOS app source:
 
-- `ios/big-tuna-lights-widget/` contains an XcodeGen-based SwiftUI iPhone app plus WidgetKit extension for the Lights API.
-- Generate the project with `cd ios/big-tuna-lights-widget && xcodegen generate`, then open `BigTunaLights.xcodeproj` in Xcode 15+.
-- Deployment target is iOS 17 because the widget uses an interactive App Intent button.
-- Both the app and widget use App Group `group.ca.yannickmorgans.bigtuna.lights` for shared session token and last-known light state.
-- The widget should always display current light status from the public `GET /api/lights` endpoint when online, fall back to the cached last-known state when offline, and only enable toggling when the shared signed-in user is `yannick`.
+- `ios/big-tuna-lights-widget/` is the deterministic XcodeGen product source for the BIG TUNA Lights Apple family: native iPhone app, `.systemSmall` interactive Home Screen widget, iOS control, companion Watch app, Watch complications/Smart Stack widget, and watchOS control.
+- Its durable identity/capability contract is `ios/app-factory/specs/big-tuna-lights.yml`; generate it through Apple App Factory or run `cd ios/big-tuna-lights-widget && xcodegen generate`, then open `BigTunaLights.xcodeproj` in Xcode 26+.
+- The full feature set targets iOS 18 and watchOS 26. iPhone controls use the existing iPhone widget extension ID; Watch controls use the Watch widget extension ID, so no extra control App IDs are introduced.
+- All four app/extension targets use App Group `group.ca.yannickmorgans.bigtuna.lights` for a revocable, Lights-only bearer token and last confirmed native state. Login briefly uses a normal website session, exchanges it through `POST /api/lights/native/v1/session`, then revokes the website session; passwords are never persisted. The iPhone sends the scoped token/state application context to the Watch with WatchConnectivity.
+- Native surfaces use owner-authenticated `GET/PUT /api/lights/native/v1`, explicit physical target state, and an idempotent command ID. They never optimistically cache an unconfirmed change. The website, HomeKit, scheduler, and ESP routes retain their prior stored/inverted contracts.
+- The app uses the Lights page's physical wall-plate/paddle visual, upper owner-access screw, and lower relay-heartbeat screw. The Home Screen widget is Apple's smallest supported square family; there is no app-icon-sized 1x1 Home Screen WidgetKit family, so the 1x1 experience is the system control.
 
 ## Admin Dashboard & Email Campaigns
 
@@ -477,11 +478,20 @@ data/shared-lists/{id}.json
 
 data/lights/state.json
   Desired light relay state for the Lights app and ESP8266 polling integration:
-  { on: boolean, updatedAt: ISO string, updatedBy: username or "device" }.
+  { on: boolean, updatedAt: ISO string, updatedBy: username or "device",
+    revision: non-negative integer }. Older files without `revision` read as 0.
 
 data/lights/device-status.json
   ESP8266 polling heartbeat/status written by the device endpoints:
-  { on: boolean, receivedAt: ISO string, polledAt: ISO string }.
+  legacy `{ on, receivedAt, polledAt }` plus trusted `{ trustedOn,
+  trustedReceivedAt, trustedPolledAt }` fields written only when the configured
+  `X-Big-Tuna-Device-Token` is valid.
+
+data/lights/native-sessions.json
+  Bounded, expiring, Lights-only Apple client bearer tokens.
+
+data/lights/native-commands.json
+  Bounded ten-minute native command result journal for restart-safe idempotency.
 
 data/lights/homekit/
   Gitignored HAP-NodeJS pairing identity and a random persistent HomeKit setup
@@ -575,13 +585,25 @@ Lights:
 ```text
 GET  /api/lights
 POST /api/lights
+GET/PUT /api/lights/native/v1
+POST/DELETE /api/lights/native/v1/session
 GET  /api/lights/events
 GET  /api/lights/device
 GET/POST /api/lights/device/status
 GET  /api/lights/homekit
 ```
 
-`GET /api/lights` is public and returns `{ on, updatedAt }`. `GET /api/lights/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`. Device routes are public and intended for ESP8266 polling/status. `GET /api/lights/device` records `polledAt`, currently returns the inverted stored `on` value as a hardware-polarity workaround, and includes an additive `pollAfterMs` hint, currently `250`, so ESP firmware can poll aggressively without hardcoding the cadence. `GET /api/lights/device/status` returns `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` for the Lights page device-poll indicator.
+`GET /api/lights` is public and returns `{ on, updatedAt }`. `GET /api/lights/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lights` requires bearer session auth and only username `yannick` can update `{ on: boolean }`. Device routes preserve legacy unauthenticated polling only when `LIGHTS_DEVICE_API_TOKEN` is unset, but those calls never create trusted telemetry. Once the same secret is configured in the server and ESP, both device routes require `X-Big-Tuna-Device-Token`; only authenticated polls/reports feed the website/native device indicators. `GET /api/lights/device` returns the inverted stored `on` value and `pollAfterMs: 250`. `GET /api/lights/device/status` returns the trusted `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` view.
+
+`GET/PUT /api/lights/native/v1` is the owner-only Apple-client contract. It uses
+physical-light terminology and returns `{ physicalOn, reportedPhysicalOn,
+recentlyPolled, updatedAt, revision }`. `PUT` accepts `{ physicalOn, commandId }`;
+command IDs are bounded and journaled for ten minutes so retries remain idempotent
+across restarts, while conflicting reuse returns 409. Bodies are capped at 2KB.
+`POST /api/lights/native/v1/session` exchanges an owner website session for the
+scoped credential used by Apple extensions; `DELETE` revokes it. Native mutations serialize in-process and
+translate through the existing inverted storage boundary without changing legacy
+payloads.
 
 `hap-nodejs` also starts a LAN-only HomeKit bridge named `BIG TUNA Lights` on TCP 51826, advertised by mDNS only through the physical Wi-Fi IPv4 address (explicit `HOMEKIT_BIND_ADDRESS`, otherwise the first IPv4 on `HOMEKIT_BIND_INTERFACE`, default `Wi-Fi`) so Tailscale and IPv6 routes cannot break Apple Home pairing. It translates HomeKit's physical-light `On` value through the existing website/device inversion and uses the same `writeLightsState` path, so the ESP device endpoints and schedule contract do not change. Pairing data lives in `data/lights/homekit/`; `GET /api/lights/homekit` returns status only to the authenticated `yannick` account, while the owner-gated `/api/lights/homekit/qr` returns a locally generated, no-store SVG from the HAP setup URI only before pairing. The Cloudflare Tunnel is not part of HomeKit discovery; see `docs/apple-home-lights.md` for the QR pairing/firewall guide.
 
@@ -809,6 +831,13 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
 - `.github/workflows/apple-app-factory.yml` builds unsigned IPAs on GitHub macOS.
   It has no Apple credentials; private SSH deployment is main-only and disabled until
   all explicitly configured secrets, including a pinned known-hosts entry, exist.
+- Specs may set `factory.sourceProject` to a validated repository-relative `ios/...`
+  XcodeGen product directory. Generation copies it only into a fresh build output,
+  verifies every requested bundle ID in `project.yml`, and writes schema-v2 target
+  evidence. `targets.iphoneControls` requires iOS 18+ and reuses the iPhone widget
+  extension; `targets.watchControls` requires watchOS 26+, a Watch app, and the Watch
+  widget extension. IPA inspection fails when requested app/widget/Watch bundles or
+  their declared control-extension evidence are missing.
 - Release payloads live in ignored `data/apple-app-factory/releases/`, not static
   `apps/`. `/api/apple-app-factory/*` is session- and configured-owner-authenticated,
   with strict path/symlink protection; `/apple-apps/` is only its UI shell.

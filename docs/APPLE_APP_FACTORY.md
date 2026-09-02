@@ -35,7 +35,13 @@ The expected per-release files are `<AppName>.ipa`, `manifest.json`, `release-no
 
 ## Target design
 
-The template supports an iPhone application plus independently selectable WidgetKit, Lock Screen widget, Live Activity, companion Watch app, independent Watch app, Watch widget/complication, and WatchConnectivity components. A target toggle is a build contract: the spec lists its bundle ID and the archive inspector asserts it exists.
+The template supports an iPhone application plus independently selectable WidgetKit, Lock Screen widget, Live Activity, iPhone controls, companion Watch app, independent Watch app, Watch widget/complication, watchOS controls, and WatchConnectivity components. Controls reuse their platform's existing widget extension rather than consuming another bundle ID. iPhone controls require iOS 18 or newer; Watch controls require watchOS 26 or newer. A target toggle is a build contract: the spec lists its bundle ID and the archive inspector asserts it exists.
+
+An app with maintained product-specific XcodeGen sources may set the validated
+`factory.sourceProject` field to a repository-relative directory below `ios/`.
+Generation copies that tree only into a fresh build directory, verifies the
+requested bundle IDs in its `project.yml`, and emits target evidence for archive
+inspection. It never overwrites the product source.
 
 Use App Groups only where the selected signing profile permits them; otherwise use a local app-owned store and WatchConnectivity/server synchronization. Prefer offline-first local storage, a versioned Codable schema, migration functions, an explicit export/backup path, and an idempotent server sync queue. Watch transfers must use `WCSession` application context for current state and queued user-info/file transfers for durable payloads, with no polling loop that wastes battery.
 

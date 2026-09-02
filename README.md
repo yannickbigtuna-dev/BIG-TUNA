@@ -285,6 +285,13 @@ Describe a private native Apple app or change in plain English, for example: “
 
 This is intentionally honest about Apple’s free Personal Team: it is seven-day testing on registered devices, not App Store/TestFlight distribution; Safari cannot directly install the generated IPA; and Watch/widget installer support is not claimed until a physical-device acceptance run succeeds. Start with the [free-signing rules](docs/APPLE_FREE_SIGNING.md) and [installation guide](docs/IPHONE_AND_WATCH_INSTALLATION.md).
 
+The maintained BIG TUNA Lights family is declared by
+`ios/app-factory/specs/big-tuna-lights.yml`. It contains the native iPhone app,
+small interactive Home Screen widget, iPhone control, companion Watch app,
+Watch complications/Smart Stack widget, and watchOS 26 control. Generate its
+deterministic product project through the factory, or work directly from
+`ios/big-tuna-lights-widget/project.yml` with XcodeGen on a Mac running Xcode 26+.
+
 ## Shared Frontend Libraries
 
 ### `topbar.js`
@@ -368,12 +375,14 @@ GET               /api/waquatics/search
 GET               /api/waquatics/athlete
 POST              /api/parse-pbest
 GET/POST          /api/lights
+GET/PUT           /api/lights/native/v1
+POST/DELETE       /api/lights/native/v1/session
 GET               /api/lights/events
 GET               /api/lights/device
 GET/POST          /api/lights/device/status
 ```
 
-The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.txt](docs/lights-esp8266-prompt.txt).
+The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.txt](docs/lights-esp8266-prompt.txt). Configure the same `LIGHTS_DEVICE_API_TOKEN` on the server and device so relay telemetry is trusted; the unset-token fallback preserves relay operation but deliberately reports no confirmed heartbeat.
 
 ## Yannick vs Emma Strava Challenge
 

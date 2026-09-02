@@ -17,9 +17,11 @@
     "homeScreenWidget": false,
     "lockScreenWidget": false,
     "liveActivities": false,
+    "iphoneControls": false,
     "watchMode": "none",
     "watchWidgets": false,
     "watchComplications": false,
+    "watchControls": false,
     "watchConnectivity": false
   },
   "capabilities": {
@@ -38,6 +40,7 @@
   "appGroupId": null,
   "privacy": {},
   "factory": {
+    "sourceProject": null,
     "released": false,
     "bundleIdentifiers": {
       "iphoneApp": "com.example.privateapps.exampleapp",

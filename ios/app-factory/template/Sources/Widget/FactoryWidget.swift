@@ -30,7 +30,8 @@ struct FactoryWidget: Widget {
 @main
 struct FactoryWidgetBundle: WidgetBundle {
     var body: some Widget {
-        FactoryWidget()
+        // HOME_SCREEN_WIDGET
+        // IPHONE_CONTROL_WIDGET
         // LIVE_ACTIVITY_WIDGET
     }
 }

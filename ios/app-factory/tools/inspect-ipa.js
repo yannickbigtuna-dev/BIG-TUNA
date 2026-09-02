@@ -39,6 +39,7 @@ function requireBundleIdentifier(archive, plistPath, expected, label) {
 try {
   if (!fs.statSync(ipa).isFile()) throw new Error(`IPA was not found: ${ipa}`);
   const targetManifest = readJson(targetsFile);
+  if (!targetManifest.targetEvidence || typeof targetManifest.targetEvidence !== 'object') throw new Error('Target manifest is missing targetEvidence; regenerate from the current Apple App Factory before inspection');
   const result = spawnSync('tar', ['-tf', ipa], { encoding: 'utf8', shell: false });
   if (result.status !== 0) throw new Error(`IPA is not a readable ZIP archive: ${result.stderr.trim()}`);
   const files = result.stdout.split(/\r?\n/).filter(Boolean);
@@ -58,9 +59,11 @@ try {
   if (!host) throw new Error(`IPA is missing the generated iPhone host bundle ${hostPrefix}`);
   const requirePath = (prefix, description) => { if (!files.some(name => name.startsWith(prefix))) throw new Error(`IPA is missing ${description}; refusing to publish a stripped or wrong-identity build`); };
   requireBundleIdentifier(ipa, hostInfo, targetManifest.bundleIds && targetManifest.bundleIds.iphone, 'iPhone host app');
-  if (targetManifest.targets.homeScreenWidget) { requirePath(widgetPrefix, `the generated iPhone WidgetKit extension ${widgetPrefix}`); requireBundleIdentifier(ipa, widgetInfo, targetManifest.bundleIds && targetManifest.bundleIds.widget, 'iPhone widget extension'); }
+  if (targetManifest.targets.homeScreenWidget || targetManifest.targets.iphoneControls) { requirePath(widgetPrefix, `the generated iPhone WidgetKit extension ${widgetPrefix}`); requireBundleIdentifier(ipa, widgetInfo, targetManifest.bundleIds && targetManifest.bundleIds.widget, 'iPhone widget extension'); }
+  if (targetManifest.targets.iphoneControls && targetManifest.targetEvidence.iphoneControlExtension !== (targetManifest.bundleIds && targetManifest.bundleIds.widget)) throw new Error('Target manifest does not prove that the iPhone control uses the existing iPhone WidgetKit extension');
   if (targetManifest.targets.watchMode !== 'none') { requirePath(watchPrefix, `the generated embedded Apple Watch app ${watchPrefix}`); requireBundleIdentifier(ipa, watchInfo, targetManifest.bundleIds && targetManifest.bundleIds.watch, 'Apple Watch app'); }
   if (targetManifest.targets.watchWidgets) { requirePath(watchWidgetPrefix, `the generated Apple Watch widget/complication extension ${watchWidgetPrefix}`); requireBundleIdentifier(ipa, watchWidgetInfo, targetManifest.bundleIds && targetManifest.bundleIds.watchWidget, 'Apple Watch widget extension'); }
-  const report = { ok: true, ipa: path.resolve(ipa), sha256: sha256(ipa), hostBundlePath: host, fileCount: files.length, requestedTargets: targetManifest.targets };
+  if (targetManifest.targets.watchControls && targetManifest.targetEvidence.watchControlExtension !== (targetManifest.bundleIds && targetManifest.bundleIds.watchWidget)) throw new Error('Target manifest does not prove that the Watch control uses the existing Watch widget extension');
+  const report = { ok: true, ipa: path.resolve(ipa), sha256: sha256(ipa), hostBundlePath: host, fileCount: files.length, requestedTargets: targetManifest.targets, targetEvidence: targetManifest.targetEvidence };
   console.log(JSON.stringify(report, null, 2));
 } catch (error) { console.error(`IPA inspection failed: ${error.message}`); process.exit(1); }

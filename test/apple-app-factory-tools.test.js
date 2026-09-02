@@ -89,11 +89,75 @@ test('generator omits Lock Screen families when the specification disables them'
   assert.doesNotMatch(widget, /accessoryCircular|accessoryRectangular|accessoryInline/);
 });
 
+test('factory controls are explicit, use existing extensions, and enforce OS gates', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-controls-'));
+  const spec = fixture();
+  spec.app.minimumIOS = '18.0'; spec.app.minimumWatchOS = '26.0';
+  spec.targets.iphoneControls = true; spec.targets.watchControls = true;
+  const specPath = path.join(directory, 'trail-log.yml'); fs.writeFileSync(specPath, JSON.stringify(spec));
+  const output = path.join(directory, 'generated'); run('generate-project.js', ['--spec', specPath, '--output', output]);
+  const project = fs.readFileSync(path.join(output, 'project.yml'), 'utf8');
+  assert.match(project, /Sources\/Control/); assert.match(project, /Sources\/WatchControl/);
+  assert.match(project, /- target: AppWidget\n\s+embed: true/);
+  assert.match(fs.readFileSync(path.join(output, 'Sources', 'Widget', 'FactoryWidget.swift'), 'utf8'), /FactoryControl\(\)/);
+  assert.match(fs.readFileSync(path.join(output, 'Sources', 'WatchWidget', 'FactoryWatchWidget.swift'), 'utf8'), /FactoryWatchControl\(\)/);
+  const iphoneControl = fs.readFileSync(path.join(output, 'Sources', 'Control', 'FactoryControl.swift'), 'utf8');
+  const watchControl = fs.readFileSync(path.join(output, 'Sources', 'WatchControl', 'FactoryWatchControl.swift'), 'utf8');
+  assert.match(iphoneControl, /ControlValueProvider/); assert.match(iphoneControl, /var previewValue: Bool/); assert.match(iphoneControl, /StaticControlConfiguration\(kind: kind, provider: FactoryControlValueProvider\(\)\) \{ value in/); assert.match(iphoneControl, /isOn: value/);
+  assert.match(watchControl, /@available\(watchOS 26\.0, \*\)/); assert.match(watchControl, /ControlValueProvider/); assert.match(watchControl, /var previewValue: Bool/); assert.match(watchControl, /StaticControlConfiguration\(kind: kind, provider: FactoryWatchControlValueProvider\(\)\) \{ value in/); assert.match(watchControl, /isOn: value/);
+  const targets = JSON.parse(fs.readFileSync(path.join(output, '.factory-targets.json'), 'utf8'));
+  assert.equal(targets.targetEvidence.iphoneControlExtension, 'ca.example.traillog.widget');
+  assert.equal(targets.targetEvidence.watchControlExtension, 'ca.example.traillog.watchwidget');
+  const tooOldIOS = fixture(); tooOldIOS.targets.iphoneControls = true;
+  assert.throws(() => validateSpec(tooOldIOS), /minimumIOS 18.0/);
+  const noWatchWidget = fixture(); noWatchWidget.app.minimumWatchOS = '26.0'; noWatchWidget.targets.watchWidgets = false; noWatchWidget.targets.watchControls = true; noWatchWidget.targets.watchComplications = false; noWatchWidget.factory.bundleIdentifiers.watchWidget = null;
+  assert.throws(() => validateSpec(noWatchWidget), /requires targets.watchWidgets=true/);
+  const tooOldWatch = fixture(); tooOldWatch.targets.watchControls = true;
+  assert.throws(() => validateSpec(tooOldWatch), /minimumWatchOS 26.0/);
+  const invalidVersion = fixture(); invalidVersion.targets.iphoneControls = true; invalidVersion.app.minimumIOS = 'latest';
+  assert.throws(() => validateSpec(invalidVersion), /numeric platform version/);
+});
+
+test('factory can copy an allowlisted product source project without overwriting it', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-source-'));
+  const spec = fixture();
+  spec.app.name = 'BIG TUNA Lights'; spec.app.slug = 'big-tuna-lights'; spec.app.bundleId = 'ca.yannickmorgans.bigtuna.lights'; spec.app.bundleIdNamespace = 'ca.yannickmorgans.bigtuna';
+  spec.targets = { iphone: true, homeScreenWidget: true, lockScreenWidget: false, liveActivities: false, iphoneControls: false, watchMode: 'none', watchWidgets: false, watchComplications: false, watchControls: false, watchConnectivity: false };
+  spec.capabilities.watchConnectivity = false; spec.factory.bundleIdentifiers = { iphoneApp: spec.app.bundleId, homeWidget: `${spec.app.bundleId}.widget`, lockScreenWidget: null, liveActivityWidget: null, watchApp: null, watchExtension: null, watchWidget: null };
+  spec.factory.sourceProject = 'ios/big-tuna-lights-widget';
+  const specPath = path.join(directory, 'trail-log.yml'); fs.writeFileSync(specPath, JSON.stringify(spec));
+  const output = path.join(directory, 'product'); run('generate-project.js', ['--spec', specPath, '--output', output]);
+  assert.ok(fs.existsSync(path.join(output, 'project.yml')));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(output, '.factory-targets.json'), 'utf8')).factory.sourceProject, 'ios/big-tuna-lights-widget');
+  const unsafe = fixture(); unsafe.factory.sourceProject = '../outside';
+  assert.throws(() => validateSpec(unsafe), /repository-relative directory below ios/);
+});
+
+test('IPA inspection requires control evidence to reuse the existing extensions', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-control-ipa-'));
+  const spec = fixture(); spec.app.minimumIOS = '18.0'; spec.app.minimumWatchOS = '26.0'; spec.targets.iphoneControls = true; spec.targets.watchControls = true;
+  const specPath = path.join(directory, 'trail-log.yml'); fs.writeFileSync(specPath, JSON.stringify(spec));
+  const generated = path.join(directory, 'generated'); run('generate-project.js', ['--spec', specPath, '--output', generated]);
+  const targetManifest = path.join(generated, '.factory-targets.json');
+  const plist = identifier => `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${identifier}</string></dict></plist>`;
+  const ipa = path.join(directory, 'controls.ipa'); makeZip(ipa, [
+    { name: 'Payload/Trail Log.app/Info.plist', content: plist('ca.example.traillog') },
+    { name: 'Payload/Trail Log.app/PlugIns/Trail Log Widgets.appex/Info.plist', content: plist('ca.example.traillog.widget') },
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/Info.plist', content: plist('ca.example.traillog.watchapp') },
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/PlugIns/Trail Log Watch Widgets.appex/Info.plist', content: plist('ca.example.traillog.watchwidget') }
+  ]);
+  assert.equal(JSON.parse(run('inspect-ipa.js', ['--ipa', ipa, '--targets', targetManifest])).targetEvidence.watchControlExtension, 'ca.example.traillog.watchwidget');
+  const badManifest = JSON.parse(fs.readFileSync(targetManifest, 'utf8')); badManifest.targetEvidence.iphoneControlExtension = 'ca.example.other';
+  const badTargets = path.join(directory, 'bad-targets.json'); fs.writeFileSync(badTargets, JSON.stringify(badManifest));
+  const result = spawnSync(process.execPath, [path.join(tools, 'inspect-ipa.js'), '--ipa', ipa, '--targets', badTargets], { cwd: root, encoding: 'utf8' });
+  assert.notEqual(result.status, 0); assert.match(`${result.stdout}${result.stderr}`, /iPhone control uses the existing/);
+});
+
 test('IPA inspection requires the generated host, widget, and Watch product paths', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-ipa-'));
   const targetManifest = path.join(directory, '.factory-targets.json');
   const generated = fixture();
-  fs.writeFileSync(targetManifest, JSON.stringify({ app: generated.app, targets: generated.targets, bundleIds: { iphone: generated.app.bundleId, widget: `${generated.app.bundleId}.widget`, watch: `${generated.app.bundleId}.watchapp`, watchWidget: `${generated.app.bundleId}.watchwidget` } }));
+  fs.writeFileSync(targetManifest, JSON.stringify({ app: generated.app, targets: generated.targets, bundleIds: { iphone: generated.app.bundleId, widget: `${generated.app.bundleId}.widget`, watch: `${generated.app.bundleId}.watchapp`, watchWidget: `${generated.app.bundleId}.watchwidget` }, targetEvidence: { iphoneWidgetExtension: `${generated.app.bundleId}.widget`, iphoneControlExtension: null, watchWidgetExtension: `${generated.app.bundleId}.watchwidget`, watchControlExtension: null } }));
   const plist = identifier => `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${identifier}</string></dict></plist>`;
   const correct = [
     { name: 'Payload/Trail Log.app/Info.plist', content: plist('ca.example.traillog') },

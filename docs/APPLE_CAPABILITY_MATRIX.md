@@ -6,10 +6,12 @@ Status is intentionally conservative. “Framework usable” means source can be
 |---|---|---|---|---|---|---|
 | Main native app | both | Yes, seven-day device testing | bundle ID; app ID budget | main app ID | device trust/Developer Mode as prompted; 3 apps/device | rebuild/reinstall |
 | WidgetKit Home / Lock Screen | iPhone | Conditional—extension signing must be tested | widget extension bundle; WidgetKit | extension ID: measure on device | physical widget/timeline test | in-app dashboard |
+| System controls | iPhone | Conditional—extension signing must be tested | WidgetKit + App Intents in the existing widget extension | no separate ID; verify observed use | iOS 18+; test Control Center/Lock Screen and locked-device behavior | interactive Home Screen widget/in-app control |
 | Live Activities | iPhone | Conditional | ActivityKit, optional push token capability | no extra ID unless separate extension/service is enabled | device/live-activity setting | local notification/in-app status |
 | Companion Watch app | Watch + iPhone | **Unverified installer support** | nested Watch app/extension IDs | Watch IDs: measure on device | paired Watch; physical install test | iPhone-only app |
 | Independent Watch app | Watch | **Unverified installer support** | Watch app/extension IDs | Watch IDs: measure on device | paired Watch; independent install test | companion design |
 | Watch widgets / complications | Watch | **Unverified installer support** | WidgetKit extension | extension ID: measure on device | add/configure on Watch | Watch app screen |
+| Watch controls | Watch | **Unverified installer support** | WidgetKit + App Intents in the existing Watch widget extension | no separate ID; verify observed use | watchOS 26+; Control Center/Smart Stack, Action button only on Apple Watch Ultra | Watch app/complication |
 | WatchConnectivity | both | Conditional | no special service entitlement normally | none known; record observed result | paired-device, offline queue test | HTTPS sync/manual export |
 | App Groups / shared settings | both | Apple table must allow profile; do not assume | `com.apple.security.application-groups` + group ID | group ID/associated app IDs: record | target/profile verification | per-target local cache + transfer |
 | Local offline data / export | both | Yes | none | none | migration/export test | n/a |

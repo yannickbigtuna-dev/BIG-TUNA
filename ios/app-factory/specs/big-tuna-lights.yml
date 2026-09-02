@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "app": {
+    "name": "BIG TUNA Lights",
+    "slug": "big-tuna-lights",
+    "bundleId": "ca.yannickmorgans.bigtuna.lights",
+    "bundleIdNamespace": "ca.yannickmorgans.bigtuna",
+    "iconSource": "ios/big-tuna-lights-widget/Assets.xcassets/AppIcon.appiconset",
+    "minimumIOS": "18.0",
+    "minimumWatchOS": "26.0",
+    "version": "1.1.0",
+    "build": 2,
+    "theme": {
+      "accentHex": "#E7B84B",
+      "backgroundHex": "#111111"
+    }
+  },
+  "targets": {
+    "iphone": true,
+    "homeScreenWidget": true,
+    "lockScreenWidget": false,
+    "liveActivities": false,
+    "iphoneControls": true,
+    "watchMode": "companion",
+    "watchWidgets": true,
+    "watchComplications": true,
+    "watchControls": true,
+    "watchConnectivity": true
+  },
+  "capabilities": {
+    "appGroups": true,
+    "healthKit": false,
+    "workoutKit": false,
+    "coreMotion": false,
+    "location": false,
+    "bluetooth": false,
+    "notifications": false,
+    "backgroundRefresh": false,
+    "siri": false,
+    "haptics": false,
+    "watchConnectivity": true
+  },
+  "appGroupId": "group.ca.yannickmorgans.bigtuna.lights",
+  "privacy": {},
+  "factory": {
+    "sourceProject": "ios/big-tuna-lights-widget",
+    "released": false,
+    "bundleIdentifiers": {
+      "iphoneApp": "ca.yannickmorgans.bigtuna.lights",
+      "homeWidget": "ca.yannickmorgans.bigtuna.lights.widget",
+      "lockScreenWidget": null,
+      "liveActivityWidget": null,
+      "watchApp": "ca.yannickmorgans.bigtuna.lights.watchapp",
+      "watchExtension": null,
+      "watchWidget": "ca.yannickmorgans.bigtuna.lights.watchwidget"
+    },
+    "data": {
+      "storageMethod": "app-group-userdefaults",
+      "schemaVersion": 1,
+      "migrationStrategy": "Preserve the existing App Group keys and add new confirmed-state fields backward-compatibly.",
+      "exportOrBackup": "Server remains authoritative; signing updates must preserve the App Group and bundle identities.",
+      "homeServerApi": {
+        "baseUrl": "https://yannickmorgans.ca",
+        "authMode": "owner-login-exchanged-for-lights-scoped-bearer"
+      }
+    },
+    "distribution": {
+      "access": "private-owner-authenticated",
+      "url": null,
+      "releaseRoot": "data/apple-app-factory/releases"
+    },
+    "lastSuccessfulBuild": {
+      "status": "never-built",
+      "ciRunUrl": null,
+      "completedAt": null,
+      "ipaSha256": null
+    },
+    "physicalAcceptance": {
+      "iphone": "not-tested",
+      "widgets": "not-tested",
+      "watchInstallation": "not-tested",
+      "watchComplications": "not-tested",
+      "testedOS": null,
+      "installer": null,
+      "signedAt": null,
+      "expectedExpiry": null,
+      "observedAppIdUse": null
+    },
+    "knownLimitations": [
+      "Free Personal Team provisioning expires after seven days and must be refreshed on the owner's devices.",
+      "The Home Screen uses the smallest supported systemSmall widget; iPhone does not offer an app-icon-sized 1x1 Home Screen WidgetKit family.",
+      "Without APNs, WidgetKit controls refresh immediately after their own actions but external state changes may remain cached until the system permits another refresh.",
+      "A revocable Lights-only token is shared through the App Group so extensions can act without opening the app; passwords and full-site sessions are never stored.",
+      "Apple Watch installation, controls, complications, and seven-day refresh remain unverified until recorded physical acceptance passes."
+    ]
+  }
+}
