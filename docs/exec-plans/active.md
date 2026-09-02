@@ -571,3 +571,54 @@ Apple does not expose an app-icon-sized 1x1 Home Screen WidgetKit family. The re
 - [x] Review combined diff and run independent security/acceptance testing.
 - [x] Correct findings and complete full validation.
 - [x] Commit and push `main`; do not restart or otherwise deploy the live server without separate explicit authorization.
+
+## Active Extension — Sideloadly widget/control discovery repair
+
+### Goal and diagnosis
+
+Produce BIG TUNA Lights 1.1.1 (3) as a transient Sideloadly-prepared artifact so
+the installed iPhone app is discoverable in both the Home Screen widget gallery
+and Control Center. The current 1.1.0 IPA contains the WidgetKit extension and
+App Intents metadata, but it predates the workflow support that prepares nested
+bundle identifiers for the host identifier Sideloadly derives while signing.
+
+### Scope, constraints, and ownership
+
+- Preserve every canonical bundle identifier, the App Group, storage schema,
+  server API, source targets, and Watch components.
+- Never commit the locally observed Personal Team suffix, certificate, key,
+  session, provisioning profile, device identifier, or other signing material.
+- Never promote the noncanonical Sideloadly-prepared artifact as `latest`; it is
+  an owner-controlled installation input only.
+- The implementer owns only the durable app spec, product `project.yml`, and a
+  new 1.1.1 release-notes file. Root owns this plan, diff review, workflow
+  dispatch/download, artifact inspection, Git integration, and local handoff.
+- No website restart or live server deployment is authorized or required.
+
+### Approach and acceptance checks
+
+1. Bump the durable spec and XcodeGen project together to 1.1.1 build 3, with
+   release notes explaining the Sideloadly widget/control discovery repair.
+2. Validate the app spec and version/build alignment, run focused factory tests,
+   then run the full Node regression suite.
+3. Commit and push the reviewed source change, then dispatch the macOS Apple App
+   Factory workflow with the locally detected suffix supplied only as a transient
+   workflow input.
+4. Require a successful unsigned compile/archive and component inspection.
+   Download the resulting artifact and independently verify its checksum,
+   complete nested target tree, rewritten embedded IDs and Watch companion
+   pointer, WidgetKit extension metadata, and App Intents metadata.
+5. Select the verified IPA in File Explorer and open Sideloadly for the user's
+   final Apple Account, 2FA, device, and Start actions. Physical widget/control
+   success remains unverified until the user installs and checks the device.
+
+### Progress
+
+- [x] Read required Apple guidance, app spec, current release records, and source.
+- [x] Confirm the current IPA contains the expected extension and identify the
+      host/embedded identifier mismatch addressed by the newer workflow.
+- [x] Write implementation specification and isolated ownership package.
+- [x] Implement and review the versioned release change.
+- [x] Run local validation and independent acceptance review.
+- [ ] Build, inspect, download, and open the prepared artifact.
+- [ ] Commit and push; do not deploy or restart the website.

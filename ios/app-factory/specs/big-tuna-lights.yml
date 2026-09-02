@@ -8,8 +8,8 @@
     "iconSource": "ios/big-tuna-lights-widget/Assets.xcassets/AppIcon.appiconset",
     "minimumIOS": "18.0",
     "minimumWatchOS": "26.0",
-    "version": "1.1.0",
-    "build": 2,
+    "version": "1.1.1",
+    "build": 3,
     "theme": {
       "accentHex": "#E7B84B",
       "backgroundHex": "#111111"
@@ -70,10 +70,10 @@
       "releaseRoot": "data/apple-app-factory/releases"
     },
     "lastSuccessfulBuild": {
-      "status": "unsigned-ci-build-passed",
-      "ciRunUrl": "https://github.com/yannickbigtuna-dev/BIG-TUNA/actions/runs/33631213210",
-      "completedAt": "2026-09-02T12:43:11Z",
-      "ipaSha256": "cb120055bc5ae0fa14fefafd2be9df65421542a8696c1f108361fbcee6aa6831"
+      "status": "not-built",
+      "ciRunUrl": null,
+      "completedAt": null,
+      "ipaSha256": null
     },
     "physicalAcceptance": {
       "iphone": "not-tested",
