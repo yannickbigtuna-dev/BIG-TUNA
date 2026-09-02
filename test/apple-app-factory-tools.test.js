@@ -183,3 +183,17 @@ test('IPA inspection requires the generated host, widget, and Watch product path
   assert.notEqual(identifierResult.status, 0);
   assert.match(`${identifierResult.stdout}${identifierResult.stderr}`, /CFBundleIdentifier is ca\.example\.wrong/);
 });
+
+test('Apple factory packages nested bundles with credential-free ad-hoc signatures before their parents', () => {
+  const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'apple-app-factory.yml'), 'utf8');
+  const packageStep = workflow.match(/- name: Package credential-free ad-hoc IPA and verify embedded components\n([\s\S]*?)(?=\n      - name: Create release metadata)/);
+  assert.ok(packageStep, 'credential-free package step must exist');
+  const script = packageStep[1];
+  assert.match(script, /\/usr\/bin\/codesign --force --sign - --timestamp=none "\$bundle"/);
+  assert.match(script, /\/usr\/bin\/codesign --verify --strict "\$bundle"/);
+  assert.match(script, /find "\$app" -depth -type d -name '\*\.appex' -print0/);
+  assert.match(script, /find "\$app\/Watch" -depth -type d -name '\*\.app' -print0/);
+  assert.ok(script.indexOf("find \"$app\" -depth -type d -name '*.appex' -print0") < script.indexOf("find \"$app/Watch\" -depth -type d -name '*.app' -print0"));
+  assert.ok(script.indexOf("find \"$app/Watch\" -depth -type d -name '*.app' -print0") < script.indexOf('sign_bundle "$app"'));
+  assert.doesNotMatch(script, /CODE_SIGN_IDENTITY|CODE_SIGN_STYLE|DEVELOPMENT_TEAM|PROVISIONING_PROFILE|allowProvisioning|APPLE_ID|APPLE_PASSWORD|APP_SPECIFIC_PASSWORD|DEVICE_ID|Personal Team/i);
+});

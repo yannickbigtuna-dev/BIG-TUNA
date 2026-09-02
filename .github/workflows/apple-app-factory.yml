@@ -12,8 +12,9 @@ on:
         required: false
         type: string
 
-# No signing, release, or repository-write permission is needed. Deployment is
-# separately gated on explicitly configured SSH secrets below.
+# No Apple identity, provisioning profile, release, or repository-write
+# permission is needed. Deployment is separately gated on explicitly configured
+# SSH secrets below.
 permissions:
   contents: read
 
@@ -81,13 +82,35 @@ jobs:
           xcodebuild -project "$project" -scheme App -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/scheme-build.log"
           xcodebuild -project "$project" -scheme App -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO archive -archivePath "$RUNNER_TEMP/apple-app-factory/${APP_SLUG}.xcarchive" | tee "$RUNNER_TEMP/apple-app-factory/logs/archive.log"
 
-      - name: Package unsigned IPA and verify embedded components
+      - name: Package credential-free ad-hoc IPA and verify embedded components
         shell: bash
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/apple-app-factory/${APP_SLUG}.xcarchive"
           app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$app"
+
+          # The archive is built without an Apple identity. Re-sign each nested
+          # code bundle with the ad-hoc identity so their metadata remains
+          # internally consistent for the owner's later local re-signing step.
+          sign_bundle() {
+            local bundle="$1"
+            /usr/bin/codesign --force --sign - --timestamp=none "$bundle"
+            /usr/bin/codesign --verify --strict "$bundle"
+          }
+
+          # Extensions must be signed deepest-first, before their containing
+          # Watch application and, finally, the iPhone host application.
+          while IFS= read -r -d '' extension; do
+            sign_bundle "$extension"
+          done < <(find "$app" -depth -type d -name '*.appex' -print0)
+          if [[ -d "$app/Watch" ]]; then
+            while IFS= read -r -d '' watch_app; do
+              sign_bundle "$watch_app"
+            done < <(find "$app/Watch" -depth -type d -name '*.app' -print0)
+          fi
+          sign_bundle "$app"
+
           package="$RUNNER_TEMP/apple-app-factory/package"
           mkdir -p "$package/Payload"
           cp -R "$app" "$package/Payload/"
@@ -108,7 +131,7 @@ jobs:
           node ios/app-factory/tools/create-release-metadata.js "${args[@]}"
           shasum -a 256 "$RUNNER_TEMP/apple-app-factory/release-input/${APP_SLUG}.ipa" | tee "$RUNNER_TEMP/apple-app-factory/release-input/sha256.txt"
 
-      - name: Upload unsigned release input
+      - name: Upload credential-free ad-hoc release input
         uses: actions/upload-artifact@v4
         with:
           name: apple-app-factory-${{ steps.identity.outputs.slug }}-${{ steps.identity.outputs.version }}

@@ -374,7 +374,7 @@ iOS app source:
 - The full feature set targets iOS 18 and watchOS 26. iPhone controls use the existing iPhone widget extension ID; Watch controls use the Watch widget extension ID, so no extra control App IDs are introduced.
 - All four app/extension targets use App Group `group.ca.yannickmorgans.bigtuna.lights` for a revocable, Lights-only bearer token and last confirmed native state. Login briefly uses a normal website session, exchanges it through `POST /api/lights/native/v1/session`, then revokes the website session; passwords are never persisted. The iPhone sends the scoped token/state application context to the Watch with WatchConnectivity.
 - Native surfaces use owner-authenticated `GET/PUT /api/lights/native/v1`, explicit physical target state, and an idempotent command ID. They never optimistically cache an unconfirmed change. The website, HomeKit, scheduler, and ESP routes retain their prior stored/inverted contracts.
-- BIG TUNA Lights 1.1.0 (2) passed the GitHub macOS unsigned build and full IPA component inspection in Actions run `33631213210`; SHA-256 is `cb120055bc5ae0fa14fefafd2be9df65421542a8696c1f108361fbcee6aa6831`. The verified IPA is promoted under `data/apple-app-factory/releases/big-tuna-lights/`. Physical signing/install results remain unrecorded.
+- BIG TUNA Lights 1.1.0 (2) passed the GitHub macOS build and full IPA component inspection in Actions run `33631213210`; SHA-256 is `cb120055bc5ae0fa14fefafd2be9df65421542a8696c1f108361fbcee6aa6831`. The verified IPA is promoted under `data/apple-app-factory/releases/big-tuna-lights/`. Physical signing/install results remain unrecorded.
 - The app uses the Lights page's physical wall-plate/paddle visual, upper owner-access screw, and lower relay-heartbeat screw. The Home Screen widget is Apple's smallest supported square family; there is no app-icon-sized 1x1 Home Screen WidgetKit family, so the 1x1 experience is the system control.
 
 ## Admin Dashboard & Email Campaigns
@@ -829,8 +829,10 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   Future Apple work must read `docs/APPLE_APP_FACTORY.md` and the app's
   `ios/app-factory/specs/<slug>.yml` first; preserve its identity, enabled targets,
   data format, and app-group value across updates.
-- `.github/workflows/apple-app-factory.yml` builds unsigned IPAs on GitHub macOS.
-  It has no Apple credentials; private SSH deployment is main-only and disabled until
+- `.github/workflows/apple-app-factory.yml` builds without Apple signing, then applies
+  credential-free ad-hoc signatures to nested extensions, the embedded Watch app, and
+  the iPhone host solely to preserve bundle metadata for owner-controlled local
+  re-signing. It has no Apple credentials; private SSH deployment is main-only and disabled until
   all explicitly configured secrets, including a pinned known-hosts entry, exist.
 - Specs may set `factory.sourceProject` to a validated repository-relative `ios/...`
   XcodeGen product directory. Generation copies it only into a fresh build output,
