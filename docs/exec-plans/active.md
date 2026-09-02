@@ -520,7 +520,7 @@ Apple does not expose an app-icon-sized 1x1 Home Screen WidgetKit family. The re
 ### Stable identity and compatibility constraints
 
 - Preserve iPhone bundle ID `ca.yannickmorgans.bigtuna.lights`, widget/control extension ID `ca.yannickmorgans.bigtuna.lights.widget`, and App Group `group.ca.yannickmorgans.bigtuna.lights`.
-- Add deterministic Watch IDs `ca.yannickmorgans.bigtuna.lights.watchapp` and `ca.yannickmorgans.bigtuna.lights.watchwidget`; record all IDs and observed Personal Team consumption in the durable factory spec.
+- Add deterministic Watch IDs `ca.yannickmorgans.bigtuna.lights.watchapp` and nested extension ID `ca.yannickmorgans.bigtuna.lights.watchapp.widget`; record all IDs and observed Personal Team consumption in the durable factory spec.
 - Keep `GET/POST /api/lights`, `/api/lights/events`, `/api/lights/device`, `/api/lights/device/status`, HomeKit state propagation, inverted stored-state semantics, and scheduled changes compatible.
 - Native surfaces operate on explicit physical light state. Inversion is centralized in one server/native boundary and is covered by tests.
 - Existing untracked `server.env.backup-*` files are user-owned and must remain untouched and uncommitted.

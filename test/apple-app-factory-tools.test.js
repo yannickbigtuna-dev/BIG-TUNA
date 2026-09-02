@@ -9,7 +9,7 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const tools = path.join(root, 'ios', 'app-factory', 'tools');
 const { validateSpec } = require(path.join(tools, 'factory-lib'));
-function fixture() { return { app: { name: 'Trail Log', slug: 'trail-log', bundleId: 'ca.example.traillog', bundleIdNamespace: 'ca.example', iconSource: 'assets/trail-log.png', minimumIOS: '17.0', minimumWatchOS: '10.0', version: '1.0.0', build: 1, theme: { accentHex: '#0A84FF', backgroundHex: '#FFFFFF' } }, targets: { iphone: true, homeScreenWidget: true, lockScreenWidget: true, liveActivities: true, watchMode: 'companion', watchWidgets: true, watchComplications: true, watchConnectivity: true }, capabilities: { appGroups: true, healthKit: false, workoutKit: false, coreMotion: false, location: false, bluetooth: false, notifications: false, backgroundRefresh: false, siri: false, haptics: false, watchConnectivity: true }, appGroupId: 'group.ca.example.traillog', privacy: {}, factory: { bundleIdentifiers: { iphoneApp: 'ca.example.traillog', homeWidget: 'ca.example.traillog.widget', lockScreenWidget: 'ca.example.traillog.widget', liveActivityWidget: 'ca.example.traillog.widget', watchApp: 'ca.example.traillog.watchapp', watchExtension: null, watchWidget: 'ca.example.traillog.watchwidget' }, data: { storageMethod: 'local-codable', schemaVersion: 1, migrationStrategy: 'Migrate before changing data.', exportOrBackup: 'in-app export', homeServerApi: { baseUrl: null, authMode: 'none' } }, distribution: { access: 'private-owner-authenticated', url: null, releaseRoot: 'data/apple-app-factory/releases' }, lastSuccessfulBuild: { status: 'never-built', ciRunUrl: null, completedAt: null, ipaSha256: null }, knownLimitations: ['Free signatures expire after seven days.'] } }; }
+function fixture() { return { app: { name: 'Trail Log', slug: 'trail-log', bundleId: 'ca.example.traillog', bundleIdNamespace: 'ca.example', iconSource: 'assets/trail-log.png', minimumIOS: '17.0', minimumWatchOS: '10.0', version: '1.0.0', build: 1, theme: { accentHex: '#0A84FF', backgroundHex: '#FFFFFF' } }, targets: { iphone: true, homeScreenWidget: true, lockScreenWidget: true, liveActivities: true, watchMode: 'companion', watchWidgets: true, watchComplications: true, watchConnectivity: true }, capabilities: { appGroups: true, healthKit: false, workoutKit: false, coreMotion: false, location: false, bluetooth: false, notifications: false, backgroundRefresh: false, siri: false, haptics: false, watchConnectivity: true }, appGroupId: 'group.ca.example.traillog', privacy: {}, factory: { bundleIdentifiers: { iphoneApp: 'ca.example.traillog', homeWidget: 'ca.example.traillog.widget', lockScreenWidget: 'ca.example.traillog.widget', liveActivityWidget: 'ca.example.traillog.widget', watchApp: 'ca.example.traillog.watchapp', watchExtension: null, watchWidget: 'ca.example.traillog.watchapp.widget' }, data: { storageMethod: 'local-codable', schemaVersion: 1, migrationStrategy: 'Migrate before changing data.', exportOrBackup: 'in-app export', homeServerApi: { baseUrl: null, authMode: 'none' } }, distribution: { access: 'private-owner-authenticated', url: null, releaseRoot: 'data/apple-app-factory/releases' }, lastSuccessfulBuild: { status: 'never-built', ciRunUrl: null, completedAt: null, ipaSha256: null }, knownLimitations: ['Free signatures expire after seven days.'] } }; }
 function run(script, args) { return execFileSync(process.execPath, [path.join(tools, script), ...args], { cwd: root, encoding: 'utf8' }); }
 function crc32(buffer) {
   let value = 0xffffffff;
@@ -107,7 +107,7 @@ test('factory controls are explicit, use existing extensions, and enforce OS gat
   assert.match(watchControl, /@available\(watchOS 26\.0, \*\)/); assert.match(watchControl, /ControlValueProvider/); assert.match(watchControl, /var previewValue: Bool/); assert.match(watchControl, /StaticControlConfiguration\(kind: kind, provider: FactoryWatchControlValueProvider\(\)\) \{ value in/); assert.match(watchControl, /isOn: value/);
   const targets = JSON.parse(fs.readFileSync(path.join(output, '.factory-targets.json'), 'utf8'));
   assert.equal(targets.targetEvidence.iphoneControlExtension, 'ca.example.traillog.widget');
-  assert.equal(targets.targetEvidence.watchControlExtension, 'ca.example.traillog.watchwidget');
+  assert.equal(targets.targetEvidence.watchControlExtension, 'ca.example.traillog.watchapp.widget');
   const tooOldIOS = fixture(); tooOldIOS.targets.iphoneControls = true;
   assert.throws(() => validateSpec(tooOldIOS), /minimumIOS 18.0/);
   const noWatchWidget = fixture(); noWatchWidget.app.minimumWatchOS = '26.0'; noWatchWidget.targets.watchWidgets = false; noWatchWidget.targets.watchControls = true; noWatchWidget.targets.watchComplications = false; noWatchWidget.factory.bundleIdentifiers.watchWidget = null;
@@ -144,9 +144,9 @@ test('IPA inspection requires control evidence to reuse the existing extensions'
     { name: 'Payload/Trail Log.app/Info.plist', content: plist('ca.example.traillog') },
     { name: 'Payload/Trail Log.app/PlugIns/Trail Log Widgets.appex/Info.plist', content: plist('ca.example.traillog.widget') },
     { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/Info.plist', content: plist('ca.example.traillog.watchapp') },
-    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/PlugIns/Trail Log Watch Widgets.appex/Info.plist', content: plist('ca.example.traillog.watchwidget') }
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/PlugIns/Trail Log Watch Widgets.appex/Info.plist', content: plist('ca.example.traillog.watchapp.widget') }
   ]);
-  assert.equal(JSON.parse(run('inspect-ipa.js', ['--ipa', ipa, '--targets', targetManifest])).targetEvidence.watchControlExtension, 'ca.example.traillog.watchwidget');
+  assert.equal(JSON.parse(run('inspect-ipa.js', ['--ipa', ipa, '--targets', targetManifest])).targetEvidence.watchControlExtension, 'ca.example.traillog.watchapp.widget');
   const badManifest = JSON.parse(fs.readFileSync(targetManifest, 'utf8')); badManifest.targetEvidence.iphoneControlExtension = 'ca.example.other';
   const badTargets = path.join(directory, 'bad-targets.json'); fs.writeFileSync(badTargets, JSON.stringify(badManifest));
   const result = spawnSync(process.execPath, [path.join(tools, 'inspect-ipa.js'), '--ipa', ipa, '--targets', badTargets], { cwd: root, encoding: 'utf8' });
@@ -157,13 +157,13 @@ test('IPA inspection requires the generated host, widget, and Watch product path
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-ipa-'));
   const targetManifest = path.join(directory, '.factory-targets.json');
   const generated = fixture();
-  fs.writeFileSync(targetManifest, JSON.stringify({ app: generated.app, targets: generated.targets, bundleIds: { iphone: generated.app.bundleId, widget: `${generated.app.bundleId}.widget`, watch: `${generated.app.bundleId}.watchapp`, watchWidget: `${generated.app.bundleId}.watchwidget` }, targetEvidence: { iphoneWidgetExtension: `${generated.app.bundleId}.widget`, iphoneControlExtension: null, watchWidgetExtension: `${generated.app.bundleId}.watchwidget`, watchControlExtension: null } }));
+  fs.writeFileSync(targetManifest, JSON.stringify({ app: generated.app, targets: generated.targets, bundleIds: { iphone: generated.app.bundleId, widget: `${generated.app.bundleId}.widget`, watch: `${generated.app.bundleId}.watchapp`, watchWidget: `${generated.app.bundleId}.watchapp.widget` }, targetEvidence: { iphoneWidgetExtension: `${generated.app.bundleId}.widget`, iphoneControlExtension: null, watchWidgetExtension: `${generated.app.bundleId}.watchapp.widget`, watchControlExtension: null } }));
   const plist = identifier => `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${identifier}</string></dict></plist>`;
   const correct = [
     { name: 'Payload/Trail Log.app/Info.plist', content: plist('ca.example.traillog') },
     { name: 'Payload/Trail Log.app/PlugIns/Trail Log Widgets.appex/Info.plist', content: plist('ca.example.traillog.widget') },
     { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/Info.plist', content: plist('ca.example.traillog.watchapp') },
-    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/PlugIns/Trail Log Watch Widgets.appex/Info.plist', content: plist('ca.example.traillog.watchwidget') }
+    { name: 'Payload/Trail Log.app/Watch/Trail Log Watch.app/PlugIns/Trail Log Watch Widgets.appex/Info.plist', content: plist('ca.example.traillog.watchapp.widget') }
   ];
   const ipa = path.join(directory, 'correct.ipa'); makeZip(ipa, correct);
   assert.equal(JSON.parse(run('inspect-ipa.js', ['--ipa', ipa, '--targets', targetManifest])).ok, true);

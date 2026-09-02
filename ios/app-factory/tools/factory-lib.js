@@ -126,7 +126,7 @@ function bundleIds(spec) {
     iphone: id,
     widget: appleBundleId(id, 'widget'),
     watch: appleBundleId(id, 'watchapp'),
-    watchWidget: appleBundleId(id, 'watchwidget')
+    watchWidget: appleBundleId(appleBundleId(id, 'watchapp'), 'widget')
   };
 }
 function sha256(file) { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'); }

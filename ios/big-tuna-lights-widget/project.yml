@@ -78,7 +78,7 @@ targets:
       path: BigTunaLightsWatchWidget/BigTunaLightsWatchWidget.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights.watchwidget
+        PRODUCT_BUNDLE_IDENTIFIER: ca.yannickmorgans.bigtuna.lights.watchapp.widget
         PRODUCT_NAME: BIG TUNA Lights Watch Widgets
         INFOPLIST_FILE: BigTunaLightsWatchWidget/Info.plist
         SKIP_INSTALL: YES

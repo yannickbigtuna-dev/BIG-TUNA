@@ -68,8 +68,8 @@ jobs:
           test -n "$project"
           # Build all app/extension targets. The target graph records the exact
           # enabled components for subsequent IPA inspection.
-          xcodebuild -project "$project" -target App -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/build-App.log"
-          if node -e "process.exit(require(process.argv[1]).targets.homeScreenWidget ? 0 : 1)" ".factory-build/${APP_SLUG}/.factory-targets.json"; then
+          xcodebuild -project "$project" -target App -configuration Release CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/build-App.log"
+          if node -e "const t=require(process.argv[1]).targets; process.exit(t.homeScreenWidget || t.iphoneControls ? 0 : 1)" ".factory-build/${APP_SLUG}/.factory-targets.json"; then
             xcodebuild -project "$project" -target AppWidget -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/apple-app-factory/logs/build-AppWidget.log"
           fi
           if node -e "process.exit(require(process.argv[1]).targets.watchMode !== 'none' ? 0 : 1)" ".factory-build/${APP_SLUG}/.factory-targets.json"; then

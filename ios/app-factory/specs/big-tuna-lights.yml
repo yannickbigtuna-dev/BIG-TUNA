@@ -52,7 +52,7 @@
       "liveActivityWidget": null,
       "watchApp": "ca.yannickmorgans.bigtuna.lights.watchapp",
       "watchExtension": null,
-      "watchWidget": "ca.yannickmorgans.bigtuna.lights.watchwidget"
+      "watchWidget": "ca.yannickmorgans.bigtuna.lights.watchapp.widget"
     },
     "data": {
       "storageMethod": "app-group-userdefaults",
