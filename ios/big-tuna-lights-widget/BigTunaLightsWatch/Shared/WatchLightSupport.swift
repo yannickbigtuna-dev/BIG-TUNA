@@ -216,5 +216,16 @@ final class WatchLightConnectivity: NSObject, WCSessionDelegate {
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         WatchLightStore.applyPhoneContext(applicationContext)
     }
+
+    #if os(iOS)
+    // The iPhone host's archive graph type-checks this shared connectivity
+    // source for iOS as it embeds the Watch products. These callbacks are
+    // required by WCSessionDelegate on iOS but not on watchOS.
+    func sessionDidBecomeInactive(_ session: WCSession) {}
+
+    func sessionDidDeactivate(_ session: WCSession) {
+        session.activate()
+    }
+    #endif
 }
 #endif
