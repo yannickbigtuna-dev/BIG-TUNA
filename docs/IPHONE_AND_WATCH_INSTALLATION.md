@@ -45,6 +45,8 @@ drag the selected IPA into Sideloadly, choose the connected iPhone and Apple
 Account, and click **Start**. Complete Apple’s trust, 2FA, and Developer Mode
 prompts on the trusted PC/device. If a Watch bundle is not visibly retained or
 installed, stop and record the failure—do not substitute a stripped IPA.
+Add `-VerifyOnly` to print and verify the release without opening Explorer or an
+installer.
 
 ## Data-preserving updates
 

@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory = $true, ParameterSetName = 'Ipa')] [string] $Ipa,
     [string] $ReleaseRoot = $env:APPLE_APP_FACTORY_RELEASE_ROOT,
     [string] $ChecksumPath,
-    [string] $SideloadlyPath = $env:APPLE_APP_FACTORY_SIDELOADLY_PATH
+    [string] $SideloadlyPath = $env:APPLE_APP_FACTORY_SIDELOADLY_PATH,
+    [switch] $VerifyOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,6 +31,14 @@ $expected = (($checksumLine -split '\s+')[0]).ToLowerInvariant()
 $actual = (Get-FileHash -LiteralPath $ipaPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -ne $expected) { throw 'SHA-256 verification failed. Do not open this IPA in Sideloadly.' }
 
+if (Test-Path -LiteralPath $manifestPath) {
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $releaseLabel = "$($manifest.app.name) $($manifest.app.version) ($($manifest.app.build))"
+} else { $releaseLabel = (Split-Path -Leaf $ipaPath) }
+Write-Host "Verified ${releaseLabel}: $actual"
+Write-Host "IPA: $ipaPath"
+if ($VerifyOnly) { return }
+
 Start-Process explorer.exe -ArgumentList "/select,`"$ipaPath`""
 
 if ([string]::IsNullOrWhiteSpace($SideloadlyPath)) {
@@ -47,10 +56,5 @@ if (-not $SideloadlyPath -or -not (Test-Path -LiteralPath $SideloadlyPath)) {
 # not pass an IPA, Apple Account, password, or two-factor code to it. Explorer
 # selects the verified file and Sideloadly opens its normal GUI for the one final click.
 Start-Process -FilePath $SideloadlyPath
-if (Test-Path -LiteralPath $manifestPath) {
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $releaseLabel = "$($manifest.app.name) $($manifest.app.version) ($($manifest.app.build))"
-} else { $releaseLabel = (Split-Path -Leaf $ipaPath) }
-Write-Host "Verified ${releaseLabel}: $actual"
 Write-Host 'In Sideloadly: drag the selected IPA into the app, choose your connected iPhone, then complete Apple-required sign-in and click Start.'
 Write-Host 'This launcher never supplies Apple credentials and cannot bypass trust, Developer Mode, or seven-day renewal prompts.'
