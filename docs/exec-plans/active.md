@@ -679,5 +679,5 @@ Control Center control.
 - [x] Write the iPhone-only implementation specification and disjoint ownership.
 - [x] Implement and review the target/source changes.
 - [x] Run local and independent acceptance checks.
-- [ ] Build and inspect the exact iPhone-only IPA.
-- [ ] Open the verified artifact, commit, and push without server restart.
+- [x] Build and inspect the exact iPhone-only IPA.
+- [x] Open the verified artifact, commit, and push without server restart.

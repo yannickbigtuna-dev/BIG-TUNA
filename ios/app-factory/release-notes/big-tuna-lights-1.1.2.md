@@ -1,6 +1,6 @@
 # BIG TUNA Lights 1.1.2 (4)
 
-Release date: pending build completion
+Release date: 2026-09-03
 
 ## Changed
 
@@ -21,7 +21,7 @@ Release date: pending build completion
 ## Compatibility
 
 - Minimum iOS: 18.0
-- SHA-256: pending unsigned CI build
+- SHA-256: `bd7c0cdf1efd2646e30bfd16327945986e084a126e00138281401df1d8adde19`
 
 ## Installation and free-signing notice
 
@@ -41,7 +41,7 @@ recorded.
 
 ## Validation status
 
-- CI build: pending
-- IPA target inspection: pending
+- CI build: passed ([run 33698060467](https://github.com/yannickbigtuna-dev/BIG-TUNA/actions/runs/33698060467))
+- IPA target inspection: passed
 - iPhone physical test: not tested
 - Home Screen widget and Control Center discovery: not tested
