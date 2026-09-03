@@ -125,7 +125,6 @@ enum BigTunaLightsAPI {
                 let message = parseErrorMessage(from: data) ?? "Request failed with status \(http.statusCode)."
                 if http.statusCode == 401 {
                     SharedSettings.clearSession()
-                    IPhoneWatchConnectivity.shared.publishCurrentContext()
                     throw BigTunaLightsAPIError.notAuthenticated
                 }
                 throw BigTunaLightsAPIError.server(message)

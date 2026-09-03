@@ -622,3 +622,62 @@ bundle identifiers for the host identifier Sideloadly derives while signing.
 - [x] Run local validation and independent acceptance review.
 - [x] Build, inspect, download, and open the prepared artifact.
 - [x] Commit and push; do not deploy or restart the website.
+
+## Active Extension — iPhone-only widget/control release
+
+### Goal and observed failure
+
+Replace the rejected Watch-bearing 1.1.1 handoff with BIG TUNA Lights 1.1.2
+(4), containing only the iPhone host and its iOS WidgetKit extension. Sideloadly
+reported an invalid companion-app bundle identifier; the user explicitly chose
+to remove Watch delivery and retain only the iPhone Home Screen widget and
+Control Center control.
+
+### Scope, constraints, and ownership
+
+- Keep the canonical iPhone ID, iOS widget/control extension ID, App Group,
+  storage schema, authentication flow, and Lights API unchanged.
+- Disable every Watch target and WatchConnectivity toggle in the active spec.
+  Preserve the previously released Watch IDs as retired identity metadata so
+  they cannot be reassigned accidentally.
+- Keep dormant Watch sources in Git for rollback, but do not compile or embed
+  them. The shipped Xcode target graph must contain only `App` and `AppWidget`.
+- Product/release implementer owns the durable spec, `project.yml`, product
+  README, 1.1.2 release notes, and focused factory-test assertions. iPhone-code
+  implementer owns only the iPhone/widget/shared Swift call sites that currently
+  invoke WatchConnectivity. Root owns this plan, context update, integration,
+  diff review, workflow dispatch/download, artifact inspection, commits, pushes,
+  and Explorer handoff.
+- Never commit or print signing credentials, the locally observed Team suffix,
+  certificates, profiles, keys, sessions, or device identifiers. The prepared
+  artifact remains noncanonical and cannot deploy as `latest`.
+
+### Approach and acceptance checks
+
+1. Bump the spec/project to 1.1.2 build 4; select iPhone, Home Screen widget,
+   and iPhone control only; null active Watch bundle slots while recording their
+   stable retired identities.
+2. Remove Watch targets/dependencies from `project.yml`, remove iPhone/widget
+   WatchConnectivity calls, and ensure the dormant bridge is excluded from the
+   two active targets.
+3. Validate the spec and generated evidence: exactly two Xcode targets, one
+   iOS extension used for both widget and control, no Watch target evidence.
+4. Run focused factory checks and the complete Node regression suite; review
+   the combined diff and run an independent acceptance pass.
+5. Commit/push, run the macOS factory with transient Sideloadly preparation,
+   and require compilation plus archive inspection to pass.
+6. Download and verify SHA-256, binary plist identities, extension containment,
+   WidgetKit and App Intents metadata, exactly one `.appex`, and no `Watch/`
+   payload. Open the verified 1.1.2 IPA in Explorer.
+7. Do not claim physical success until Sideloadly installs it and the iPhone
+   widget gallery and Control Center both show BIG TUNA Lights.
+
+### Progress
+
+- [x] Reproduce the failure from the user's exact Sideloadly error and identify
+      the embedded companion Watch bundle as the rejected component.
+- [x] Write the iPhone-only implementation specification and disjoint ownership.
+- [x] Implement and review the target/source changes.
+- [x] Run local and independent acceptance checks.
+- [ ] Build and inspect the exact iPhone-only IPA.
+- [ ] Open the verified artifact, commit, and push without server restart.

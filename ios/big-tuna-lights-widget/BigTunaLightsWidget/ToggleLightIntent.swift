@@ -26,7 +26,6 @@ struct ToggleLightIntent: AppIntent {
             commandId: UUID()
         )
         SharedSettings.saveLastState(state)
-        IPhoneWatchConnectivity.shared.publishCurrentContext()
         WidgetCenter.shared.reloadAllTimelines()
         if #available(iOS 18.0, *) { ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsControl") }
         return .result()
@@ -49,7 +48,6 @@ struct SetControlLightIntent: SetValueIntent {
         }
         let state = try await BigTunaLightsAPI.setPhysicalLight(on: value, token: token, commandId: UUID())
         SharedSettings.saveLastState(state)
-        IPhoneWatchConnectivity.shared.publishCurrentContext()
         WidgetCenter.shared.reloadAllTimelines()
         ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsControl")
         return .result()

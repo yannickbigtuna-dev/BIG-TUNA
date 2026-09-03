@@ -8,8 +8,8 @@
     "iconSource": "ios/big-tuna-lights-widget/Assets.xcassets/AppIcon.appiconset",
     "minimumIOS": "18.0",
     "minimumWatchOS": "26.0",
-    "version": "1.1.1",
-    "build": 3,
+    "version": "1.1.2",
+    "build": 4,
     "theme": {
       "accentHex": "#E7B84B",
       "backgroundHex": "#111111"
@@ -21,11 +21,11 @@
     "lockScreenWidget": false,
     "liveActivities": false,
     "iphoneControls": true,
-    "watchMode": "companion",
-    "watchWidgets": true,
-    "watchComplications": true,
-    "watchControls": true,
-    "watchConnectivity": true
+    "watchMode": "none",
+    "watchWidgets": false,
+    "watchComplications": false,
+    "watchControls": false,
+    "watchConnectivity": false
   },
   "capabilities": {
     "appGroups": true,
@@ -38,7 +38,7 @@
     "backgroundRefresh": false,
     "siri": false,
     "haptics": false,
-    "watchConnectivity": true
+    "watchConnectivity": false
   },
   "appGroupId": "group.ca.yannickmorgans.bigtuna.lights",
   "privacy": {},
@@ -50,9 +50,16 @@
       "homeWidget": "ca.yannickmorgans.bigtuna.lights.widget",
       "lockScreenWidget": null,
       "liveActivityWidget": null,
+      "watchApp": null,
+      "watchExtension": null,
+      "watchWidget": null
+    },
+    "retiredBundleIdentifiers": {
       "watchApp": "ca.yannickmorgans.bigtuna.lights.watchapp",
       "watchExtension": null,
-      "watchWidget": "ca.yannickmorgans.bigtuna.lights.watchapp.widget"
+      "watchWidget": "ca.yannickmorgans.bigtuna.lights.watchapp.widget",
+      "retiredAt": "2026-09-02",
+      "reason": "The owner explicitly authorized removal of the unverified Apple Watch companion targets after Sideloadly reported an invalid companion app bundle identifier."
     },
     "data": {
       "storageMethod": "app-group-userdefaults",
@@ -70,10 +77,10 @@
       "releaseRoot": "data/apple-app-factory/releases"
     },
     "lastSuccessfulBuild": {
-      "status": "unsigned-ci-build-passed",
-      "ciRunUrl": "https://github.com/yannickbigtuna-dev/BIG-TUNA/actions/runs/33696632964",
-      "completedAt": "2026-09-02T23:48:36Z",
-      "ipaSha256": "bbfecaf44e6ac2fe85d8650c1aca783f113507224cc999136503e1b22fd6f2e7"
+      "status": "pending",
+      "ciRunUrl": null,
+      "completedAt": null,
+      "ipaSha256": null
     },
     "physicalAcceptance": {
       "iphone": "not-tested",
@@ -91,7 +98,7 @@
       "The Home Screen uses the smallest supported systemSmall widget; iPhone does not offer an app-icon-sized 1x1 Home Screen WidgetKit family.",
       "Without APNs, WidgetKit controls refresh immediately after their own actions but external state changes may remain cached until the system permits another refresh.",
       "A revocable Lights-only token is shared through the App Group so extensions can act without opening the app; passwords and full-site sessions are never stored.",
-      "Apple Watch installation, controls, complications, and seven-day refresh remain unverified until recorded physical acceptance passes."
+      "Apple Watch companion targets were explicitly removed from this iPhone-only release after Sideloadly rejected the former companion bundle identifier; their former identifiers are retained above only as retired identity records."
     ]
   }
 }

@@ -133,6 +133,37 @@ test('factory can copy an allowlisted product source project without overwriting
   assert.throws(() => validateSpec(unsafe), /repository-relative directory below ios/);
 });
 
+test('BIG TUNA Lights current release is iPhone-only while retaining widget and Control Center evidence', () => {
+  const specPath = path.join(root, 'ios', 'app-factory', 'specs', 'big-tuna-lights.yml');
+  const spec = JSON.parse(fs.readFileSync(specPath, 'utf8'));
+  assert.doesNotThrow(() => validateSpec(spec));
+  assert.equal(spec.app.version, '1.1.2');
+  assert.equal(spec.app.build, 4);
+  assert.equal(spec.targets.watchMode, 'none');
+  assert.equal(spec.targets.watchWidgets, false);
+  assert.equal(spec.targets.watchComplications, false);
+  assert.equal(spec.targets.watchControls, false);
+  assert.equal(spec.targets.watchConnectivity, false);
+  assert.equal(spec.capabilities.watchConnectivity, false);
+  assert.equal(spec.factory.bundleIdentifiers.watchApp, null);
+  assert.equal(spec.factory.bundleIdentifiers.watchExtension, null);
+  assert.equal(spec.factory.bundleIdentifiers.watchWidget, null);
+  assert.equal(spec.factory.retiredBundleIdentifiers.watchApp, 'ca.yannickmorgans.bigtuna.lights.watchapp');
+  assert.equal(spec.factory.retiredBundleIdentifiers.watchWidget, 'ca.yannickmorgans.bigtuna.lights.watchapp.widget');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-big-tuna-lights-'));
+  const output = path.join(directory, 'product'); run('generate-project.js', ['--spec', specPath, '--output', output]);
+  const targets = JSON.parse(fs.readFileSync(path.join(output, '.factory-targets.json'), 'utf8'));
+  assert.equal(targets.targetEvidence.iphoneWidgetExtension, 'ca.yannickmorgans.bigtuna.lights.widget');
+  assert.equal(targets.targetEvidence.iphoneControlExtension, 'ca.yannickmorgans.bigtuna.lights.widget');
+  assert.equal(targets.targetEvidence.watchWidgetExtension, null);
+  assert.equal(targets.targetEvidence.watchControlExtension, null);
+  const project = fs.readFileSync(path.join(output, 'project.yml'), 'utf8');
+  assert.match(project, /^  App:\r?$/m);
+  assert.match(project, /^  AppWidget:\r?$/m);
+  assert.doesNotMatch(project, /AppWatch|watchOS|WKCompanionAppBundleIdentifier/);
+  assert.match(project, /excludes:\r?\n\s+- IPhoneWatchConnectivity\.swift/);
+});
+
 test('IPA inspection requires control evidence to reuse the existing extensions', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-app-factory-control-ipa-'));
   const spec = fixture(); spec.app.minimumIOS = '18.0'; spec.app.minimumWatchOS = '26.0'; spec.targets.iphoneControls = true; spec.targets.watchControls = true;

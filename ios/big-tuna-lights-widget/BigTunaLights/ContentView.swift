@@ -172,7 +172,6 @@ final class LightsViewModel: ObservableObject {
             statusText = state.recentlyPolled ? "Ready." : "Relay has not checked in recently."
         } catch BigTunaLightsAPIError.notAuthenticated {
             SharedSettings.clearSession()
-            IPhoneWatchConnectivity.shared.publishCurrentContext()
             username = ""
             statusText = "Your session expired. Sign in again."
         } catch {
@@ -189,7 +188,6 @@ final class LightsViewModel: ObservableObject {
             let session = try await BigTunaLightsAPI.login(username: username, password: password)
             password = ""
             SharedSettings.saveSession(session)
-            IPhoneWatchConnectivity.shared.publishCurrentContext()
             WidgetCenter.shared.reloadAllTimelines()
             await refresh()
         } catch { statusText = error.localizedDescription }
@@ -198,7 +196,6 @@ final class LightsViewModel: ObservableObject {
     func logout() async {
         let token = SharedSettings.sessionToken
         SharedSettings.clearSession()
-        IPhoneWatchConnectivity.shared.publishCurrentContext()
         username = ""
         password = ""
         statusText = "Signed out."
@@ -224,7 +221,6 @@ final class LightsViewModel: ObservableObject {
             WidgetCenter.shared.reloadAllTimelines()
         } catch BigTunaLightsAPIError.notAuthenticated {
             SharedSettings.clearSession()
-            IPhoneWatchConnectivity.shared.publishCurrentContext()
             username = ""
             statusText = "Your session expired. Sign in again."
         } catch { statusText = error.localizedDescription }
@@ -235,7 +231,6 @@ final class LightsViewModel: ObservableObject {
         hasConfirmedState = true
         relayRecentlyActive = state.recentlyPolled
         SharedSettings.saveLastState(state)
-        IPhoneWatchConnectivity.shared.publishCurrentContext()
         if #available(iOS 18.0, *) {
             ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsControl")
         }

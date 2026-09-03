@@ -1,14 +1,14 @@
 # BIG TUNA Lights iOS Widget
 
 Native iPhone controller for BIG TUNA Lights. It mirrors the wall switch on the
-website, with a 2x2 Home Screen widget and an iOS Control Center control. The
+website, with a Home Screen widget and an iOS Control Center control. The
 app signs in to `https://yannickmorgans.ca`; its App Group shares a revocable
 session and the last confirmed state with its extension. Passwords are never
 stored.
 
 ## Requirements
 
-- macOS with Xcode 26 or newer (the Watch control requires the watchOS 26 SDK)
+- macOS with Xcode 16 or newer
 - iOS 18 or newer for the interactive widget and Control Center control
 - XcodeGen
 - An Apple Developer account with this App Group enabled:
@@ -28,16 +28,18 @@ xcodegen generate
 open BigTunaLights.xcodeproj
 ```
 
-In Xcode, set the development team for all four targets, confirm the App Group
-is enabled for the app, widget, Watch app, and Watch widget extension, then run
-the `App` scheme on an iPhone or simulator. Watch delivery still requires the
-paired-device acceptance run documented in `docs/IPHONE_AND_WATCH_INSTALLATION.md`.
+In Xcode, set the development team for the two targets (`App` and `AppWidget`),
+confirm the App Group is enabled for both, then run the `App` scheme on an
+iPhone or simulator. This project intentionally contains no Apple Watch target
+or companion app. The Sideloadly companion-bundle error authorized this
+iPhone-only target set; physical widget and Control Center discovery still need
+to be tested on the signing iPhone.
 
 ## Behavior
 
 - Login exchanges the temporary website session at `POST /api/lights/native/v1/session`
-  for a revocable Lights-only bearer token. Only that least-privilege token is
-  shared with widgets and Watch. The native contract uses physical state:
+  for a revocable Lights-only bearer token shared only with the iPhone widget.
+  The native contract uses physical state:
   `PUT` sends `{ "physicalOn": Bool, "commandId": UUID }` and returns the
   authoritative state `{ physicalOn, reportedPhysicalOn, recentlyPolled,
   updatedAt, revision }`.
@@ -57,6 +59,6 @@ paired-device acceptance run documented in `docs/IPHONE_AND_WATCH_INSTALLATION.m
 Use logout in the app to clear the shared session and disable widgets/controls.
 The App Group identifier remains `group.ca.yannickmorgans.bigtuna.lights`.
 
-The companion Watch app and Watch widget/control targets are generated from the
-same project but still require physical paired-Watch signing and installation
-validation before they can be claimed as supported.
+The app is not physically validated yet. After Sideloadly installs it, add the
+Home Screen widget and Control Center control on the iPhone and record the
+result before claiming device support.
