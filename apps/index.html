@@ -255,6 +255,51 @@
   }
   .download-item:hover, .download-item:focus-visible { color: var(--text); background: rgba(255,255,255,0.06); outline: none; }
 
+  #qr-btn:hover { color: var(--c-indigo); border-color: color-mix(in srgb, var(--c-indigo) 45%, transparent); }
+
+  /* QR creator: the printable white card is deliberately the visual focus. */
+  #qr-modal {
+    width: min(760px, calc(100vw - 24px));
+    max-height: min(700px, calc(100svh - 24px));
+    margin: auto;
+    padding: 0;
+    overflow: auto;
+    color: var(--text);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-3);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+  }
+  #qr-modal::backdrop { background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(5px); }
+  .qr-modal-inner { padding: clamp(20px, 4vw, 32px); }
+  .qr-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-6); text-align: left; }
+  .qr-modal-header h2 { font-size: var(--text-2xl); }
+  .qr-modal-header p { max-width: 42ch; margin-top: var(--space-1); color: var(--text-muted); font-size: var(--text-sm); }
+  .qr-close-btn { width: 36px; height: 36px; flex: 0 0 auto; padding: 0; border: 1px solid var(--glass-border); border-radius: var(--radius-full); background: transparent; color: var(--text-muted); }
+  .qr-close-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+  .qr-close-btn svg { width: 18px; height: 18px; margin: auto; }
+  .qr-creator-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 310px); align-items: center; gap: clamp(20px, 4vw, 36px); }
+  .qr-controls { min-width: 0; text-align: left; }
+  .qr-controls label { display: block; margin-bottom: var(--space-2); color: var(--text); font-size: var(--text-sm); font-weight: var(--weight-bold); }
+  #qr-link { min-height: 46px; }
+  .qr-help { margin-top: var(--space-2); color: var(--text-dim); font-size: var(--text-xs); }
+  .qr-error { min-height: 1.5em; margin-top: var(--space-2); color: var(--danger); font-size: var(--text-xs); }
+  .qr-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+  .qr-actions .btn { min-height: 42px; }
+  .qr-print-card { display: grid; place-items: center; min-height: 0; padding: clamp(14px, 3vw, 22px); background: #fff; border-radius: var(--radius-sm); box-shadow: var(--shadow-2); }
+  #qr-canvas { display: block; width: 100%; max-width: 280px; height: auto; aspect-ratio: 1; background: #fff; image-rendering: pixelated; }
+  .qr-placeholder { padding: 24px; color: #4a4a4a; font-size: var(--text-sm); line-height: 1.4; text-align: center; }
+  .qr-print-card.is-ready .qr-placeholder { display: none; }
+  .qr-print-card.is-empty #qr-canvas { display: none; }
+
+  @media (max-width: 580px) {
+    .qr-creator-layout { grid-template-columns: 1fr; }
+    .qr-print-card { order: -1; }
+    #qr-canvas { max-width: min(100%, 280px); }
+  }
+
   @media (max-width: 600px) {
     body { padding-top: calc(env(safe-area-inset-top, 0px) + 76px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); }
     .logo { font-size: clamp(2.4rem, 13vw, 3rem); }
@@ -340,6 +385,9 @@
 
 <!-- Bottom-right corner tools -->
 <div class="corner-tools">
+  <button id="qr-btn" class="tool-btn" type="button" aria-haspopup="dialog" aria-controls="qr-modal" aria-label="Create QR code" title="Create QR code">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M15 15h2v2h-2zM19 15h2v2h-2zM15 19h2v2h-2zM18 18h3v3h-3z"/></svg>
+  </button>
   <div id="downloads-menu">
     <button id="downloads-btn" class="tool-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Downloads">
       <svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
@@ -358,6 +406,36 @@
     <svg class="ic" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
   </a>
 </div>
+
+<dialog id="qr-modal" aria-labelledby="qr-modal-title">
+  <div class="qr-modal-inner">
+    <header class="qr-modal-header">
+      <div>
+        <h2 id="qr-modal-title">Create a QR code</h2>
+        <p>Paste a web link to make a shareable code. Your link stays in this browser.</p>
+      </div>
+      <button id="qr-close-btn" class="qr-close-btn" type="button" aria-label="Close QR creator">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="qr-creator-layout">
+      <form id="qr-form" class="qr-controls" novalidate>
+        <label for="qr-link">Web link</label>
+        <input id="qr-link" class="field" type="url" inputmode="url" autocomplete="url" maxlength="2048" placeholder="example.com/page" aria-describedby="qr-help qr-error">
+        <p id="qr-help" class="qr-help">Bare domains are saved with https://</p>
+        <p id="qr-error" class="qr-error" role="alert" aria-live="polite"></p>
+        <div class="qr-actions">
+          <button class="btn btn-primary" type="submit">Generate code</button>
+          <button id="qr-export-btn" class="btn btn-ghost" type="button" disabled>Export JPEG</button>
+        </div>
+      </form>
+      <section id="qr-print-card" class="qr-print-card is-empty" aria-label="QR code preview">
+        <canvas id="qr-canvas" width="800" height="800"></canvas>
+        <p class="qr-placeholder">Your QR code will appear here, ready to screenshot or export.</p>
+      </section>
+    </div>
+  </div>
+</dialog>
 
 <script>
   // ── Date ──
@@ -429,6 +507,7 @@
 
 <script src="/auth.js"></script>
 <script src="/strava-challenge.js?v=score-font-20260830"></script>
+<script src="/vendor/qrcode.js"></script>
 <script>
   // Admin Dashboard link — only ever shown to the site owner's account (yannick), same convention as the terminal/lights restrictions.
   if (typeof Auth !== 'undefined' && Auth.onReady) Auth.onReady(user => {
@@ -452,6 +531,98 @@
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') setDownloadsOpen(false);
+  });
+
+  // ── QR creator: generation and export run entirely in this browser. ──
+  const qrButton = document.getElementById('qr-btn');
+  const qrModal = document.getElementById('qr-modal');
+  const qrCloseButton = document.getElementById('qr-close-btn');
+  const qrForm = document.getElementById('qr-form');
+  const qrLink = document.getElementById('qr-link');
+  const qrError = document.getElementById('qr-error');
+  const qrCanvas = document.getElementById('qr-canvas');
+  const qrPrintCard = document.getElementById('qr-print-card');
+  const qrExportButton = document.getElementById('qr-export-btn');
+  let qrGenerated = false;
+
+  function setQrError(message) {
+    qrError.textContent = message;
+    qrLink.setAttribute('aria-invalid', message ? 'true' : 'false');
+  }
+
+  function normaliseQrLink(value) {
+    const trimmed = value.trim();
+    if (!trimmed) throw new Error('Enter a web link to create a QR code.');
+    if (trimmed.length > 2048) throw new Error('Links can be up to 2,048 characters.');
+    if (/\s/.test(trimmed)) throw new Error('Web links cannot include spaces.');
+    const withScheme = /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    let url;
+    try { url = new URL(withScheme); }
+    catch { throw new Error('Enter a complete web link, such as example.com.'); }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Only http and https web links are supported.');
+    if (!url.hostname) throw new Error('Enter a complete web link, such as example.com.');
+    if (url.href.length > 2048) throw new Error('Links can be up to 2,048 characters.');
+    return url.href;
+  }
+
+  function openQrModal() {
+    setDownloadsOpen(false);
+    if (!qrModal.open) qrModal.showModal();
+    window.setTimeout(() => qrLink.focus(), 0);
+  }
+
+  function closeQrModal() {
+    if (qrModal.open) qrModal.close();
+  }
+
+  qrButton.addEventListener('click', openQrModal);
+  qrCloseButton.addEventListener('click', closeQrModal);
+  qrModal.addEventListener('click', event => {
+    if (event.target === qrModal) closeQrModal();
+  });
+  qrModal.addEventListener('cancel', event => {
+    event.preventDefault();
+    closeQrModal();
+  });
+  qrModal.addEventListener('close', () => qrButton.focus());
+  qrLink.addEventListener('input', () => {
+    setQrError('');
+    if (!qrGenerated) return;
+    qrGenerated = false;
+    qrExportButton.disabled = true;
+    qrPrintCard.classList.remove('is-ready');
+    qrPrintCard.classList.add('is-empty');
+  });
+
+  qrForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    let link;
+    try { link = normaliseQrLink(qrLink.value); }
+    catch (error) { setQrError(error.message); qrLink.focus(); return; }
+    try {
+      await QRCode.toCanvas(qrCanvas, link, {
+        width: 800,
+        margin: 4,
+        errorCorrectionLevel: 'M',
+        color: { dark: '#000000', light: '#ffffff' },
+      });
+      qrLink.value = link;
+      qrGenerated = true;
+      qrPrintCard.classList.remove('is-empty');
+      qrPrintCard.classList.add('is-ready');
+      qrExportButton.disabled = false;
+      setQrError('');
+    } catch {
+      setQrError('This link is too long to turn into a QR code. Try a shorter link.');
+    }
+  });
+
+  qrExportButton.addEventListener('click', () => {
+    if (!qrGenerated) return;
+    const download = document.createElement('a');
+    download.href = qrCanvas.toDataURL('image/jpeg', 0.95);
+    download.download = 'qr-code.jpg';
+    download.click();
   });
 </script>
 </body>
