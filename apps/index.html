@@ -289,7 +289,7 @@
   .qr-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
   .qr-actions .btn { min-height: 42px; }
   .qr-print-card { display: grid; place-items: center; min-height: 0; padding: clamp(14px, 3vw, 22px); background: #fff; border-radius: var(--radius-sm); box-shadow: var(--shadow-2); }
-  #qr-canvas { display: block; width: 100%; max-width: 280px; height: auto; aspect-ratio: 1; background: #fff; image-rendering: pixelated; }
+  #qr-canvas { display: block; width: min(100%, 280px) !important; max-width: 280px; height: auto !important; aspect-ratio: 1 / 1; background: #fff; image-rendering: pixelated; }
   .qr-placeholder { padding: 24px; color: #4a4a4a; font-size: var(--text-sm); line-height: 1.4; text-align: center; }
   .qr-print-card.is-ready .qr-placeholder { display: none; }
   .qr-print-card.is-empty #qr-canvas { display: none; }
@@ -297,7 +297,7 @@
   @media (max-width: 580px) {
     .qr-creator-layout { grid-template-columns: 1fr; }
     .qr-print-card { order: -1; }
-    #qr-canvas { max-width: min(100%, 280px); }
+    #qr-canvas { max-width: 280px; }
   }
 
   @media (max-width: 600px) {
@@ -606,6 +606,10 @@
         errorCorrectionLevel: 'M',
         color: { dark: '#000000', light: '#ffffff' },
       });
+      // node-qrcode adds presentation dimensions inline; retain the 800px
+      // bitmap for JPEG export while letting responsive CSS size the preview.
+      qrCanvas.style.removeProperty('width');
+      qrCanvas.style.removeProperty('height');
       qrLink.value = link;
       qrGenerated = true;
       qrPrintCard.classList.remove('is-empty');
