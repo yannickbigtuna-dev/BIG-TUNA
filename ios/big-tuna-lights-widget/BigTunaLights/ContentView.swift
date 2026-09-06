@@ -1,5 +1,8 @@
 import SwiftUI
 import WidgetKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ContentView: View {
     @StateObject private var model = LightsViewModel()
@@ -7,144 +10,87 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            ambientBackground
-
-            VStack(spacing: 22) {
-                Spacer(minLength: 24)
-                switchPlate
-                Text(model.statusText)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(model.physicalOn ? Color.brown.opacity(0.8) : .secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(minHeight: 20)
-                    .padding(.horizontal, 24)
-                accountArea
-                Spacer(minLength: 18)
+            LinearGradient(colors: model.hasConfirmedState && model.physicalOn ? [.orange.opacity(0.26), Color(uiColor: .systemBackground)] : [Color(uiColor: .systemBackground), .black.opacity(0.07)], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 24) {
+                    header
+                    lightControl
+                    statusLine
+                    ScoreStrip(score: model.weeklyScore)
+                    accountArea
+                }.padding(.horizontal, 22).padding(.vertical, 20)
             }
-            .padding(.horizontal, 24)
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.32), value: model.physicalOn)
-        .task {
-            await model.refresh()
-            await model.pollWhileForeground()
-        }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.32), value: model.physicalOn)
+        .task { await model.start() }
         .refreshable { await model.refresh() }
     }
 
-    private var ambientBackground: some View {
-        ZStack {
-            LinearGradient(
-                colors: model.physicalOn ? [Color(red: 0.72, green: 0.57, blue: 0.28), Color(red: 0.35, green: 0.25, blue: 0.12)] : [Color.black, Color(white: 0.12)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            RadialGradient(
-                colors: model.physicalOn ? [.yellow.opacity(0.52), .clear] : [.yellow.opacity(0.08), .clear],
-                center: .center,
-                startRadius: 4,
-                endRadius: 330
-            )
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("LIGHTS").font(.caption.weight(.bold)).tracking(1.5).foregroundStyle(.secondary)
+                Text(model.lightTitle).font(.system(size: 42, weight: .bold, design: .rounded)).contentTransition(.numericText()).accessibilityLabel(model.hasConfirmedState ? "Lights are \(model.lightTitle.lowercased())" : "Light state unavailable")
+            }
+            Spacer()
+            Image(systemName: model.lightSymbol).font(.system(size: 30, weight: .semibold)).foregroundStyle(model.hasConfirmedState && model.physicalOn ? .orange : .secondary).accessibilityHidden(true)
         }
-        .ignoresSafeArea()
     }
 
-    private var switchPlate: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(model.physicalOn ? Color(red: 0.82, green: 0.77, blue: 0.65) : Color(white: 0.23))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(model.physicalOn ? Color(red: 0.63, green: 0.56, blue: 0.43) : Color.white.opacity(0.15), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.44), radius: 22, y: 17)
-
-            VStack {
-                StatusScrew(isActive: model.canControl, label: "Owner access \(model.canControl ? "verified" : "not verified")")
-                Spacer()
-                StatusScrew(isActive: model.relayRecentlyActive, label: "Relay \(model.relayRecentlyActive ? "recently active" : "not recently active")")
+    private var lightControl: some View {
+        Button { Task { await model.toggleLight() } } label: {
+            VStack(spacing: 14) {
+                Image(systemName: model.lightSymbol).font(.system(size: 72, weight: .medium)).symbolEffect(.bounce, value: model.physicalOn)
+                Text(model.isBusy ? "UPDATING" : (model.hasConfirmedState ? (model.physicalOn ? "TURN OFF" : "TURN ON") : "STATE UNKNOWN")).font(.headline.weight(.semibold)).tracking(0.7)
             }
-            .padding(.vertical, 21)
-
-            Button {
-                Task { await model.toggleLight() }
-            } label: {
-                SwitchPaddle(isOn: model.physicalOn, isBusy: model.isBusy)
-            }
-            .buttonStyle(.plain)
-            .disabled(!model.canControl || model.isBusy || !model.hasConfirmedState)
-            .accessibilityLabel("Lights")
-            .accessibilityValue(model.physicalOn ? "On" : "Off")
-            .accessibilityHint(model.canControl ? "Double tap to toggle the lights." : "Sign in as yannick to control the lights.")
+            .foregroundStyle(model.physicalOn ? Color.orange : Color.primary).frame(maxWidth: .infinity, minHeight: 230)
+            .background { RoundedRectangle(cornerRadius: 32, style: .continuous).fill(model.physicalOn ? Color.orange.opacity(0.16) : Color.secondary.opacity(0.09)).overlay { RoundedRectangle(cornerRadius: 32, style: .continuous).stroke(model.physicalOn ? Color.orange.opacity(0.36) : Color.primary.opacity(0.08), lineWidth: 1) } }
+            .overlay(alignment: .topTrailing) { if model.isBusy { ProgressView().padding(20).tint(.orange) } }
         }
-        .frame(width: min(UIScreen.main.bounds.width * 0.62, 210), height: min(UIScreen.main.bounds.width * 0.97, 328))
-        .accessibilityElement(children: .contain)
+        .buttonStyle(LightButtonStyle()).disabled(!model.canControl || model.isBusy || !model.hasConfirmedState)
+        .accessibilityLabel(model.hasConfirmedState ? (model.physicalOn ? "Turn lights off" : "Turn lights on") : "Light state unavailable")
+        .accessibilityValue(model.hasConfirmedState ? "\(model.physicalOn ? "On" : "Off"), \(model.relayRecentlyActive ? "relay responding" : "relay status stale")" : "State unavailable")
+        .accessibilityHint(model.canControl ? "Double tap to change the physical lights." : "Sign in as Yannick to enable light controls.")
     }
 
-    @ViewBuilder
-    private var accountArea: some View {
+    private var statusLine: some View {
+        HStack(spacing: 8) { Image(systemName: model.statusSymbol).foregroundStyle(model.statusTint); Text(model.statusText).font(.subheadline).foregroundStyle(.secondary); Spacer(minLength: 0) }
+            .accessibilityElement(children: .combine).accessibilityLabel("Light status: \(model.statusText)")
+    }
+
+    @ViewBuilder private var accountArea: some View {
         if model.isSignedIn {
-            Button("Log Out") { Task { await model.logout() } }
-                .buttonStyle(.bordered)
-                .tint(model.physicalOn ? .brown : .white)
-                .disabled(model.isBusy)
-                .accessibilityLabel("Log out and disable light controls")
+            Button("Log Out") { Task { await model.logout() } }.buttonStyle(.bordered).disabled(model.isBusy).accessibilityLabel("Log out and disable light controls")
         } else {
-            VStack(spacing: 10) {
-                TextField("Username", text: $model.username)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textContentType(.username)
-                SecureField("Password", text: $model.password)
-                    .textContentType(.password)
-                Button("Sign In") { Task { await model.login() } }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.username.isEmpty || model.password.isEmpty || model.isBusy)
-            }
-            .textFieldStyle(.roundedBorder)
-            .padding(14)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .accessibilityElement(children: .contain)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Owner access").font(.headline)
+                Text("Sign in as Yannick to enable controls on this iPhone, widgets, and Watch.").font(.footnote).foregroundStyle(.secondary)
+                TextField("Username", text: $model.username).textInputAutocapitalization(.never).autocorrectionDisabled().textContentType(.username)
+                SecureField("Password", text: $model.password).textContentType(.password)
+                Button("Sign In") { Task { await model.login() } }.buttonStyle(.borderedProminent).tint(.orange).disabled(model.username.isEmpty || model.password.isEmpty || model.isBusy)
+            }.textFieldStyle(.roundedBorder).padding(18).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 }
 
-private struct StatusScrew: View {
-    let isActive: Bool
-    let label: String
-
+private struct ScoreStrip: View {
+    let score: WeeklyScore?
     var body: some View {
-        Circle()
-            .fill(RadialGradient(
-                colors: isActive ? [.white, .green, Color(red: 0.1, green: 0.35, blue: 0.15)] : [.white.opacity(0.75), .gray, Color(white: 0.25)],
-                center: .topLeading,
-                startRadius: 1,
-                endRadius: 8
-            ))
-            .frame(width: 11, height: 11)
-            .shadow(color: isActive ? .green.opacity(0.75) : .clear, radius: 5)
-            .accessibilityLabel(label)
+        HStack(spacing: 14) {
+            scoreSide("YANNICK", value: score?.yannickScore, tint: .red, aligned: .leading)
+            Text("—").font(.title3.monospacedDigit()).foregroundStyle(.tertiary)
+            scoreSide("EMMA", value: score?.emmaScore, tint: .blue, aligned: .trailing)
+        }.padding(16).frame(maxWidth: .infinity).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(alignment: .bottomLeading) { Text(score.map { "Current week · \($0.dateLabel)\($0.isCached || $0.isStale ? " · last available" : "")" } ?? "Weekly score unavailable").font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.bottom, 7) }
+            .padding(.bottom, 16).accessibilityElement(children: .combine)
+            .accessibilityLabel(score.map { "Current weekly score. Yannick \($0.yannickScore), Emma \($0.emmaScore). \($0.leaderDescription)." } ?? "Weekly score unavailable")
+    }
+    private func scoreSide(_ name: String, value: Int?, tint: Color, aligned: HorizontalAlignment) -> some View {
+        VStack(alignment: aligned, spacing: 3) { Text(name).font(.caption2.weight(.bold)).tracking(0.7).foregroundStyle(tint); Text(value.map(String.init) ?? "–").font(.system(size: 30, weight: .bold, design: .rounded).monospacedDigit()) }.frame(maxWidth: .infinity, alignment: aligned == .leading ? .leading : .trailing)
     }
 }
 
-private struct SwitchPaddle: View {
-    let isOn: Bool
-    let isBusy: Bool
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(LinearGradient(
-                colors: isOn ? [Color(red: 0.93, green: 0.87, blue: 0.72), Color(red: 0.74, green: 0.68, blue: 0.56)] : [Color(white: 0.3), Color(white: 0.16)],
-                startPoint: .top,
-                endPoint: .bottom
-            ))
-            .overlay(alignment: .center) { Rectangle().fill(.black.opacity(0.18)).frame(height: 1).padding(.horizontal, 8) }
-            .overlay { RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(.white.opacity(isOn ? 0.4 : 0.12), lineWidth: 1) }
-            .shadow(color: .black.opacity(0.42), radius: 6, y: 5)
-            .rotation3DEffect(.degrees(isOn ? 13 : -13), axis: (x: 1, y: 0, z: 0), anchor: isOn ? .top : .bottom, perspective: 0.55)
-            .opacity(isBusy ? 0.72 : 1)
-            .frame(width: 94, height: 150)
-    }
-}
+private struct LightButtonStyle: ButtonStyle { func makeBody(configuration: Configuration) -> some View { configuration.label.scaleEffect(configuration.isPressed ? 0.975 : 1) } }
 
 @MainActor
 final class LightsViewModel: ObservableObject {
@@ -155,94 +101,49 @@ final class LightsViewModel: ObservableObject {
     @Published var isBusy = false
     @Published var hasConfirmedState = SharedSettings.lastPhysicalOn != nil
     @Published var relayRecentlyActive = SharedSettings.relayRecentlyActive
-
+    @Published var weeklyScore: WeeklyScore? = SharedSettings.lastWeeklyScore
     var isSignedIn: Bool { SharedSettings.sessionToken != nil }
     var canControl: Bool { SharedSettings.canControlLight }
+    var lightTitle: String { hasConfirmedState ? (physicalOn ? "ON" : "OFF") : "UNKNOWN" }
+    var lightSymbol: String { hasConfirmedState ? (physicalOn ? "lightbulb.fill" : "lightbulb") : "lightbulb.slash" }
+    var statusSymbol: String { isBusy ? "arrow.triangle.2.circlepath" : (relayRecentlyActive ? "checkmark.circle.fill" : "exclamationmark.triangle.fill") }
+    var statusTint: Color { isBusy ? .orange : (relayRecentlyActive ? .green : .secondary) }
 
+    func start() async { async let light: Void = refresh(); async let score: Void = refreshScore(); _ = await (light, score); await pollWhileForeground() }
     func refresh(presentBusy: Bool = true) async {
         guard let token = SharedSettings.sessionToken else { return }
-        if presentBusy { isBusy = true }
-        defer { if presentBusy { isBusy = false } }
-        do {
-            let owner = try await BigTunaLightsAPI.validateOwner(token: token)
-            SharedSettings.setAccessVerified(owner)
-            guard owner else { statusText = "This account cannot control the lights."; return }
-            let state = try await BigTunaLightsAPI.fetchState(token: token)
-            apply(state)
-            statusText = state.recentlyPolled ? "Ready." : "Relay has not checked in recently."
-        } catch BigTunaLightsAPIError.notAuthenticated {
-            SharedSettings.clearSession()
-            username = ""
-            statusText = "Your session expired. Sign in again."
-        } catch {
-            statusText = hasConfirmedState ? "Showing the last confirmed state. Pull to retry." : error.localizedDescription
-        }
+        if presentBusy { isBusy = true }; defer { if presentBusy { isBusy = false } }
+        do { SharedSettings.setAccessVerified(try await BigTunaLightsAPI.validateOwner(token: token)); let state = try await LightService.shared.getCurrentLightState(token: token); apply(state); statusText = state.recentlyPolled ? "Connected and confirmed." : "Last command confirmed; relay has not checked in recently." } catch { handle(error) }
     }
-
+    func refreshScore() async { weeklyScore = try? await ScoreService.shared.getCurrentWeeklyScore() }
     func login() async {
-        guard !username.isEmpty, !password.isEmpty else { return }
-        isBusy = true
-        statusText = "Signing in…"
-        defer { isBusy = false }
-        do {
-            let session = try await BigTunaLightsAPI.login(username: username, password: password)
-            password = ""
-            SharedSettings.saveSession(session)
-            WidgetCenter.shared.reloadAllTimelines()
-            await refresh()
-        } catch { statusText = error.localizedDescription }
+        guard !username.isEmpty, !password.isEmpty else { return }; isBusy = true; statusText = "Signing in…"; defer { isBusy = false }
+        do { let session = try await BigTunaLightsAPI.login(username: username, password: password); password = ""; SharedSettings.saveSession(session); IPhoneWatchConnectivity.shared.publishCurrentContext(); reloadSurfaces(); await refresh(presentBusy: false) } catch { handle(error) }
     }
-
-    func logout() async {
-        let token = SharedSettings.sessionToken
-        SharedSettings.clearSession()
-        username = ""
-        password = ""
-        statusText = "Signed out."
-        WidgetCenter.shared.reloadAllTimelines()
-        if #available(iOS 18.0, *) {
-            ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsControl")
-        }
-        if let token { await BigTunaLightsAPI.logout(token: token) }
-    }
-
+    func logout() async { let token = SharedSettings.sessionToken; SharedSettings.clearSession(); IPhoneWatchConnectivity.shared.publishCurrentContext(); username = ""; password = ""; statusText = "Signed out. Controls are disabled."; reloadSurfaces(); if let token { await BigTunaLightsAPI.logout(token: token) } }
     func toggleLight() async {
-        guard let token = SharedSettings.sessionToken, canControl, hasConfirmedState else {
-            statusText = "Sign in as yannick to control the light."
-            return
-        }
-        isBusy = true
-        statusText = "Setting light…"
-        defer { isBusy = false }
-        do {
-            let state = try await BigTunaLightsAPI.setPhysicalLight(on: !physicalOn, token: token)
-            apply(state)
-            statusText = state.recentlyPolled ? "Ready." : "Light changed; relay has not checked in recently."
-            WidgetCenter.shared.reloadAllTimelines()
-        } catch BigTunaLightsAPIError.notAuthenticated {
+        guard let token = SharedSettings.sessionToken, canControl, hasConfirmedState else { statusText = "Sign in as Yannick and refresh a confirmed state first."; return }
+        let previous = physicalOn; let target = !previous; physicalOn = target; isBusy = true; statusText = "Updating light…"; defer { isBusy = false }
+        do { let result = try await LightService.shared.setLightState(target, token: token); apply(result.state); statusText = result.verification == .verified ? "Light confirmed." : "Light changed, but verification is unavailable."; haptic(success: true) } catch { physicalOn = previous; handle(error); haptic(success: false) }
+    }
+    private func apply(_ state: LightState) { physicalOn = state.physicalOn; hasConfirmedState = true; relayRecentlyActive = state.recentlyPolled; SharedSettings.saveLastState(state); IPhoneWatchConnectivity.shared.publishCurrentContext(); reloadSurfaces() }
+    private func handle(_ error: Error) {
+        if case BigTunaLightsAPIError.notAuthenticated = error {
             SharedSettings.clearSession()
+            IPhoneWatchConnectivity.shared.publishCurrentContext()
+            reloadSurfaces()
             username = ""
             statusText = "Your session expired. Sign in again."
-        } catch { statusText = error.localizedDescription }
-    }
-
-    private func apply(_ state: LightState) {
-        physicalOn = state.physicalOn
-        hasConfirmedState = true
-        relayRecentlyActive = state.recentlyPolled
-        SharedSettings.saveLastState(state)
-        if #available(iOS 18.0, *) {
-            ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsControl")
+        } else {
+            statusText = hasConfirmedState ? "\(error.localizedDescription) Showing the last confirmed state." : error.localizedDescription
         }
     }
-
-    /// While this screen is visible, reflect website/HomeKit/external changes
-    /// without putting the switch into a busy state or re-showing loading UI.
-    func pollWhileForeground() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(8))
-            guard !Task.isCancelled, isSignedIn, !isBusy else { continue }
-            await refresh(presentBusy: false)
-        }
+    private func reloadSurfaces() { WidgetCenter.shared.reloadAllTimelines(); if #available(iOS 18.0, *) { ControlCenter.shared.reloadControls(ofKind: "YannickLightsControl") } }
+    private func haptic(success: Bool) {
+        #if canImport(UIKit)
+        if success { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+        else { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+        #endif
     }
+    private func pollWhileForeground() async { while !Task.isCancelled { try? await Task.sleep(for: .seconds(30)); guard !Task.isCancelled, isSignedIn, !isBusy else { continue }; await refresh(presentBusy: false) } }
 }

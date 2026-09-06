@@ -15,6 +15,7 @@ enum SharedSettings {
         static let reportedPhysicalOn = "reportedPhysicalOn"
         static let recentlyPolled = "recentlyPolled"
         static let lastRelayHeartbeatAt = "lastRelayHeartbeatAt"
+        static let weeklyScore = "weeklyScore"
     }
 
     /// Falling back to standard defaults would split app and extension state
@@ -34,7 +35,8 @@ enum SharedSettings {
     }
 
     /// A cached username alone must never authorize a widget action. This flag
-    /// is set only after the active token is checked with `/api/auth/me`.
+    /// is set only after the active scoped token succeeds against the native
+    /// Lights state endpoint.
     static var canControlLight: Bool {
         accessVerified && username?.lowercased() == "yannick" && sessionToken != nil
     }
@@ -83,5 +85,18 @@ enum SharedSettings {
     static var relayRecentlyActive: Bool {
         guard let heartbeat = lastRelayHeartbeatAt else { return false }
         return Date().timeIntervalSince(heartbeat) < 6
+    }
+
+    static var lastWeeklyScore: WeeklyScore? {
+        guard let data = store?.data(forKey: Key.weeklyScore) else { return nil }
+        return try? JSONDecoder().decode(WeeklyScore.self, from: data)
+    }
+
+    /// Scores are public, compact data. Keeping only the current successful
+    /// response lets widgets remain useful through a temporary outage without
+    /// retaining any Strava credential or activity history.
+    static func saveLastWeeklyScore(_ score: WeeklyScore) {
+        guard let data = try? JSONEncoder().encode(score) else { return }
+        store?.set(data, forKey: Key.weeklyScore)
     }
 }

@@ -2,10 +2,10 @@ import AppIntents
 import WidgetKit
 
 /// Used by the Home Screen widget and Control Center. It deliberately carries
-/// a physical target value rather than asking the server to "toggle".
+/// a physical target value, giving retries a safe idempotent server command.
 struct ToggleLightIntent: AppIntent {
-    static var title: LocalizedStringResource = "Set BIG TUNA Lights"
-    static var description = IntentDescription("Sets the BIG TUNA light to the selected state.")
+    static var title: LocalizedStringResource = "Set Yannick Lights"
+    static var description = IntentDescription("Sets Yannick's physical light to the selected state.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Turn lights on") var targetPhysicalOn: Bool
@@ -20,21 +20,16 @@ struct ToggleLightIntent: AppIntent {
         guard let token = SharedSettings.sessionToken, SharedSettings.canControlLight else {
             throw BigTunaLightsAPIError.notAuthenticated
         }
-        let state = try await BigTunaLightsAPI.setPhysicalLight(
-            on: targetPhysicalOn,
-            token: token,
-            commandId: UUID()
-        )
-        SharedSettings.saveLastState(state)
+        _ = try await LightService.shared.setLightState(targetPhysicalOn, token: token)
         WidgetCenter.shared.reloadAllTimelines()
-        if #available(iOS 18.0, *) { ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsControl") }
+        if #available(iOS 18.0, *) { ControlCenter.shared.reloadControls(ofKind: "YannickLightsControl") }
         return .result()
     }
 }
 
 @available(iOS 18.0, *)
 struct SetControlLightIntent: SetValueIntent {
-    static var title: LocalizedStringResource = "Set BIG TUNA Lights"
+    static var title: LocalizedStringResource = "Set Yannick Lights"
     static var openAppWhenRun = false
 
     @Parameter(title: "Turn lights on") var value: Bool
@@ -46,10 +41,9 @@ struct SetControlLightIntent: SetValueIntent {
         guard let token = SharedSettings.sessionToken, SharedSettings.canControlLight else {
             throw BigTunaLightsAPIError.notAuthenticated
         }
-        let state = try await BigTunaLightsAPI.setPhysicalLight(on: value, token: token, commandId: UUID())
-        SharedSettings.saveLastState(state)
+        _ = try await LightService.shared.setLightState(value, token: token)
         WidgetCenter.shared.reloadAllTimelines()
-        ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsControl")
+        ControlCenter.shared.reloadControls(ofKind: "YannickLightsControl")
         return .result()
     }
 }

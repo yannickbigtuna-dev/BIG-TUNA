@@ -1,49 +1,61 @@
 import SwiftUI
 import WidgetKit
 
-struct LightEntry: TimelineEntry {
+struct LightWidgetEntry: TimelineEntry {
     let date: Date
     let status: LightWidgetStatus
 }
 
 enum LightWidgetStatus {
-    case ready(LightState)
+    case confirmed(LightState)
     case stale(physicalOn: Bool, updatedAt: String?)
-    case unavailable(String)
+    case unavailable(message: String)
+
+    var physicalOn: Bool? {
+        switch self {
+        case .confirmed(let state): return state.physicalOn
+        case .stale(let physicalOn, _): return physicalOn
+        case .unavailable: return nil
+        }
+    }
+
+    var isConfirmed: Bool {
+        if case .confirmed = self { return true }
+        return false
+    }
 }
 
 struct LightTimelineProvider: TimelineProvider {
-    func placeholder(in context: Context) -> LightEntry {
-        LightEntry(date: .now, status: cachedStatus())
+    func placeholder(in context: Context) -> LightWidgetEntry {
+        LightWidgetEntry(date: .now, status: cachedStatus())
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (LightEntry) -> Void) {
-        completion(LightEntry(date: .now, status: cachedStatus()))
+    func getSnapshot(in context: Context, completion: @escaping (LightWidgetEntry) -> Void) {
+        completion(LightWidgetEntry(date: .now, status: cachedStatus()))
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<LightEntry>) -> Void) {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<LightWidgetEntry>) -> Void) {
         Task {
-            let entry = LightEntry(date: .now, status: await fetchStatus())
+            let entry = LightWidgetEntry(date: .now, status: await refreshedStatus())
             completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(15 * 60))))
         }
     }
 
     private func cachedStatus() -> LightWidgetStatus {
-        if let physicalOn = SharedSettings.lastPhysicalOn {
-            return .stale(physicalOn: physicalOn, updatedAt: SharedSettings.lastUpdatedAt)
+        guard let physicalOn = SharedSettings.lastPhysicalOn else {
+            return .unavailable(message: SharedSettings.sessionToken == nil ? "Open Yannick Lights to sign in." : "Light state unavailable.")
         }
-        return .unavailable(SharedSettings.sessionToken == nil ? "Sign in in the app." : "Checking light state…")
+        return .stale(physicalOn: physicalOn, updatedAt: SharedSettings.lastUpdatedAt)
     }
 
-    private func fetchStatus() async -> LightWidgetStatus {
+    private func refreshedStatus() async -> LightWidgetStatus {
         guard let token = SharedSettings.sessionToken, SharedSettings.canControlLight else { return cachedStatus() }
         do {
-            let state = try await BigTunaLightsAPI.fetchState(token: token)
-            SharedSettings.saveLastState(state)
-            return .ready(state)
+            let state = try await LightService.shared.getCurrentLightState(token: token)
+            return .confirmed(state)
         } catch BigTunaLightsAPIError.notAuthenticated {
             SharedSettings.clearSession()
-            return .unavailable("Session expired. Open the app.")
+            return .unavailable(message: "Session expired. Open Yannick Lights.")
         } catch {
             return cachedStatus()
         }
@@ -51,101 +63,110 @@ struct LightTimelineProvider: TimelineProvider {
 }
 
 struct BigTunaLightsWidgetView: View {
-    let entry: LightEntry
+    let entry: LightWidgetEntry
+    @Environment(\.widgetFamily) private var family
+
+    private var physicalOn: Bool? { entry.status.physicalOn }
+    private var isOn: Bool { physicalOn == true }
+    private var canControl: Bool { entry.status.isConfirmed && SharedSettings.canControlLight }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Image(systemName: physicalOn ? "lightbulb.fill" : "lightbulb")
-                    .font(.title2.weight(.bold))
-                Spacer()
-                if canControl {
-                    Button(intent: ToggleLightIntent(targetPhysicalOn: !physicalOn)) {
-                        Image(systemName: physicalOn ? "power.circle.fill" : "power.circle")
-                            .font(.title2.weight(.bold))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(physicalOn ? "Turn lights off" : "Turn lights on")
-                }
+                Image(systemName: lightSymbol)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(physicalOn == nil ? .secondary : (isOn ? .yellow : .secondary))
+                    .accessibilityLabel("Yannick Lights")
+                Spacer(minLength: 8)
+                statusPill
             }
-            Spacer(minLength: 0)
-            Text(physicalOn ? "Light On" : "Light Off")
-                .font(.headline.weight(.bold))
-                .lineLimit(1)
-            Text(detail)
+            Spacer(minLength: family == .systemSmall ? 8 : 14)
+            Text(statusTitle)
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Text(detailText)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
+                .lineLimit(1)
+                .padding(.top, 2)
+            Spacer(minLength: 8)
+            if canControl {
+                Button(intent: ToggleLightIntent(targetPhysicalOn: !isOn)) {
+                    Label(isOn ? "Turn Off" : "Turn On", systemImage: isOn ? "power" : "lightbulb.fill")
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(isOn ? Color.yellow.opacity(0.22) : Color.primary.opacity(0.09), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isOn ? "Turn lights off" : "Turn lights on")
+                .accessibilityHint("Controls the physical light without opening the app")
+            } else {
+                Label(unavailableActionText, systemImage: "exclamationmark.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
-        .containerBackground(for: .widget) {
-            LinearGradient(
-                colors: physicalOn ? [.yellow.opacity(0.65), .orange.opacity(0.32)] : [.black.opacity(0.92), .gray.opacity(0.45)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        .padding()
+        .containerBackground(for: .widget) { Color(uiColor: .secondarySystemBackground) }
         .accessibilityElement(children: .contain)
+        .accessibilityLabel("Yannick Lights, \(statusTitle.lowercased())")
+        .accessibilityValue(accessibilityValue)
     }
 
-    private var physicalOn: Bool {
+    private var statusPill: some View {
+        Text(statusTitle)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(physicalOn == nil ? .secondary : (isOn ? Color.yellow : .secondary))
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background((physicalOn == nil ? Color.secondary : (isOn ? Color.yellow : Color.secondary)).opacity(0.15), in: Capsule())
+            .accessibilityHidden(true)
+    }
+
+    private var detailText: String {
         switch entry.status {
-        case .ready(let state): return state.physicalOn
-        case .stale(let physicalOn, _): return physicalOn
-        case .unavailable: return false
+        case .confirmed(let state): state.recentlyPolled ? "Verified just now" : "Relay may be offline"
+        case .stale(_, let updatedAt): updatedAt.map { "Last verified \($0)" } ?? "Last verified state"
+        case .unavailable(let message): message
         }
     }
 
-    private var canControl: Bool {
-        if case .ready = entry.status { return SharedSettings.canControlLight }
-        return false
+    private var unavailableActionText: String {
+        switch entry.status {
+        case .stale: "Refreshes when available"
+        case .unavailable: "Open app to continue"
+        case .confirmed: ""
+        }
     }
 
-    private var detail: String {
+    private var accessibilityValue: String {
         switch entry.status {
-        case .ready(let state):
-            return state.recentlyPolled ? "Tap to toggle" : "Relay not recently active"
-        case .stale:
-            return "Last confirmed state"
-        case .unavailable(let message):
-            return message
+        case .confirmed: "Verified \(isOn ? "on" : "off")"
+        case .stale: "Last confirmed \(isOn ? "on" : "off"); data may be stale"
+        case .unavailable(let message): "State unavailable. \(message)"
         }
+    }
+
+    private var statusTitle: String {
+        guard physicalOn != nil else { return "UNKNOWN" }
+        return isOn ? "ON" : "OFF"
+    }
+
+    private var lightSymbol: String {
+        guard physicalOn != nil else { return "lightbulb.slash" }
+        return isOn ? "lightbulb.fill" : "lightbulb"
     }
 }
 
 struct BigTunaLightsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "BigTunaLightsWidget", provider: LightTimelineProvider()) { entry in
+        StaticConfiguration(kind: "YannickLights.Light", provider: LightTimelineProvider()) { entry in
             BigTunaLightsWidgetView(entry: entry)
         }
-        .configurationDisplayName("BIG TUNA Lights")
-        .description("Shows and controls the BIG TUNA light.")
+        .configurationDisplayName("Yannick Lights")
+        .description("Check and control Yannick's light.")
         .supportedFamilies([.systemSmall])
-    }
-}
-
-@available(iOS 18.0, *)
-struct BigTunaLightsControl: ControlWidget {
-    var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "BigTunaLightsControl", provider: LightsControlValueProvider()) { isOn in
-            ControlWidgetToggle("BIG TUNA Lights", isOn: isOn, action: SetControlLightIntent()) { targetPhysicalOn in
-                Label(targetPhysicalOn ? "Lights On" : "Lights Off", systemImage: targetPhysicalOn ? "lightbulb.fill" : "lightbulb")
-            }
-        }
-        .displayName("BIG TUNA Lights")
-        .description("Turn the BIG TUNA light on or off.")
-    }
-}
-
-@available(iOS 18.0, *)
-struct LightsControlValueProvider: ControlValueProvider {
-    var previewValue: Bool { SharedSettings.lastPhysicalOn ?? false }
-
-    func currentValue() async throws -> Bool {
-        guard let token = SharedSettings.sessionToken, SharedSettings.canControlLight else {
-            throw BigTunaLightsAPIError.notAuthenticated
-        }
-        let state = try await BigTunaLightsAPI.fetchState(token: token)
-        SharedSettings.saveLastState(state)
-        return state.physicalOn
     }
 }

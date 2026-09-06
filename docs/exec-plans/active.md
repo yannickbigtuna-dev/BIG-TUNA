@@ -681,3 +681,130 @@ Control Center control.
 - [x] Run local and independent acceptance checks.
 - [x] Build and inspect the exact iPhone-only IPA.
 - [x] Open the verified artifact, commit, and push without server restart.
+
+## Active Extension — Yannick Lights unified Xcode handoff
+
+### Goal and mode
+
+Complete the maintained Apple lights family in DEEP mode as one polished native
+project named **Yannick Lights**, containing the iPhone app, iOS widgets and
+control, companion Watch app, watchOS widgets/complications and watchOS 26
+control, plus the Yannick-versus-Emma weekly scoreboard on both platforms.
+Package a single no-dependency Mac transfer named `YannickLights-Xcode.zip`.
+
+### Stable contracts and constraints
+
+- Preserve the released identifiers
+  `ca.yannickmorgans.bigtuna.lights`,
+  `ca.yannickmorgans.bigtuna.lights.widget`,
+  `ca.yannickmorgans.bigtuna.lights.watchapp`, and
+  `ca.yannickmorgans.bigtuna.lights.watchapp.widget`, plus App Group
+  `group.ca.yannickmorgans.bigtuna.lights`. Rename product/display/project
+  presentation only; do not strand existing App Group data or TestFlight identity.
+- Continue using the versioned owner-only Lights API and public read-only Strava
+  challenge API. Do not add device credentials, LAN addresses, Strava tokens,
+  Apple credentials, certificates, profiles, or signing material to source or ZIP.
+- Preserve all pre-existing dirty work and concurrent agent edits. No server
+  restart or live deployment is authorized; a push may trigger the repository's
+  normal auto-pull but must not require runtime service changes.
+- Windows validation is structural and behavioral where possible. Never claim an
+  Xcode compile, archive upload, TestFlight processing, or physical-device result.
+
+### Architecture and implementation
+
+- Raise the maintained contract to version 1.3.0, build 6, keeping iOS 18 and
+  watchOS 26 deployment targets. The ZIP contains a generated
+  `YannickLights.xcodeproj`; XcodeGen remains optional for future regeneration and
+  is not required merely to open/build the transfer.
+- Shared light code exposes status, explicit on/off, and serialized toggle flows.
+  Requests use 12-second timeouts, bounded retry only for safe reads/idempotent
+  command IDs, HTTP/status/schema validation, confirmed-state caching, refresh
+  after mutation, reconciliation, widget/control reloads, and useful offline or
+  verification-failed states. Foreground UI may animate optimistically but only
+  confirmed responses enter shared storage.
+- Shared score code decodes `GET /api/strava-challenge/public`, specifically
+  `currentWeek.score`, `dateLabel`/`weekStart`, `winner`, `lastUpdatedAt`, and
+  `stale`; it caches the last valid compact score in the App Group and returns it
+  when the network or schema fails. Timelines refresh sensibly rather than poll.
+- iPhone uses an open, spacious SwiftUI composition with one luminous amber light
+  control, explicit LIGHTS and ON/OFF text, restrained haptics, accessibility, a
+  secondary weekly-score strip, sign-in/session/error states, and reduced-motion
+  support. Score widgets support small, medium, and large; medium receives the
+  strongest hockey-scorecard treatment without full red/blue fills.
+- Watch uses two native vertically paged screens: a one-tap light control and a
+  glanceable score. It performs direct HTTPS whenever possible; WatchConnectivity
+  carries only the scoped token and confirmed cache. The Watch extension provides
+  score Smart Stack/complication families, a light accessory widget with direct
+  App Intent interaction where the surface supports it, and a watchOS 26 native
+  control for Control Center, Smart Stack, and Apple Watch Ultra Action Button.
+- Expose discoverable Turn Lights On, Turn Lights Off, Toggle Lights, and Get Light
+  Status App Intents. Widget/control intents never require the app to open.
+- Supply valid iPhone and Watch icon asset catalogs, deterministic `project.yml`,
+  a five-target PBX graph including unit tests, entitlements/plists, and exact
+  embed/dependency relationships for iOS widget, Watch app, and Watch widget.
+- The transfer root includes `MAC-INSTRUCTIONS.md`, `WINDOWS-README.md`, and
+  `API-DISCOVERY.md`, along with source, project, assets, app spec, and optional
+  maintenance metadata. It excludes secrets, build output, user data, and junk.
+
+### Disjoint implementation ownership
+
+- Shared/iPhone implementer owns `ios/big-tuna-lights-widget/Shared/**`,
+  `BigTunaLights/**`, and `YannickLightsTests/**` only.
+- Widget implementer owns `ios/big-tuna-lights-widget/BigTunaLightsWidget/**` only.
+- Watch implementer owns `ios/big-tuna-lights-widget/BigTunaLightsWatch/**` and
+  `BigTunaLightsWatchWidget/**` only.
+- Project/package implementer owns `ios/big-tuna-lights-widget/project.yml`,
+  `ios/big-tuna-lights-widget/YannickLights.xcodeproj/**`, asset catalogs,
+  `scripts/apple-app-factory/package-big-tuna-lights-xcode.mjs`, and its focused
+  transfer/project-audit tests only.
+- Documentation implementer owns only `ios/big-tuna-lights-widget/MAC-INSTRUCTIONS.md`,
+  `WINDOWS-README.md`, and `API-DISCOVERY.md`.
+- Root owns this execution plan, the durable app spec, context/root README updates,
+  cross-package integration, visual asset selection, combined diff/security
+  review, validation loop, final ZIP generation, commit, and push.
+
+Every implementer is not alone in the repository: preserve user and concurrent
+changes, stay inside the assigned paths, do not commit or push, and report exact
+paths and checks.
+
+### Acceptance checks
+
+1. Live read-only probes and local server code agree on Lights and scoreboard
+   methods, authentication, inversion, response schema, week boundaries, and
+   errors. No live light mutation occurs during validation.
+2. iPhone app supports signed-out, loading, on, off, optimistic pending,
+   reconciled, verification-failed, stale relay, offline, and session-expired
+   states with useful VoiceOver values and success/failure haptics.
+3. iOS widget bundle contains interactive light widget, scoreboard small/medium/
+   large, iOS 18 control, and App Intents with `openAppWhenRun = false`; all write
+   through the real versioned backend and reload timelines/controls.
+4. Watch app controls the same backend directly and shows the score on a second
+   native page. Watch widget bundle contains appropriate accessory score/light
+   families and watchOS 26 control; unsupported surface behavior is documented,
+   never faked.
+5. App Group and four bundle IDs match spec, entitlements, PBX settings, companion
+   pointers, embed phases, products, and documentation. Swift platform APIs are
+   correctly gated and shared files have deliberate target membership.
+6. Networking/cache unit tests cover light decode, score decode, HTTP errors,
+   cache fallback, and idempotent explicit toggle payloads. Static checks cover
+   plist parsing, duplicate Swift types, PBX UUID uniqueness/references/build
+   phases, products, target dependencies, and required archive/ZIP inventory.
+7. Run focused Node tests, factory spec validation/generation, full `npm test`,
+   secret scan, ZIP extraction/inventory/hash verification, `git diff`, and
+   `git status`. Independent tester findings are corrected before completion.
+8. Final file is exactly `C:\SERVER\YannickLights-Xcode.zip`; it contains one
+   unified project and can be opened on a Mac without Git, npm, Homebrew,
+   CocoaPods, XcodeGen, or another package manager.
+
+### Progress
+
+- [x] Read required Apple factory/signing/capability/install/distribution and
+      troubleshooting guidance, plus smart-home/security/design skills.
+- [x] Inspect the maintained dirty work, Lights website/server/native contract,
+      live public light status, live Strava schema, and current Apple platform docs.
+- [x] Write the root implementation specification and disjoint ownership plan.
+- [x] Implement all disjoint packages and generated artwork/project.
+- [x] Review the combined diff and complete corrective implementation passes.
+- [x] Run independent acceptance/security checks and full Windows validation.
+- [x] Generate and audit the exact final ZIP; commit and push follow this final
+      recorded validation without a server restart.

@@ -2,7 +2,7 @@ import Foundation
 
 /// This is the single compatibility boundary for native light access. Views,
 /// widgets and controls always work in physical (not inverted relay) state.
-struct LightState: Decodable, Equatable {
+struct LightState: Codable, Equatable, Sendable {
     let physicalOn: Bool
     let reportedPhysicalOn: Bool?
     let recentlyPolled: Bool
@@ -10,7 +10,7 @@ struct LightState: Decodable, Equatable {
     let revision: String
 }
 
-struct LoginSession: Decodable {
+struct LoginSession: Codable, Sendable {
     let token: String
     let username: String
 }
@@ -19,6 +19,7 @@ enum BigTunaLightsAPIError: LocalizedError {
     case invalidURL
     case notAuthenticated
     case invalidResponse
+    case transport(String)
     case server(String)
 
     var errorDescription: String? {
@@ -29,6 +30,8 @@ enum BigTunaLightsAPIError: LocalizedError {
             return "Sign in as yannick to control the light."
         case .invalidResponse:
             return "The server returned an invalid response."
+        case .transport(let message):
+            return message
         case .server(let message):
             return message
         }
@@ -47,7 +50,7 @@ enum BigTunaLightsAPI {
     static func fetchState(token: String) async throws -> LightState {
         var request = makeRequest(path: Endpoint.nativeState, method: "GET")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        return try await send(request, as: LightState.self)
+        return try await send(request, as: LightState.self, retrySafeRequest: true)
     }
 
     static func login(username: String, password: String) async throws -> LoginSession {
@@ -95,11 +98,10 @@ enum BigTunaLightsAPI {
         var request = makeRequest(path: Endpoint.nativeState, method: "PUT")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(commandId.uuidString, forHTTPHeaderField: "Idempotency-Key")
-        request.httpBody = try JSONEncoder().encode(NativeLightCommand(
-            physicalOn: physicalOn,
-            commandId: commandId.uuidString
-        ))
-        return try await send(request, as: LightState.self)
+        request.httpBody = try makeCommandBody(physicalOn: physicalOn, commandId: commandId)
+        // Repeating the same command ID is safe: the server returns the
+        // original result instead of cycling a relay a second time.
+        return try await send(request, as: LightState.self, retrySafeRequest: true)
     }
 
     private static func makeRequest(path: String, method: String) -> URLRequest {
@@ -115,26 +117,46 @@ enum BigTunaLightsAPI {
         return request
     }
 
-    private static func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+    private static func send<T: Decodable>(_ request: URLRequest, as type: T.Type, retrySafeRequest: Bool = false) async throws -> T {
+        var lastError: Error?
+        for attempt in 0...(retrySafeRequest ? 1 : 0) {
+            do { return try await sendOnce(request, as: type) }
+            catch let error as BigTunaLightsAPIError {
+                // Authentication and malformed/explicit HTTP failures cannot
+                // be improved with a retry. A transient transport error can.
+                guard attempt == 0, retrySafeRequest, case .transport = error else { throw error }
+                lastError = error
+                try? await Task.sleep(for: .milliseconds(250))
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? BigTunaLightsAPIError.transport("The light service is unavailable.")
+    }
+
+    /// Kept internal for focused request-shape tests. The command ID is reused
+    /// for a retry, which is what makes retrying an explicit relay target safe.
+    static func makeCommandBody(physicalOn: Bool, commandId: UUID) throws -> Data {
+        try JSONEncoder().encode(NativeLightCommand(physicalOn: physicalOn, commandId: commandId.uuidString))
+    }
+
+    private static func sendOnce<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 throw BigTunaLightsAPIError.invalidResponse
             }
-            guard (200..<300).contains(http.statusCode) else {
-                let message = parseErrorMessage(from: data) ?? "Request failed with status \(http.statusCode)."
-                if http.statusCode == 401 {
-                    SharedSettings.clearSession()
-                    throw BigTunaLightsAPIError.notAuthenticated
-                }
-                throw BigTunaLightsAPIError.server(message)
-            }
+            try validateHTTPResponse(statusCode: http.statusCode, data: data)
             if T.self == EmptyResponse.self { return EmptyResponse() as! T }
-            return try JSONDecoder().decode(T.self, from: data)
+            do {
+                return try JSONDecoder().decode(T.self, from: data)
+            } catch {
+                throw BigTunaLightsAPIError.invalidResponse
+            }
         } catch let error as BigTunaLightsAPIError {
             throw error
         } catch {
-            throw BigTunaLightsAPIError.server("The light service is unavailable.")
+            throw BigTunaLightsAPIError.transport("The light service is unavailable.")
         }
     }
 
@@ -149,6 +171,18 @@ enum BigTunaLightsAPI {
         return message
     }
 
+    /// Internal so XCTest can verify non-2xx handling without contacting the
+    /// live owner endpoint or mutating a physical device.
+    static func validateHTTPResponse(statusCode: Int, data: Data) throws {
+        guard !(200..<300).contains(statusCode) else { return }
+        if statusCode == 401 {
+            SharedSettings.clearSession()
+            throw BigTunaLightsAPIError.notAuthenticated
+        }
+        let message = parseErrorMessage(from: data) ?? "Request failed with status \(statusCode)."
+        throw BigTunaLightsAPIError.server(message)
+    }
+
     private static func logoutWebsite(token: String) async {
         var request = makeRequest(path: Endpoint.logout, method: "POST")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -156,7 +190,7 @@ enum BigTunaLightsAPI {
     }
 }
 
-private struct NativeLightCommand: Encodable {
+struct NativeLightCommand: Encodable {
     let physicalOn: Bool
     let commandId: String
 }

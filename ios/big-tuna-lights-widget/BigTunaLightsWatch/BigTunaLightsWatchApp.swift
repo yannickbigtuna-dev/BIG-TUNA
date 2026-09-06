@@ -6,6 +6,7 @@ struct BigTunaLightsWatchApp: App {
         #if canImport(WatchConnectivity)
         WatchLightConnectivity.shared.activate()
         #endif
+        YannickLightsWatchShortcuts.updateAppShortcutParameters()
     }
 
     var body: some Scene {

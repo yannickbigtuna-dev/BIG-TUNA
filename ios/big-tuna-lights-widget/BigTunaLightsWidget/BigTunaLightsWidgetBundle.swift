@@ -5,6 +5,7 @@ import SwiftUI
 struct BigTunaLightsWidgetBundle: WidgetBundle {
     var body: some Widget {
         BigTunaLightsWidget()
+        WeeklyScoreWidget()
         if #available(iOS 18.0, *) {
             BigTunaLightsControl()
         }

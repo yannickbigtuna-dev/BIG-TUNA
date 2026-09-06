@@ -2,8 +2,8 @@ import AppIntents
 import WidgetKit
 
 struct SetWatchLightIntent: SetValueIntent {
-    static var title: LocalizedStringResource = "Set BIG TUNA Lights"
-    static var description = IntentDescription("Sets the BIG TUNA light to an explicit on or off state.")
+    static var title: LocalizedStringResource = "Set Yannick Lights"
+    static var description = IntentDescription("Sets Yannick Lights to an explicit on or off state.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Lights On") var value: Bool
@@ -24,11 +24,11 @@ struct SetWatchLightIntent: SetValueIntent {
         guard let cached = WatchLightStore.cachedState, cached.hasConfirmedDesiredState else {
             throw WatchLightAPIError.server("Refresh a confirmed state before controlling.")
         }
-        let state = try await WatchLightAPI.setPhysicalLight(on: value, token: token)
-        WatchLightStore.save(state)
+        let result = try await WatchLightCommandCoordinator.shared.set(value, token: token)
+        WatchLightStore.save(result.state)
         WidgetCenter.shared.reloadAllTimelines()
         if #available(watchOS 26.0, *) {
-            ControlCenter.shared.reloadControls(ofKind: "BigTunaLightsWatchControl")
+            ControlCenter.shared.reloadControls(ofKind: "YannickLightsWatchControl")
         }
         return .result()
     }

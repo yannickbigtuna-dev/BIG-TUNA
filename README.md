@@ -283,14 +283,22 @@ Recommended app template:
 
 Describe a private native Apple app or change in plain English, for example: “Create a private iPhone app called Trail Log with an Apple Watch companion and a Home Screen widget.” Codex uses the durable spec and workflow in [docs/APPLE_APP_FACTORY.md](docs/APPLE_APP_FACTORY.md) to generate, test, version, cloud-build, privately publish, and prepare the local installation handoff.
 
-This is intentionally honest about Apple’s free Personal Team: it is seven-day testing on registered devices, not App Store/TestFlight distribution; Safari cannot directly install the generated IPA; and Watch/widget installer support is not claimed until a physical-device acceptance run succeeds. Start with the [free-signing rules](docs/APPLE_FREE_SIGNING.md) and [installation guide](docs/IPHONE_AND_WATCH_INSTALLATION.md).
+The factory still supports the documented free Personal Team path, whose
+seven-day builds are not TestFlight distribution. BIG TUNA Lights now has a
+separate paid Developer Program/TestFlight handoff; start with
+[the Lights TestFlight guide](docs/BIG-TUNA_LIGHTS_TESTFLIGHT.md). Signed upload
+and iPhone/Watch behavior are not claimed until the owner completes the Mac and
+physical-device checks.
 
-The maintained BIG TUNA Lights family is declared by
+The maintained Yannick Lights family is declared by
 `ios/app-factory/specs/big-tuna-lights.yml`. It contains the native iPhone app,
 small interactive Home Screen widget, iPhone control, companion Watch app,
 Watch complications/Smart Stack widget, and watchOS 26 control. Generate its
-deterministic product project through the factory, or work directly from
-`ios/big-tuna-lights-widget/project.yml` with XcodeGen on a Mac running Xcode 26+.
+deterministic product project through the factory, or open the checked-in
+`ios/big-tuna-lights-widget/YannickLights.xcodeproj` directly in Xcode 26+.
+XcodeGen is optional maintenance tooling and is not required for the transfer.
+Run `node scripts/apple-app-factory/package-big-tuna-lights-xcode.mjs` to create the one-file
+Mac transfer ZIP described in the TestFlight guide.
 
 ## Shared Frontend Libraries
 

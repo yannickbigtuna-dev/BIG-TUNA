@@ -1,10 +1,17 @@
 {
   "images": [
     {
-      "filename": "AppIcon-1024.png",
+      "filename": "AppIcon-YannickLights-1024-final.png",
       "idiom": "universal",
       "platform": "ios",
       "size": "1024x1024"
+    },
+    {
+      "filename": "AppIcon-YannickLights-1024-final.png",
+      "idiom": "universal",
+      "platform": "watchos",
+      "size": "1024x1024",
+      "scale": "1x"
     }
   ],
   "info": {

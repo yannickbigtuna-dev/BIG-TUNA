@@ -369,12 +369,13 @@ Desktop app source:
 
 iOS app source:
 
-- `ios/big-tuna-lights-widget/` is the deterministic XcodeGen product source for BIG TUNA Lights. Its active release graph is intentionally iPhone-only: the native iPhone app plus one WidgetKit extension containing both the `.systemSmall` interactive Home Screen widget and iOS Control Center control. Dormant Watch sources remain in Git for rollback/history but are not compiled or embedded.
-- Its durable identity/capability contract is `ios/app-factory/specs/big-tuna-lights.yml`; generate it through Apple App Factory or run `cd ios/big-tuna-lights-widget && xcodegen generate`, then open `BigTunaLights.xcodeproj` in Xcode 26+.
-- The active app requires iOS 18. The iPhone control uses the existing iPhone widget extension ID, so no extra control App ID is introduced. The former Watch bundle IDs are retained as retired identity metadata and must not be reassigned.
-- The iPhone app and WidgetKit extension use App Group `group.ca.yannickmorgans.bigtuna.lights` for a revocable, Lights-only bearer token and last confirmed native state. Login briefly uses a normal website session, exchanges it through `POST /api/lights/native/v1/session`, then revokes the website session; passwords are never persisted.
+- `ios/big-tuna-lights-widget/` is the deterministic native source for Yannick Lights. Release 1.3.0 has the paid-program four-product graph: native iPhone app; one iPhone WidgetKit extension containing the `.systemSmall` interactive Home Screen widget, weekly-score widgets, and iOS Control Center control; companion Watch app; and one Watch WidgetKit extension containing light/score complications and Smart Stack widgets plus the watchOS control.
+- Its durable identity/capability contract is `ios/app-factory/specs/big-tuna-lights.yml`. Open the checked-in `YannickLights.xcodeproj` directly in Xcode 26+; XcodeGen remains optional maintenance tooling and is not required for the Mac transfer.
+- The active app requires iOS 18 and watchOS 26. Each platform control reuses that platform's widget extension ID, so controls introduce no additional bundle IDs. The original Watch bundle IDs were preserved through the prior iPhone-only release and are reactivated unchanged for paid signing/TestFlight.
+- The iPhone app and WidgetKit extension use App Group `group.ca.yannickmorgans.bigtuna.lights` for a revocable, Lights-only bearer token and last confirmed native state. WatchConnectivity transfers that scoped token and confirmed state to the Watch App Group; no password is transferred or persisted. Login briefly uses a normal website session, exchanges it through `POST /api/lights/native/v1/session`, then revokes the website session.
 - Native surfaces use owner-authenticated `GET/PUT /api/lights/native/v1`, explicit physical target state, and an idempotent command ID. They never optimistically cache an unconfirmed change. The website, HomeKit, scheduler, and ESP routes retain their prior stored/inverted contracts.
 - BIG TUNA Lights 1.1.2 (4) is the first explicitly iPhone-only release, created after Sideloadly rejected the embedded Watch companion identifier. Its transient Sideloadly-prepared artifact passed macOS compilation and exact archive inspection in Actions run `33698060467`; SHA-256 is `bd7c0cdf1efd2646e30bfd16327945986e084a126e00138281401df1d8adde19`. It contains exactly the host app and one iOS `.appex`, with no `Watch/` payload. Physical signing/install results remain a separate device gate.
+- Yannick Lights 1.3.0 (6) builds on that historical Personal Team workaround: it targets the paid Apple Developer Program and TestFlight, retains the original app-family IDs, adds shared weekly-score surfaces and current App Intents/controls, and remains unverified until a Mac archive/upload and physical iPhone/Watch acceptance run pass. `ios/big-tuna-lights-widget/MAC-INSTRUCTIONS.md` is the complete owner handoff; `scripts/apple-app-factory/package-big-tuna-lights-xcode.mjs` creates the direct-open `YannickLights-Xcode.zip` without signing material.
 - The app uses the Lights page's physical wall-plate/paddle visual, upper owner-access screw, and lower relay-heartbeat screw. The Home Screen widget is Apple's smallest supported square family; there is no app-icon-sized 1x1 Home Screen WidgetKit family, so the 1x1 experience is the system control.
 
 ## Admin Dashboard & Email Campaigns
@@ -848,5 +849,7 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   `apps/`. `/api/apple-app-factory/*` is session- and configured-owner-authenticated,
   with strict path/symlink protection; `/apple-apps/` is only its UI shell.
 - Free Personal Team limits (three apps/device, three devices, ten App IDs, seven-day
-  expiry) apply. Watch installer support and privileged capabilities remain unverified
-  until documented physical-device acceptance checks pass.
+  expiry) still apply to factory apps signed with a Personal Team. BIG TUNA Lights
+  1.3.0 instead targets paid Developer Program/TestFlight distribution; its Watch,
+  widget, complication, and control behavior remains unverified until the documented
+  owner-controlled Mac upload and physical-device acceptance checks pass.
