@@ -58,6 +58,18 @@ Do not force push or rewrite history. If `git pull` produces a merge conflict, s
 
 Important local-machine assumptions: several scripts and log messages still refer to `C:\SERVER`, while this checkout may be `C:\BIG-TUNA`. Be careful before changing paths; deployment scripts may rely on the production path.
 
+## Native App Development Registry
+
+`config/apple-apps.json` is a tooling-only allowlist for local native app
+workspaces. `tools/Launch-BigTunaCodex.ps1` always starts Codex with
+`-C C:\SERVER` and adds only an existing registered Git worktree directly below
+`C:\APPS`; it rejects missing, broad, or outside-root paths. Yannick Lights is
+registered at `C:\APPS\YannickLightsIOS`. The authoritative server-facing
+native contract is `docs/openapi.yaml`, explained in `docs/API_CONTRACT.md`;
+`tools/Sync-AppApiContract.ps1` can create a clearly marked generated app-local
+copy. These files do not configure the runtime server, signing, releases, or
+deployment.
+
 ## Runtime Architecture
 
 There are two Node servers.

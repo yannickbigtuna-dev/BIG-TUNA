@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "apps": [
+    {
+      "slug": "big-tuna-lights",
+      "name": "Yannick Lights",
+      "workspacePath": "C:\\APPS\\YannickLightsIOS",
+      "repository": "yannickbigtuna-dev/YannickLightsIOS",
+      "platforms": ["iOS", "watchOS", "WidgetKit", "Control Center"],
+      "serverApiContract": "docs/openapi.yaml",
+      "nativeApiDiscovery": "API-DISCOVERY.md",
+      "backendApis": [
+        "POST /api/auth/login",
+        "POST /api/auth/logout",
+        "POST /api/lights/native/v1/session",
+        "GET /api/lights/native/v1",
+        "PUT /api/lights/native/v1",
+        "DELETE /api/lights/native/v1/session",
+        "GET /api/strava-challenge/public"
+      ],
+      "bundleId": "ca.yannickmorgans.bigtuna.lights",
+      "bundleIds": [
+        "ca.yannickmorgans.bigtuna.lights",
+        "ca.yannickmorgans.bigtuna.lights.widget",
+        "ca.yannickmorgans.bigtuna.lights.watchapp",
+        "ca.yannickmorgans.bigtuna.lights.watchapp.widget"
+      ],
+      "appGroupId": "group.ca.yannickmorgans.bigtuna.lights",
+      "xcodeCloud": {
+        "status": "configured per owner-provided Apple-side workflow; not verifiable from Windows",
+        "branch": "main",
+        "trigger": "changes to main",
+        "actions": ["Archive iOS", "Archive watchOS"]
+      },
+      "testFlight": {
+        "status": "configured per owner-provided workflow; Apple processing/device delivery not verifiable from Windows",
+        "distributionPreparation": "App Store Connect",
+        "postAction": "TestFlight Internal Testing",
+        "group": "Yannick"
+      }
+    }
+  ]
+}

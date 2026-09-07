@@ -808,3 +808,54 @@ paths and checks.
 - [x] Run independent acceptance/security checks and full Windows validation.
 - [x] Generate and audit the exact final ZIP; commit and push follow this final
       recorded validation without a server restart.
+
+---
+
+# Active Execution Plan — Permanent BIG TUNA Development Environment
+
+## Goal and mode
+
+STANDARD with a DEEP security review of workspace scoping and documented API
+contracts. Add a registry-driven Windows Codex launcher, establish durable
+server/app guidance, and document the current BIG TUNA HTTP and native-app
+contracts without changing runtime behavior or Xcode Cloud configuration.
+
+## Ownership
+
+- Server package: launcher scripts, app registry, API contract/OpenAPI,
+  contract-sync helper, and server context updates.
+- Yannick Lights package: app `.gitignore`, `AGENTS.md`, architecture,
+  backend-integration, and release-workflow documentation.
+- Root integration: preserve pre-existing changes, review both diffs, run
+  validation, and decide commit/push separately for each repository.
+
+## Risks and rollback
+
+- A malformed registry could prevent launch; the script must fail clearly and
+  never fall back to `C:\` or broad directory discovery.
+- A path outside `C:\APPS` or a non-Git directory must be rejected, not passed
+  to Codex.
+- API documentation drift is possible; every documented route must be traced
+  to current server code or existing client contract material.
+- Rollback is limited to the new documentation/tools commits; no live data,
+  server process, native project, or Xcode Cloud setting is changed.
+
+## Validation
+
+- Parse JSON/YAML and check PowerShell syntax.
+- Exercise launcher dry-run with the current registry, including the intended
+  Codex command and exact allowed paths.
+- Exercise missing-path warning behavior without modifying the registry.
+- Run the relevant Node test suite and inspect status/diff for secret or
+  unrelated-file changes.
+- Verify app docs preserve released bundle IDs, App Group, targets, and the
+  Windows → GitHub main → Xcode Cloud → TestFlight workflow.
+
+## Progress
+
+- [x] Inspect current server/app contracts and CLI capabilities.
+- [x] Implement disjoint server and app packages.
+- [x] Review combined diffs and security boundaries.
+- [x] Run acceptance checks.
+- [x] Commit appropriate repository changes; do not push Yannick Lights because
+      this setup-only change does not need to trigger Xcode Cloud.

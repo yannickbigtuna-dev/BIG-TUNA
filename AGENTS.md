@@ -16,6 +16,29 @@ At the start of every session:
 4. Read each relevant `.codex/skills/*/SKILL.md` before editing.
 5. Consult `README.md` for current behavior and operational commands when relevant.
 
+## Native app registry and contract docs
+
+- `config/apple-apps.json` is the allowlist for local native-app workspaces that
+  `tools/Launch-BigTunaCodex.ps1` may pass through `--add-dir`. Keep entries
+  narrowly rooted under `C:\APPS`; never loosen this to `C:\` or discover
+  arbitrary folders.
+- `docs/API_CONTRACT.md` and `docs/openapi.yaml` document the supported native
+  app surface. They do not change runtime behavior; keep them synchronized with
+  `server.js` and the registered app's API discovery doc when that surface
+  changes.
+- `tools/Sync-AppApiContract.ps1` writes a deliberately marked generated copy
+  into a registered app workspace. It is convenience documentation only; do
+  not edit the generated copy as the source of truth.
+- New native apps belong in their own repository under `C:\APPS` and their own
+  GitHub repository under `yannickbigtuna-dev`. After the repository exists,
+  add one allowlisted entry to `config/apple-apps.json`, update
+  `docs/APP_REGISTRY.md`, and create the app's `AGENTS.md` plus API/release
+  docs. The next launcher run reads the registry automatically; no launcher
+  script edit is required.
+- For app changes, inspect the app repository guidance and the actual server
+  contract before editing. A push to an app's `main` branch can trigger its
+  Apple/Xcode Cloud release workflow; keep incomplete changes local.
+
 ## Mandatory agent workflow
 
 For every requested change:

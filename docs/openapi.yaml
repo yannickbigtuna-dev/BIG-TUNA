@@ -1,0 +1,186 @@
+openapi: 3.0.3
+info:
+  title: BIG TUNA Native App API
+  version: 1.0.0
+  license:
+    name: ISC
+  description: |
+    Supported server integration surface for Yannick Lights. The native API
+    uses physical-light terminology; do not use legacy relay inversion logic.
+servers:
+  - url: https://yannickmorgans.ca
+    description: Production
+  - url: http://{host}:{port}
+    description: Local development
+    variables:
+      host: { default: localhost }
+      port: { default: '3000' }
+tags:
+  - name: Native Lights
+    description: Owner-controlled physical-light API for Apple clients.
+  - name: Public score
+    description: Read-only cached weekly score for native score surfaces.
+paths:
+  /api/lights/native/v1/session:
+    post:
+      tags: [Native Lights]
+      operationId: createNativeLightsSession
+      summary: Exchange an owner website session for a Lights-scoped token
+      security: [{ WebsiteBearerAuth: [] }]
+      responses:
+        '200':
+          description: Scoped token issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeSession' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Native Lights]
+      operationId: deleteNativeLightsSession
+      summary: Revoke the supplied native token
+      security: [{ NativeLightsBearerAuth: [] }]
+      responses:
+        '200':
+          description: Revocation completed (also returned when no token is supplied)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+  /api/lights/native/v1:
+    get:
+      tags: [Native Lights]
+      operationId: getNativeLightsState
+      summary: Read authoritative desired physical state
+      security: [{ NativeLightsBearerAuth: [] }, { WebsiteBearerAuth: [] }]
+      responses:
+        '200':
+          description: Current confirmed state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeLightState' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Native Lights]
+      operationId: setNativeLightsState
+      summary: Set an explicit physical state idempotently
+      security: [{ NativeLightsBearerAuth: [] }, { WebsiteBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetNativeLightStateRequest' }
+      responses:
+        '200':
+          description: Authoritative command result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeLightState' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: commandId was previously used for a different target
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '413':
+          description: Request body exceeds the server limit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/strava-challenge/public:
+    get:
+      tags: [Public score]
+      operationId: getPublicChallengeScore
+      summary: Read the cached public weekly score
+      security: []
+      responses:
+        '200':
+          description: Cached public challenge dashboard
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicChallengeDashboard' }
+        '503':
+          description: Challenge service is unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+components:
+  securitySchemes:
+    WebsiteBearerAuth:
+      type: http
+      scheme: bearer
+      description: Temporary authenticated BIG TUNA website session.
+    NativeLightsBearerAuth:
+      type: http
+      scheme: bearer
+      description: Revocable Lights-only token issued by the session exchange.
+  responses:
+    BadRequest:
+      description: Invalid JSON, unsupported fields, or invalid state/command ID
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotAuthenticated:
+      description: Missing, expired, or invalid bearer token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Authenticated caller is not the Yannick Lights owner
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+  schemas:
+    NativeSession:
+      type: object
+      required: [token, username]
+      properties:
+        token: { type: string, description: Redacted in logs; store only in the app group. }
+        username: { type: string, example: yannick }
+    SetNativeLightStateRequest:
+      type: object
+      additionalProperties: false
+      required: [physicalOn]
+      properties:
+        physicalOn: { type: boolean, description: Explicit physical relay target. }
+        commandId: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+    NativeLightState:
+      type: object
+      required: [physicalOn, reportedPhysicalOn, recentlyPolled, revision, updatedAt]
+      properties:
+        physicalOn: { type: boolean, description: Desired physical light state. }
+        reportedPhysicalOn: { type: boolean, nullable: true, description: Last trusted relay report. }
+        recentlyPolled: { type: boolean, description: True when trusted relay polling is within the current server heartbeat window. }
+        revision: { type: string, description: 'Monotonically increasing desired-state revision, serialized as a string.' }
+        updatedAt: { type: string, format: date-time }
+    PublicChallengeDashboard:
+      type: object
+      required: [configured]
+      properties:
+        configured: { type: boolean }
+        currentWeek:
+          type: object
+          nullable: true
+          properties:
+            weekStart: { type: string, format: date }
+            dateLabel: { type: string }
+            score:
+              type: object
+              properties:
+                yannick: { type: integer }
+                emma: { type: integer }
+            winner: { type: string, nullable: true }
+        lastUpdatedAt: { type: string, format: date-time, nullable: true }
+        stale: { type: boolean }
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, example: true }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
