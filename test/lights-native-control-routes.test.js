@@ -187,3 +187,18 @@ test('native command conflict protection survives control recreation', async () 
   );
   assert.equal(desired.revision, 1);
 });
+
+test('legacy web Lights writes are public but strictly validate the body', async () => {
+  const publicWrite = await request('POST', '/api/lights', { body: { on: false } });
+  assert.equal(publicWrite.status, 200);
+  assert.equal(publicWrite.body.on, false);
+
+  for (const body of [{}, { on: true, extra: true }, { on: 'true' }, []]) {
+    const invalid = await request('POST', '/api/lights', { body });
+    assert.equal(invalid.status, 400);
+  }
+
+  const legacy = await request('GET', '/api/lights');
+  assert.equal(legacy.status, 200);
+  assert.equal(legacy.body.on, false);
+});

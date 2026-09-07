@@ -41,7 +41,7 @@ Native state must only be cached after a successful GET or PUT response.
 | Method | Route | Access | Contract |
 | --- | --- | --- | --- |
 | GET | `/api/lights` | public | Historical desired stored state `{on, updatedAt}`. |
-| POST | `/api/lights` | owner website session | Update historical desired stored state with `{on:boolean}`. |
+| POST | `/api/lights` | public | Update historical desired stored state with strictly validated `{on:boolean}`. |
 | GET | `/api/lights/events` | public SSE | Desired-state stream; initial state followed by changes and 15-second keepalives. |
 | GET | `/api/lights/homekit` | owner website session | HomeKit availability/pairing status. |
 | GET | `/api/lights/homekit/qr` | owner website session | Unpaired setup QR SVG only; never cache it. |
@@ -54,6 +54,11 @@ The relay token is `X-Big-Tuna-Device-Token` only when
 that header. The current polling hint is 250 ms and trusted-heartbeat window is
 5 seconds; firmware must preserve its own bounded retry/backoff and safe last
 known state behavior.
+
+The legacy `POST /api/lights` route is public. It accepts only a JSON object
+with a Boolean `on` field; malformed JSON, a missing `on`, or any non-Boolean
+value is rejected with `400`. This public legacy route does not change the
+owner-only native and HomeKit boundaries or the device-token boundary.
 
 ## Route inventory
 
@@ -96,7 +101,7 @@ external consumer; it is not permission to expose a private route.
 | Method/path | Request | Response and errors | Auth / used by |
 | --- | --- | --- | --- |
 | `GET /api/lights` | None | `{on,updatedAt}`; normal server errors | Public Lights website |
-| `POST /api/lights` | `{on:boolean}` | `{on,updatedAt}`; `400/401/403` | Owner website/HomeKit bridge |
+| `POST /api/lights` | Strict `{on:boolean}` | `{on,updatedAt}`; `400` invalid body | Public Lights website |
 | `GET /api/lights/events` | None | SSE desired-state events + keepalives | Lights website; public browser stream |
 | `GET /api/lights/homekit` | Website Bearer | Pairing status; `401/403` | Owner Lights UI |
 | `GET /api/lights/homekit/qr` | Website Bearer | SVG setup QR; `401/403/409/503` | Owner pairing UI; no caching |

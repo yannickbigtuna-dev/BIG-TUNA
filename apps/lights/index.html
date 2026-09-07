@@ -111,14 +111,6 @@
     background: radial-gradient(circle at 35% 35%, #fff, #aba393 58%, #6f685e 100%);
   }
 
-  /* Top screw → green when signed in as yannick. */
-  body.is-authed .plate::before {
-    background: radial-gradient(circle at 35% 35%, #d9ffe0, var(--success) 58%, #1c5e2c 100%);
-    box-shadow:
-      inset 0 1px 2px color-mix(in srgb, #08230f 35%, transparent),
-      0 0 10px color-mix(in srgb, var(--success) 72%, transparent);
-  }
-
   /* Bottom screw → green when the device polled within the last 5 seconds. */
   body.is-polled .plate::after {
     background: radial-gradient(circle at 35% 35%, #d9ffe0, var(--success) 58%, #1c5e2c 100%);
@@ -217,8 +209,6 @@
 <script>
   Topbar.setTitle('Lights');
 
-  const TOKEN_KEY = 'auth_token';
-  const USER_KEY = 'auth_user';
   const switchBtn = document.getElementById('switch');
   const INVERT_WEBSITE_STATE = true;
 
@@ -228,31 +218,10 @@
   let eventsConnected = false;
   let lastUpdatedAt = '';
   let hasLoadedState = false;
-  let verifiedToken = '';
-  let authCheckSequence = 0;
-  let authValidation = null;
   let stateLoadPromise = null;
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   document.body.classList.toggle('standalone', isStandalone);
-
-  function getCachedUser() {
-    try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
-    catch { return null; }
-  }
-
-  function getToken() {
-    return localStorage.getItem(TOKEN_KEY) || '';
-  }
-
-  function isOwnerUser(user) {
-    return !!user && typeof user.username === 'string' && user.username.toLowerCase() === 'yannick';
-  }
-
-  function clearCachedSession() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  }
 
   function apiToWebsiteState(on) {
     return INVERT_WEBSITE_STATE ? on !== true : on === true;
@@ -279,84 +248,9 @@
     return true;
   }
 
-  function invalidateAccess(clearSession = false) {
-    authCheckSequence++;
-    verifiedToken = '';
-    authValidation = null;
-    if (clearSession) clearCachedSession();
-    updateAccess();
-  }
-
-  // Top status dot: green only when a live yannick session has been verified.
   function updateAccess() {
-    const user = getCachedUser();
-    const token = getToken();
-    canControl = !!token && token === verifiedToken && isOwnerUser(user);
-    switchBtn.disabled = !canControl || !hasLoadedState || pending;
-    document.body.classList.toggle('is-authed', canControl);
-  }
-
-  function validateAccess(force = false) {
-    const token = getToken();
-    const cachedUser = getCachedUser();
-
-    if (!token) {
-      invalidateAccess(false);
-      if (cachedUser) localStorage.removeItem(USER_KEY);
-      updateAccess();
-      return Promise.resolve(false);
-    }
-
-    if (!force && token === verifiedToken && isOwnerUser(cachedUser)) {
-      updateAccess();
-      return Promise.resolve(true);
-    }
-
-    if (authValidation && authValidation.token === token) {
-      return authValidation.promise;
-    }
-
-    const checkId = ++authCheckSequence;
-    verifiedToken = '';
-    updateAccess();
-
-    const validation = { token, checkId, promise: null };
-    validation.promise = (async () => {
-      try {
-        const res = await fetch('/api/auth/me', {
-          cache: 'no-store',
-          headers: { 'Authorization': 'Bearer ' + token },
-        });
-        if (checkId !== authCheckSequence || token !== getToken()) return false;
-
-        if (res.status === 401) {
-          invalidateAccess(true);
-          return false;
-        }
-        if (!res.ok) return false;
-
-        const data = await res.json();
-        if (checkId !== authCheckSequence || token !== getToken()) return false;
-        if (!data || typeof data.username !== 'string') return false;
-
-        const nextUser = {
-          ...(cachedUser && typeof cachedUser === 'object' ? cachedUser : {}),
-          ...data,
-          username: data.username,
-        };
-        localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-        if (isOwnerUser(nextUser)) verifiedToken = token;
-        return token === verifiedToken;
-      } catch {
-        // A transient network failure must not erase an otherwise valid cache.
-        return false;
-      } finally {
-        if (authValidation === validation) authValidation = null;
-        updateAccess();
-      }
-    })();
-    authValidation = validation;
-    return validation.promise;
+    canControl = hasLoadedState && !pending;
+    switchBtn.disabled = !canControl;
   }
 
   function loadState() {
@@ -408,7 +302,6 @@
 
   async function saveState() {
     if (!canControl || !hasLoadedState || pending) return;
-    const token = verifiedToken;
     pending = true;
     switchBtn.setAttribute('aria-busy', 'true');
     updateAccess();
@@ -424,18 +317,11 @@
       }
       if (!latest) throw new Error('stale state');
 
-      if (token !== verifiedToken || token !== getToken()) {
-        const error = new Error('Session changed');
-        error.sessionChanged = true;
-        throw error;
-      }
-
       const targetOn = !apiToWebsiteState(latest.on);
       const res = await fetch('/api/lights', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token,
         },
         body: JSON.stringify({ on: websiteToApiState(targetOn) }),
       });
@@ -446,13 +332,7 @@
         throw error;
       }
       if (!applyServerState(data)) throw new Error('invalid state');
-    } catch (error) {
-      if (error && error.status === 401 && token === getToken()) {
-        invalidateAccess(true);
-      } else if (error && (error.status === 401 || error.status === 403 || error.sessionChanged)) {
-        invalidateAccess(false);
-        validateAccess();
-      }
+    } catch {
       await loadState();
     } finally {
       pending = false;
@@ -470,29 +350,20 @@
   switchBtn.addEventListener('keydown', event => {
     if (event.key === ' ' || event.key === 'Enter') handleSwitchPress(event);
   });
-  window.addEventListener('storage', event => {
-    if (event.key && event.key !== TOKEN_KEY && event.key !== USER_KEY) return;
-    invalidateAccess(false);
-    validateAccess();
-  });
   window.addEventListener('online', () => {
-    validateAccess();
     if (!pending) loadState();
   });
   window.addEventListener('pageshow', event => {
     if (!event.persisted) return;
-    validateAccess();
     if (!pending) loadState();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    validateAccess();
     if (!pending) loadState();
   });
 
   updateAccess();
   loadState();
-  validateAccess();
   loadDeviceStatus();
   connectEvents();
   setInterval(() => {

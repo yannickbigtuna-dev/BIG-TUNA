@@ -10,9 +10,6 @@ const puppeteer = require('puppeteer');
 const ROOT = path.join(__dirname, '..');
 const LIGHTS_HTML = path.join(ROOT, 'apps', 'lights', 'index.html');
 const TOKENS_CSS = path.join(ROOT, 'apps', 'styles', 'tokens.css');
-const VALID_TOKEN = 'fixture-yannick-token';
-const YANNICK = { username: 'yannick', id: 'fixture-yannick' };
-
 let browser;
 let fixtureServer;
 let fixtureBaseUrl;
@@ -31,13 +28,8 @@ function resetFixture(overrides = {}) {
     apiOn: true,
     updatedAt: '2026-07-19T12:00:00.000Z',
     updateNumber: 0,
-    authStatus: 200,
-    authUser: { ...YANNICK },
-    authGate: null,
     lightsGate: null,
     postOutcome: 'success',
-    authRequests: [],
-    authResponses: 0,
     lightsGetRequests: [],
     postRequests: [],
     requestSequence: 0,
@@ -95,21 +87,6 @@ async function fixtureHandler(req, res) {
       '};',
     ].join('\n'));
   }
-  if (req.method === 'GET' && url.pathname === '/api/auth/me') {
-    const request = {
-      sequence: ++fixture.requestSequence,
-      authorization: req.headers.authorization || '',
-    };
-    fixture.authRequests.push(request);
-    if (fixture.authGate) await fixture.authGate.promise;
-    fixture.authResponses++;
-    if (request.authorization !== `Bearer ${VALID_TOKEN}` || fixture.authStatus !== 200) {
-      return jsonResponse(res, fixture.authStatus === 200 ? 401 : fixture.authStatus, {
-        error: 'Not authenticated',
-      });
-    }
-    return jsonResponse(res, 200, fixture.authUser);
-  }
   if (req.method === 'GET' && url.pathname === '/api/lights') {
     const responseSnapshot = { on: fixture.apiOn, updatedAt: fixture.updatedAt };
     const request = {
@@ -129,11 +106,11 @@ async function fixtureHandler(req, res) {
     };
     fixture.postRequests.push(request);
 
-    if (request.authorization !== `Bearer ${VALID_TOKEN}` || fixture.postOutcome === 'unauthorized') {
-      return jsonResponse(res, 401, { error: 'Not authenticated' });
-    }
     if (fixture.postOutcome === 'server-error') {
       return jsonResponse(res, 500, { error: 'Temporary fixture failure' });
+    }
+    if (fixture.postOutcome === 'bad-request') {
+      return jsonResponse(res, 400, { error: 'Body must contain only on' });
     }
 
     fixture.apiOn = body.on;
@@ -167,11 +144,10 @@ function waitForFixture(predicate, label, timeoutMs = 8000) {
 }
 
 function releaseFixtureGates() {
-  fixture?.authGate?.resolve();
   fixture?.lightsGate?.resolve();
 }
 
-async function openLightsPage({ token = VALID_TOKEN, user = YANNICK } = {}) {
+async function openLightsPage() {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   const pageErrors = [];
@@ -179,12 +155,7 @@ async function openLightsPage({ token = VALID_TOKEN, user = YANNICK } = {}) {
   page.setDefaultTimeout(10000);
   page.on('pageerror', error => pageErrors.push(error));
 
-  await page.evaluateOnNewDocument(({ storedToken, storedUser }) => {
-    if (storedToken === null) localStorage.removeItem('auth_token');
-    else localStorage.setItem('auth_token', storedToken);
-    if (storedUser === null) localStorage.removeItem('auth_user');
-    else localStorage.setItem('auth_user', JSON.stringify(storedUser));
-
+  await page.evaluateOnNewDocument(() => {
     class FixtureEventSource {
       constructor(url) {
         this.url = url;
@@ -226,7 +197,7 @@ async function openLightsPage({ token = VALID_TOKEN, user = YANNICK } = {}) {
       writable: true,
       value: FixtureEventSource,
     });
-  }, { storedToken: token, storedUser: user });
+  });
 
   await page.setRequestInterception(true);
   page.on('request', request => {
@@ -258,7 +229,6 @@ async function switchSnapshot(page) {
     ariaChecked: button.getAttribute('aria-checked'),
     busy: button.getAttribute('aria-busy') === 'true',
     bodyOn: document.body.classList.contains('is-on'),
-    bodyAuthed: document.body.classList.contains('is-authed'),
   }));
 }
 
@@ -286,13 +256,6 @@ async function pointerPress(page) {
   await page.mouse.move(point.x, point.y);
   await page.mouse.down();
   await page.mouse.up();
-}
-
-async function storageSnapshot(page) {
-  return page.evaluate(() => ({
-    token: localStorage.getItem('auth_token'),
-    user: localStorage.getItem('auth_user'),
-  }));
 }
 
 before(async () => {
@@ -328,7 +291,7 @@ after(async () => {
   }
 });
 
-test('verified yannick presses alternate authoritative API state exactly once per pointer press', { timeout: 30000 }, async () => {
+test('an unauthenticated visitor toggles authoritative API state exactly once per pointer press', { timeout: 30000 }, async () => {
   resetFixture({ apiOn: true });
   const opened = await openLightsPage();
   const { page } = opened;
@@ -340,10 +303,7 @@ test('verified yannick presses alternate authoritative API state exactly once pe
       ariaChecked: 'false',
       busy: false,
       bodyOn: false,
-      bodyAuthed: true,
     });
-    assert.equal(fixture.authRequests.length, 1);
-    assert.equal(fixture.authRequests[0].authorization, `Bearer ${VALID_TOKEN}`);
 
     await pointerPress(page);
     await waitForFixture(() => fixture.postRequests.length === 1, 'the first Lights POST');
@@ -358,174 +318,59 @@ test('verified yannick presses alternate authoritative API state exactly once pe
     await waitForEnabled(page);
     assert.equal(fixture.apiOn, true);
     assert.deepEqual(fixture.postRequests.map(request => request.body.on), [false, true]);
-    assert.deepEqual(
-      fixture.postRequests.map(request => request.authorization),
-      [`Bearer ${VALID_TOKEN}`, `Bearer ${VALID_TOKEN}`]
-    );
+    assert.deepEqual(fixture.postRequests.map(request => request.authorization), ['', '']);
   } finally {
     await closeLightsPage(opened);
   }
 });
 
-test('cached owner identity never authorizes a missing or rejected token', { timeout: 30000 }, async t => {
-  await t.test('missing token stays disabled and a pointer press cannot animate or POST', async () => {
-    resetFixture({ apiOn: false });
-    const opened = await openLightsPage({ token: null, user: YANNICK });
-    const { page } = opened;
-    try {
-      await waitForFixture(() => fixture.lightsGetRequests.length >= 1, 'the initial Lights GET');
-      await waitForVisual(page, true);
-      const before = await switchSnapshot(page);
-      assert.equal(before.disabled, true);
-      assert.equal(before.bodyAuthed, false);
-
-      await pointerPress(page);
-      await new Promise(resolve => setTimeout(resolve, 120));
-      assert.equal(fixture.postRequests.length, 0);
-      assert.deepEqual(await switchSnapshot(page), before);
-    } finally {
-      await closeLightsPage(opened);
-    }
-  });
-
-  await t.test('an explicit auth 401 clears stale storage and stays visually unchanged', async () => {
-    resetFixture({ apiOn: false, authStatus: 401 });
-    const opened = await openLightsPage({ token: 'stale-token', user: YANNICK });
-    const { page } = opened;
-    try {
-      await waitForVisual(page, true);
-      await page.waitForFunction(() => (
-        localStorage.getItem('auth_token') === null
-        && localStorage.getItem('auth_user') === null
-      ));
-      const before = await switchSnapshot(page);
-      assert.equal(before.disabled, true);
-      assert.equal(before.bodyAuthed, false);
-      assert.equal(fixture.authRequests[0].authorization, 'Bearer stale-token');
-
-      await pointerPress(page);
-      await new Promise(resolve => setTimeout(resolve, 120));
-      assert.equal(fixture.postRequests.length, 0);
-      assert.deepEqual(await switchSnapshot(page), before);
-    } finally {
-      await closeLightsPage(opened);
-    }
-  });
-});
-
-test('a verified non-owner stays cached but cannot control the Lights switch', { timeout: 30000 }, async () => {
-  resetFixture({
-    apiOn: true,
-    authUser: { username: 'emma', id: 'fixture-emma' },
-  });
-  const opened = await openLightsPage({ token: VALID_TOKEN, user: YANNICK });
+test('the switch remains disabled until initial server state is authoritative', { timeout: 30000 }, async () => {
+  const lightsGate = deferred();
+  resetFixture({ apiOn: false, lightsGate });
+  const opened = await openLightsPage();
   const { page } = opened;
   try {
-    await waitForFixture(() => fixture.authResponses === 1, 'the non-owner auth response');
-    await waitForVisual(page, false);
-    await new Promise(resolve => setTimeout(resolve, 120));
+    await waitForFixture(() => fixture.lightsGetRequests.length === 1, 'the delayed Lights GET');
+    assert.equal((await switchSnapshot(page)).disabled, true);
 
-    const before = await switchSnapshot(page);
-    const storage = await storageSnapshot(page);
-    assert.equal(before.disabled, true);
-    assert.equal(before.bodyAuthed, false);
-    assert.equal(storage.token, VALID_TOKEN);
-    assert.ok(storage.user);
-    assert.equal(JSON.parse(storage.user).username, 'emma');
-
+    lightsGate.resolve();
+    await waitForVisual(page, true);
+    await waitForEnabled(page);
     await pointerPress(page);
-    await new Promise(resolve => setTimeout(resolve, 120));
-    assert.equal(fixture.postRequests.length, 0);
-    assert.deepEqual(await switchSnapshot(page), before);
+    await waitForFixture(() => fixture.postRequests.length === 1, 'the first post-load Lights POST');
+    await waitForVisual(page, false);
+    assert.equal(fixture.postRequests[0].body.on, true);
+    assert.equal(fixture.apiOn, true);
   } finally {
     await closeLightsPage(opened);
   }
 });
 
-test('the switch remains disabled until both auth and initial server state are authoritative', { timeout: 30000 }, async t => {
-  await t.test('a delayed state load cannot use the default visual as the first command', async () => {
-    const lightsGate = deferred();
-    resetFixture({ apiOn: false, lightsGate });
-    const opened = await openLightsPage();
-    const { page } = opened;
-    try {
-      await waitForFixture(() => fixture.authResponses === 1, 'the auth response');
-      await waitForFixture(() => fixture.lightsGetRequests.length === 1, 'the delayed Lights GET');
-      await page.waitForFunction(() => document.body.classList.contains('is-authed'));
-      assert.equal((await switchSnapshot(page)).disabled, true);
-
-      lightsGate.resolve();
-      await waitForVisual(page, true);
-      await waitForEnabled(page);
-      await pointerPress(page);
-      await waitForFixture(() => fixture.postRequests.length === 1, 'the first post-load Lights POST');
-      await waitForVisual(page, false);
-      assert.equal(fixture.postRequests[0].body.on, true);
-      assert.equal(fixture.apiOn, true);
-    } finally {
-      await closeLightsPage(opened);
-    }
-  });
-
-  await t.test('a delayed auth response cannot authorize an already loaded state', async () => {
-    const authGate = deferred();
-    resetFixture({ apiOn: false, authGate });
-    const opened = await openLightsPage();
-    const { page } = opened;
-    try {
-      await waitForFixture(() => fixture.authRequests.length === 1, 'the delayed auth request');
-      await waitForVisual(page, true);
-      assert.equal((await switchSnapshot(page)).disabled, true);
-
-      authGate.resolve();
-      await waitForEnabled(page);
-      await pointerPress(page);
-      await waitForFixture(() => fixture.postRequests.length === 1, 'the authenticated Lights POST');
-      await waitForVisual(page, false);
-      assert.equal(fixture.postRequests[0].body.on, true);
-      assert.equal(fixture.apiOn, true);
-    } finally {
-      await closeLightsPage(opened);
-    }
-  });
-});
-
-test('a POST 401 clears auth, disables control, and reconciles authoritative state', { timeout: 30000 }, async () => {
-  resetFixture({ apiOn: true, postOutcome: 'unauthorized' });
+test('a public POST validation failure reconciles authoritative state and keeps control available', { timeout: 30000 }, async () => {
+  resetFixture({ apiOn: true, postOutcome: 'bad-request' });
   const opened = await openLightsPage();
   const { page } = opened;
   try {
     await waitForEnabled(page);
     await waitForVisual(page, false);
     await pointerPress(page);
-    await waitForFixture(() => fixture.postRequests.length === 1, 'the rejected Lights POST');
+    await waitForFixture(() => fixture.postRequests.length === 1, 'the rejected public Lights POST');
     const postSequence = fixture.postRequests[0].sequence;
     await waitForFixture(
       () => fixture.lightsGetRequests.some(request => request.sequence > postSequence),
-      'a post-401 authoritative state reconciliation'
+      'a post-validation authoritative state reconciliation'
     );
-    await page.waitForFunction(() => {
-      const button = document.querySelector('#switch');
-      return button.disabled
-        && button.getAttribute('aria-busy') !== 'true'
-        && localStorage.getItem('auth_token') === null
-        && localStorage.getItem('auth_user') === null;
-    });
     await waitForVisual(page, false);
+    await waitForEnabled(page);
     assert.equal(fixture.apiOn, true);
     assert.deepEqual(fixture.postRequests[0].body, { on: false });
-    assert.deepEqual(await storageSnapshot(page), { token: null, user: null });
-    assert.equal((await switchSnapshot(page)).bodyAuthed, false);
-
-    await pointerPress(page);
-    await new Promise(resolve => setTimeout(resolve, 120));
-    assert.equal(fixture.postRequests.length, 1);
+    assert.equal((await switchSnapshot(page)).disabled, false);
   } finally {
     await closeLightsPage(opened);
   }
 });
 
-test('a transient POST failure preserves valid auth and does not commit a visual flip', { timeout: 30000 }, async () => {
+test('a transient public POST failure does not commit a visual flip', { timeout: 30000 }, async () => {
   resetFixture({ apiOn: false, postOutcome: 'server-error' });
   const opened = await openLightsPage();
   const { page } = opened;
@@ -545,9 +390,6 @@ test('a transient POST failure preserves valid auth and does not commit a visual
 
     assert.equal(fixture.apiOn, false);
     assert.deepEqual(fixture.postRequests[0].body, { on: true });
-    const storage = await storageSnapshot(page);
-    assert.equal(storage.token, VALID_TOKEN);
-    assert.equal(JSON.parse(storage.user).username, YANNICK.username);
     assert.deepEqual(await switchSnapshot(page), before);
   } finally {
     await closeLightsPage(opened);

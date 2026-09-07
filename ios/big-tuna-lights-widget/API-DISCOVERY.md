@@ -103,16 +103,17 @@ commands retain their command ID if retried.
 
 ## Existing website/legacy Lights API
 
-The web page at `/lights/` is retained for browser/HomeKit/scheduler
-compatibility, but the native app does not use it for writes.
+The web page at `/lights/` is retained for browser and HomeKit compatibility,
+but the native app does not use it for writes. There is no server-side Lights
+schedule; state changes are manual through the website, HomeKit, or native
+controls.
 
 - `GET /api/lights` is public and returns the historical desired stored value:
   `{"on":true,"updatedAt":"..."}`. The website translates it through its
   `apiToWebsiteState` boundary because the historic relay wiring is inverted.
-- `POST /api/lights` requires an ordinary website Bearer session for the
-  `yannick` account. It accepts `{"on":true}` and returns
-  `{"on":true,"updatedAt":"..."}`. The server rejects unauthenticated and
-  non-owner callers with 401/403 and rejects invalid bodies.
+- `POST /api/lights` is public. It accepts only `{"on":true}` or
+  `{"on":false}` and returns `{"on":true,"updatedAt":"..."}`. The server
+  strictly rejects malformed bodies and non-Boolean `on` values.
 - `GET /api/lights/events` is a public server-sent-event desired-state stream.
 - `GET /api/lights/device` and `POST /api/lights/device/status` are relay
   protocol endpoints. Where configured, they require the private
@@ -123,10 +124,10 @@ The relay protocol's stored `on` is intentionally inverted from physical ON.
 The server's `lights-native-control` adapter is the single translation point.
 Do not copy legacy inversion logic into Swift, widgets, or App Intents.
 
-Security note: public legacy state/heartbeat reads reveal whether a light is
-desired on, while writes remain owner-gated. The native endpoint improves the
-client boundary through a revocable, least-privilege token. If public state
-visibility becomes undesirable, changing it is a server/product decision and
+Security note: the legacy website state, heartbeat, and write route are public.
+The native endpoint remains owner-only through a revocable, least-privilege
+token. Device-token and HomeKit owner boundaries are unchanged. If public
+legacy access becomes undesirable, changing it is a server/product decision and
 must preserve website/ESP compatibility; do not expose a LAN relay address or
 device credential as a workaround.
 
