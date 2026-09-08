@@ -2,6 +2,7 @@
 
 Base URL: `https://yannickmorgans.ca` (local development: `http://localhost:3000`).
 This document records the current server routes relevant to supported clients.
+For the complete live HTTP inventory, see `docs/API_ENDPOINTS.md`.
 `server.js` remains the executable authority; `docs/openapi.yaml` is the
 machine-readable contract for the native Yannick Lights integration surface.
 
@@ -141,8 +142,8 @@ external consumer; it is not permission to expose a private route.
 | `POST /api/eco-ai/chat` | Bounded chat JSON; streamed model response | Website bearer; Ollama external local API |
 | `GET /api/trivia/status`, `POST /api/trivia/generate` | Readiness or generated verified question batch | Website bearer; Trivia UI; configured model provider |
 | `GET/POST/DELETE /api/assignments*` | Per-user setup, state, check/email/action results | Website bearer; Assignment Coach and signed email actions |
-| `POST /api/parse-pbest` | SwimRankings PDF body; parsed times or parse errors | Website bearer; Psych Sheet UI |
-| `GET /api/waquatics/search?name=...`, `GET /api/waquatics/athlete?id=...` | Sanitized proxy results/errors | Website bearer; swim apps; World Aquatics upstream |
+| `POST /api/parse-pbest` | SwimRankings PDF body; parsed times or parse errors | Public; Psych Sheet UI |
+| `GET /api/waquatics/search?name=...`, `GET /api/waquatics/athlete?id=...` | Sanitized proxy results/errors | Public; swim apps; World Aquatics upstream |
 | `GET/POST /api/climbs`, `GET/POST/DELETE /api/climbs2`, `POST/DELETE /api/climbs2/photo/{id}`, `GET /api/climbs2/photo/{id}?t=` | Per-user climbs/sessions/photos; validation/auth errors | Website bearer or short-lived image token; climb apps |
 | `GET/POST/PUT/DELETE /api/quizzes[/{id}]` | Quiz metadata/questions; validation/not-found errors | Website bearer; Quiz UI |
 | `GET/POST/PATCH/DELETE /api/meets/psych-sheet[/{id}]` | Meet metadata/raw text/settings; validation/not-found errors | Website bearer; Psych Sheet UI |
