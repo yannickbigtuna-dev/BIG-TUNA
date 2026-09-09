@@ -62,8 +62,11 @@ Important local-machine assumptions: several scripts and log messages still refe
 
 `config/apple-apps.json` is a tooling-only allowlist for local native app
 workspaces. `tools/Launch-BigTunaCodex.ps1` always starts Codex with
-`-C C:\SERVER` and adds only an existing registered Git worktree directly below
-`C:\APPS`; it rejects missing, broad, or outside-root paths. Yannick Lights is
+`-C C:\SERVER` and, for an existing registered Git worktree directly below
+`C:\APPS`, adds the registry-validated app workspace and that workspace's exact
+`.git` metadata directory as narrowly scoped `--add-dir` roots. This permits
+normal Git commits and pushes from the app workspace while rejecting missing,
+broad, outside-root, or arbitrarily discovered paths. Yannick Lights is
 registered at `C:\APPS\YannickLightsIOS`. The authoritative server-facing
 native contract is `docs/openapi.yaml`, explained in `docs/API_CONTRACT.md`;
 `tools/Sync-AppApiContract.ps1` can create a clearly marked generated app-local

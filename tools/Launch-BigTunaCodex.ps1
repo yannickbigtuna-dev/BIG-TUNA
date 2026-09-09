@@ -47,12 +47,15 @@ try {
         }
         $workspace = Get-NormalizedPath $rawWorkspace "Workspace for $slug"
         if (-not (Test-ChildPath $resolvedAppsRoot $workspace)) { throw "Workspace for $slug is outside ${AllowedAppsRoot}: $workspace" }
-        if (-not (Test-Path -LiteralPath (Join-Path $workspace '.git'))) {
+        $gitDirectory = Join-Path $workspace '.git'
+        if (-not (Test-Path -LiteralPath $gitDirectory -PathType Container)) {
             if ($App -and $App.Count) { throw "Workspace for $slug is not a Git worktree: $workspace" }
             Write-Warning "Skipping registered app $slug because it is not a Git worktree: $workspace"
             continue
         }
-        $selected += [pscustomobject]@{ Slug = $slug; Workspace = $workspace }
+        $gitDirectory = Get-NormalizedPath $gitDirectory "Git metadata directory for $slug"
+        if (-not (Test-ChildPath $workspace $gitDirectory)) { throw "Git metadata directory for $slug is outside its workspace: $gitDirectory" }
+        $selected += [pscustomobject]@{ Slug = $slug; Workspace = $workspace; GitDirectory = $gitDirectory }
     }
     if (-not $selected.Count) { throw 'No registered app workspaces are available to add to Codex.' }
 
@@ -63,12 +66,15 @@ try {
     }
 
     $arguments = @('--sandbox', 'workspace-write', '-C', $resolvedRepoRoot)
-    foreach ($entry in $selected) { $arguments += @('--add-dir', $entry.Workspace) }
+    foreach ($entry in $selected) { $arguments += @('--add-dir', $entry.Workspace, '--add-dir', $entry.GitDirectory) }
 
     Write-Host 'BIG TUNA Codex workspace:' -ForegroundColor Cyan
     Write-Host "  server: $resolvedRepoRoot"
-    foreach ($entry in $selected) { Write-Host "  app [$($entry.Slug)]: $($entry.Workspace)" }
-    Write-Warning 'This launcher uses workspace-write mode: Codex can write only the server workspace and listed app workspaces. Review the dry run before continuing.'
+    foreach ($entry in $selected) {
+        Write-Host "  app [$($entry.Slug)]: $($entry.Workspace)"
+        Write-Host "    git metadata: $($entry.GitDirectory)"
+    }
+    Write-Warning 'This launcher uses workspace-write mode: Codex can write only the server workspace, listed app workspaces, and their validated Git metadata directories. Review the dry run before continuing.'
     Write-Host (('codex ' + ($arguments | ForEach-Object { if ($_ -match '[\s]') { '"' + $_ + '"' } else { $_ } }) -join ' ')) -ForegroundColor Yellow
 
     if ($DryRun) { return }

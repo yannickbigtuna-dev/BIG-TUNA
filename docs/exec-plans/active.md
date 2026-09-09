@@ -859,3 +859,29 @@ contracts without changing runtime behavior or Xcode Cloud configuration.
 - [x] Run acceptance checks.
 - [x] Commit appropriate repository changes; do not push Yannick Lights because
       this setup-only change does not need to trigger Xcode Cloud.
+
+---
+
+# Active Extension — Yannick Lights TestFlight archive repair
+
+## Goal and mode
+
+DEEP Apple release correction: produce a new `1.3.0 (7)` Xcode Cloud candidate
+for the released four-target Yannick Lights family after a workflow attempted to
+archive the non-distributable `YannickLightsWidgets` extension.
+
+## Scope, constraints, and acceptance
+
+- Preserve all four released bundle identifiers, the App Group, all iPhone and
+  Watch targets, automatic signing, and the current storage schema.
+- Make `YannickLights` an explicit tracked shared scheme, whose archive action
+  builds the primary iOS application and relies on its existing embedded widget
+  and Watch target dependencies. Never make an extension installable merely to
+  silence an archive failure.
+- Synchronize `APP-SPEC.yml`, `project.yml`, and the checked-in PBX project at
+  build 7; retain marketing version 1.3.0.
+- Validate YAML/JSON/plist/XML structure, target references, version alignment,
+  clean diffs, and absence of signing material. Windows cannot assert a macOS
+  archive or TestFlight processing result.
+- Commit and push only the completed app-repository patch. Xcode Cloud then
+  performs the signed archive/upload; verify its remote status separately.
