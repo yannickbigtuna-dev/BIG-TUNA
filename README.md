@@ -379,6 +379,14 @@ GET/POST          /api/shared-lists
 GET/POST/DELETE   /api/shared-lists/:id
 GET               /api/shared-lists/:id/events
 GET               /api/users/lookup
+GET               /api/challenge-accounts/me
+GET/POST          /api/challenges
+GET               /api/challenges/:id
+PUT               /api/challenges/:id/settings
+GET/POST          /api/challenges/:id/review-requests
+POST              /api/challenges/:id/review-requests/:reviewId/decision
+GET               /api/challenges/:id/notification-events
+POST              /api/challenge-devices
 GET               /api/waquatics/search
 GET               /api/waquatics/athlete
 POST              /api/parse-pbest

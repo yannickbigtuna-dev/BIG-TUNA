@@ -66,6 +66,82 @@ for the same target is safe and reuse for a different target returns `409`.
 | `GET /api/lights/device/status` | Public | Sanitized latest relay heartbeat/status. |
 | `POST /api/lights/device/status` | Relay | Only `{on:boolean}` → `{ok:true,trusted}`. When a relay token is configured, it is required. |
 
+## Authenticated challenge accounts
+
+All routes in this section require a normal website bearer session:
+`Authorization: Bearer <website-session>`. Responses set `Cache-Control:
+no-store` and never contain a Strava access/refresh token, OAuth material,
+device subscription token/endpoint, email address, or other account's private
+data. The service uses the existing Strava cache; it does not create another
+login or OAuth flow. Challenge reads are membership-scoped, so a non-member
+gets `404` rather than confirmation that a challenge exists. Challenge reads
+are limited to 90/minute and writes to 30/minute per authenticated account;
+excess requests receive `429`.
+
+| Method and path | Access | Request → response summary |
+| --- | --- | --- |
+| `GET /api/challenge-accounts/me` | Website session | Sanitized account profile and own Strava `{connected,lastSyncAt,athlete}` status; `401` without a session. |
+| `GET /api/challenges` | Website session | Lists only challenges containing the caller. |
+| `POST /api/challenges` | Website session | Creates a challenge from `yannick-emma-default`, `weekly`, `season`, `distance`, `streak`, or `custom`; returns `201`, or `400` for invalid template/rules. The creator is always an owner. |
+| `GET /api/challenges/{id}` | Participant | Detail with participants, rules, current/season score, activity/history/tiebreaker summaries, and pending-review count; `401`/`404`. |
+| `PUT /api/challenges/{id}/settings` | Owner or admin | Replaces validated rule settings/participants; `403` for a member, `400` invalid shape. |
+| `POST /api/challenges/{id}/review-requests` | Participant | `{activityId,reason?}` creates a request for the caller's unqualified activity; `201`, `400`, `404`, or `409` when one is pending/already qualified. |
+| `GET /api/challenges/{id}/review-requests?status=pending` | Owner or admin | Lists review requests awaiting a decision; `403` for participants without management rights. `approved` and `rejected` are also accepted filters. |
+| `POST /api/challenges/{id}/review-requests/{reviewId}/decision` | Owner or admin other than requester | `{decision:"approve"|"reject",reason?}`; approval recomputes scores exactly once. Repeat of the same decision returns `200` with `idempotent:true`; self-decision is `403`; conflicting repeat is `409`. |
+| `POST /api/challenge-devices` | Website session | `{endpoint|token,platform?}` registers a device notification target and returns only `{id,platform,registered:true}`; `201`/`400`. |
+| `GET /api/challenges/{id}/notification-events` | Participant | Returns only the caller's redacted review-requested/approved/rejected events; `401`/`404`. |
+
+Creation example:
+
+```json
+POST /api/challenges
+{
+  "template": "weekly",
+  "name": "September Miles",
+  "participants": [
+    { "userId": "member-id", "role": "member" }
+  ],
+  "qualifyingActivities": ["Run", "Walk"],
+  "thresholds": { "distanceMeters": 5000 },
+  "scoring": { "mode": "count", "pointsPerActivity": 1 },
+  "cadence": { "type": "weekly" },
+  "timezone": "America/Halifax",
+  "manualReview": true
+}
+```
+
+`201` returns a sanitized challenge record such as
+`{"id":"challenge_…","name":"September Miles","participants":[{"userId":"caller-id","role":"owner"},{"userId":"member-id","role":"member"}],"rules":{…}}`.
+Settings accept the same rule fields (`qualifyingActivities`, `thresholds`,
+`scoring`, `cadence`, `timezone`, `participants`, `manualReview`) plus `name`.
+Threshold keys are `distanceMeters`, `durationSeconds`, `elevationMeters`, and
+`activityCount`; scoring modes are `count`, `distance`, `duration`, and
+`streak`; cadence is `weekly`, `monthly`, or `season`.
+
+Detail response shape (all values are sanitized):
+
+```json
+{
+  "id": "challenge_…",
+  "participants": [{ "userId": "caller-id", "role": "owner" }],
+  "rules": { "qualifyingActivities": ["Run"], "thresholds": { "distanceMeters": 5000 } },
+  "currentScore": { "caller-id": 2 },
+  "seasonScore": { "caller-id": 2 },
+  "activities": [{ "id": "strava_123", "qualifies": false, "reviewState": "pending" }],
+  "tiebreakers": [{ "userId": "caller-id", "score": 2, "durationSeconds": 3600, "distanceMeters": 10000 }],
+  "history": [{ "at": "2026-09-09T12:00:00.000Z", "type": "review_approved", "score": { "caller-id": 2 } }],
+  "reviewState": { "pendingCount": 0 }
+}
+```
+
+Review response example: `{"id":"review_…","activityId":"strava_123",
+"status":"pending","requester":{"id":"caller-id","username":"…"}}`.
+Decision response is `{"review":{…},"challenge":{…},"idempotent":false}`.
+Notification events are persisted as `delivery:"stored"`; this deployment has
+no device-push sender or credentials yet. A future delivery worker must use a
+server-only VAPID/provider credential set and update event delivery state; no
+event path exposes a subscription endpoint.
+
 ## Strava Challenge (the Challengers surface)
 
 The two public reads contain only the service's sanitized dashboard/week data.

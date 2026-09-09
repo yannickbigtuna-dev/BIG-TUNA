@@ -839,6 +839,28 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   Challenge administration is Yannick-only under `/api/admin/strava-challenge/*`.
   Invitation tokens are fragment-only, hashed server-side, and separate from OAuth state.
 
+## Authenticated Challenge Accounts
+
+- `/api/challenge-accounts/me`, `/api/challenges*`, and `/api/challenge-devices`
+  are a private browser API layered on the existing website bearer sessions;
+  they are not a second login or OAuth system. The complete contract is in
+  `docs/API_ENDPOINTS.md#authenticated-challenge-accounts`.
+- Durable state is versioned JSON at `data/challenge-accounts/state.json`,
+  serialized and atomically written. It contains challenge membership/rules,
+  activity summaries, review requests/audit entries, device fingerprints and
+  non-secret metadata, and redacted notification-event metadata—never website
+  sessions, Strava credentials, or raw device subscription targets.
+- Every challenge lookup is membership-scoped; owner/admin roles alone may
+  change settings or decide reviews. A requester cannot decide their own
+  request. Approval preserves an audit record and recalculates scores
+  idempotently. Current cached legacy Strava activities are imported only by a
+  server-side adapter into matching participants; there is no public activity
+  ingestion route.
+- Device notification registrations/events are persisted, but no device-push
+  sender is configured today. Events remain `delivery:"stored"` until a vetted
+  server-only delivery worker and credentials are deployed. No device token or
+  endpoint is returned through API responses.
+
 ## Apple App Factory
 
 - Reusable native source/template and operating specs live under `ios/app-factory/`.

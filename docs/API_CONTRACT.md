@@ -19,6 +19,15 @@ authenticated username is `yannick`; hiding a client control is never
 authorization. Do not send a website password, website bearer token, native
 bearer token, relay token, or Apple credential to an untrusted client or log.
 
+## Authenticated challenge accounts
+
+The supported browser challenge-account API is documented authoritatively in
+[`API_ENDPOINTS.md`](API_ENDPOINTS.md#authenticated-challenge-accounts),
+including request/response examples and status codes. It uses the normal
+website bearer session, membership-scoped object lookup, owner/admin settings
+authorization, and no-store responses. It does not change the legacy public
+`/api/strava-challenge/public` scoreboard or expose Strava OAuth credentials.
+
 ## Yannick Lights native integration
 
 The native app uses physical-light terms and never calls the relay protocol.
