@@ -5,7 +5,9 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { after, before, test } = require('node:test');
+const { createChallengeApns, createDeviceTokenCipher } = require('../lib/challenge-apns');
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'big-tuna-challenge-accounts-'));
 const previousDataDir = process.env.BIG_TUNA_DATA_DIR;
@@ -39,7 +41,7 @@ function request(method, pathname, { token, body } = {}) {
 before(async () => {
   const expiresAt = new Date(Date.now() + 60_000).toISOString();
   writeJson(path.join(dataDir, 'users.json'), [
-    { id: 'owner-id', username: 'yannick' }, { id: 'member-id', username: 'fishyemma' }, { id: 'outsider-id', username: 'other' },
+    { id: 'owner-id', username: 'yannick', salt: 'website-salt', passwordHash: crypto.createHash('sha256').update('website-saltnormal-password').digest('hex') }, { id: 'member-id', username: 'fishyemma' }, { id: 'outsider-id', username: 'other' },
   ]);
   writeJson(path.join(dataDir, 'sessions.json'), [
     { token: OWNER, userId: 'owner-id', expiresAt }, { token: MEMBER, userId: 'member-id', expiresAt }, { token: OUTSIDER, userId: 'outsider-id', expiresAt },
@@ -70,6 +72,14 @@ test('challenge routes enforce sessions, membership, and owner-only settings', a
   assert.equal((await request('GET', `/api/challenges/${id}`, { token: OUTSIDER })).status, 404);
 });
 
+test('ordinary website login bearer session accesses the challenge account profile', async () => {
+  const login = await request('POST', '/api/auth/login', { body: { username: 'yannick', password: 'normal-password' } });
+  assert.equal(login.status, 200);
+  const profile = await request('GET', '/api/challenge-accounts/me', { token: login.body.token });
+  assert.equal(profile.status, 200);
+  assert.equal(profile.body.id, 'owner-id');
+});
+
 test('review decisions prevent self-approval, are idempotent, and emit safe events', async () => {
   const created = await request('POST', '/api/challenges', { token: OWNER, body: {
     template: 'custom', name: 'Review workflow', participants: [{ userId: 'member-id', role: 'member' }],
@@ -88,5 +98,23 @@ test('review decisions prevent self-approval, are idempotent, and emit safe even
   assert.equal(approved.status, 200); assert.equal(approved.body.idempotent, false); assert.equal(approved.body.challenge.currentScore['member-id'], 1);
   assert.equal((await request('POST', `/api/challenges/${id}/review-requests/${review.body.id}/decision`, { token: OWNER, body: { decision: 'approve' } })).body.idempotent, true);
   const events = await request('GET', `/api/challenges/${id}/notification-events`, { token: MEMBER });
-  assert.equal(events.status, 200); assert.equal(events.body.events[0].delivery, 'stored'); assert.equal(JSON.stringify(events.body).includes('endpoint'), false);
+  assert.equal(events.status, 200); assert.equal(events.body.events[0].delivery, 'failed'); assert.equal(JSON.stringify(events.body).includes('endpoint'), false);
+});
+
+test('device-token encryption and unavailable APNs delivery never expose a raw token', async () => {
+  const token = 'a'.repeat(64);
+  const cipher = createDeviceTokenCipher({ env: { CHALLENGE_DEVICE_TOKEN_CRYPTO_SECRET: 'x'.repeat(48) } });
+  const encrypted = cipher.encrypt(token);
+  assert.equal(JSON.stringify(encrypted).includes(token), false);
+  assert.equal(cipher.decrypt(encrypted), token);
+  const delivery = await createChallengeApns({ env: {} }).send({ token, eventType: 'review_requested', challengeId: 'challenge_1', reviewId: 'review_1', title: 'Review requested', body: 'A participant requested a review.' });
+  assert.deepEqual(delivery, { delivery: 'failed', reason: 'unavailable' });
+  assert.equal(JSON.stringify(delivery).includes(token), false);
+});
+
+test('device registration fails safely when the deployment encryption key is absent', async () => {
+  const token = 'b'.repeat(64);
+  const result = await request('POST', '/api/challenge-devices', { token: OWNER, body: { token, platform: 'ios' } });
+  assert.equal(result.status, 503);
+  assert.equal(JSON.stringify(result.body).includes(token), false);
 });

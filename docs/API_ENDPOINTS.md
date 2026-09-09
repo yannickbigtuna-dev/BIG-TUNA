@@ -71,25 +71,31 @@ for the same target is safe and reuse for a different target returns `409`.
 All routes in this section require a normal website bearer session:
 `Authorization: Bearer <website-session>`. Responses set `Cache-Control:
 no-store` and never contain a Strava access/refresh token, OAuth material,
-device subscription token/endpoint, email address, or other account's private
-data. The service uses the existing Strava cache; it does not create another
-login or OAuth flow. Challenge reads are membership-scoped, so a non-member
-gets `404` rather than confirmation that a challenge exists. Challenge reads
-are limited to 90/minute and writes to 30/minute per authenticated account;
-excess requests receive `429`.
+raw device token, email address, or another account's private data. A website
+session is also the native Challenge client's bearer credential: there is no
+second account, challenge login, Strava credential record, or challenge data
+store. Account Strava credentials and challenge records are server-side parts
+of the existing Strava Challenge state. Challenge reads are membership-scoped,
+so a non-member gets `404` rather than confirmation that a challenge exists.
+Challenge reads are limited to 90/minute and writes to 30/minute per
+authenticated account; excess requests receive `429`.
 
 | Method and path | Access | Request → response summary |
 | --- | --- | --- |
-| `GET /api/challenge-accounts/me` | Website session | Sanitized account profile and own Strava `{connected,lastSyncAt,athlete}` status; `401` without a session. |
+| `GET /api/challenge-accounts/me` | Website/native website session | Sanitized account profile and own Strava `{connected,lastSyncAt,athlete}` status; `401` without a session. |
+| `POST /api/challenge-accounts/strava/connection/start` | Website/native website session | Optional `{redirectMode:"native"|"web"}` (defaults to `native`) → `{authorizationUrl,transactionId,expiresAt}`. The authorization URL is single-use and expires in 10 minutes (or the server's shorter configured value). |
+| `GET /api/challenge-accounts/strava/connection` | Website/native website session | Current `{strava:{connected,athlete,lastSyncAt}}`; safe status/reconnect probe. |
+| `DELETE /api/challenge-accounts/strava/connection` | Website/native website session | Removes this account's existing Strava connection → the same disconnected `strava` status. |
 | `GET /api/challenges` | Website session | Lists only challenges containing the caller. |
 | `POST /api/challenges` | Website session | Creates a challenge from `yannick-emma-default`, `weekly`, `season`, `distance`, `streak`, or `custom`; returns `201`, or `400` for invalid template/rules. The creator is always an owner. |
 | `GET /api/challenges/{id}` | Participant | Detail with participants, rules, current/season score, activity/history/tiebreaker summaries, and pending-review count; `401`/`404`. |
 | `PUT /api/challenges/{id}/settings` | Owner or admin | Replaces validated rule settings/participants; `403` for a member, `400` invalid shape. |
 | `POST /api/challenges/{id}/review-requests` | Participant | `{activityId,reason?}` creates a request for the caller's unqualified activity; `201`, `400`, `404`, or `409` when one is pending/already qualified. |
 | `GET /api/challenges/{id}/review-requests?status=pending` | Owner or admin | Lists review requests awaiting a decision; `403` for participants without management rights. `approved` and `rejected` are also accepted filters. |
-| `POST /api/challenges/{id}/review-requests/{reviewId}/decision` | Owner or admin other than requester | `{decision:"approve"|"reject",reason?}`; approval recomputes scores exactly once. Repeat of the same decision returns `200` with `idempotent:true`; self-decision is `403`; conflicting repeat is `409`. |
-| `POST /api/challenge-devices` | Website session | `{endpoint|token,platform?}` registers a device notification target and returns only `{id,platform,registered:true}`; `201`/`400`. |
-| `GET /api/challenges/{id}/notification-events` | Participant | Returns only the caller's redacted review-requested/approved/rejected events; `401`/`404`. |
+| `GET /api/challenge-review-inbox` | Eligible reviewer | Pending requests in challenges containing the caller that were requested by someone else and that caller can decide. Response `{reviews:[{challenge:{id,name},review:{id,requesterDisplayName,activity,reason,createdAt}}]}`. |
+| `POST /api/challenges/{id}/review-requests/{reviewId}/decision` | Eligible reviewer other than requester | `{decision:"approve"|"reject",reason?}`; approval recomputes scores exactly once. Same decision repeat returns `200` with `idempotent:true`; self-decision is `403`; conflicting repeat is `409`. |
+| `POST /api/challenge-devices` | Website/native website session | Exactly `{token,platform:"ios"}`. Stores the raw APNs token encrypted; response is only `{id,platform:"ios",registered:true}`; `201`, `400`, or `503` if encryption is unavailable. |
+| `GET /api/challenges/{id}/notification-events` | Participant | Returns only the caller's redacted review-requested/approved/rejected events `{id,type,reviewId,createdAt,delivery}`; delivery is `pending`, `sent`, or `failed`; `401`/`404`. |
 
 Creation example:
 
@@ -134,13 +140,68 @@ Detail response shape (all values are sanitized):
 }
 ```
 
-Review response example: `{"id":"review_…","activityId":"strava_123",
-"status":"pending","requester":{"id":"caller-id","username":"…"}}`.
-Decision response is `{"review":{…},"challenge":{…},"idempotent":false}`.
-Notification events are persisted as `delivery:"stored"`; this deployment has
-no device-push sender or credentials yet. A future delivery worker must use a
-server-only VAPID/provider credential set and update event delivery state; no
-event path exposes a subscription endpoint.
+### Native-safe Strava connection
+
+The native client signs in with `POST /api/auth/login`, stores the ordinary
+BIG TUNA session securely, and sends it as the bearer credential above. Start
+with `POST /api/challenge-accounts/strava/connection/start` and
+`{"redirectMode":"native"}`. Open the returned `authorizationUrl` in an
+authentication browser session. It is an opaque, short-lived transaction; do
+not parse, persist, or share its OAuth state.
+
+After successful authorization the server redirects the browser to
+`yannickchallenge://strava-complete?status=success&transaction=<one-time-id>`.
+Failure uses `status=failure` when the callback can identify the transaction.
+The callback has no Strava token, no BIG TUNA bearer token, and no OAuth state.
+`transaction` is only a completion correlation value, not a credential; it is
+single-use and expires with the 10-minute transaction. Expired, replayed,
+claimed, denied, or malformed transactions fail safely (`400`, typically
+`invalid_oauth_state`) and cannot update a connection. The app must then call
+`GET /api/challenge-accounts/me` or `GET .../strava/connection` to obtain the
+authoritative `strava.connected` status. Website `redirectMode:"web"` and
+native connection/reconnection write the exact same account connection.
+
+### Peer review and notifications
+
+Either participant in a two-person challenge may decide the *other* person's
+pending request; owner/admin is not required for that decision. For three or
+more participants, an eligible reviewer is an owner or admin participant other
+than the requester. This rule is used for both the inbox and decision endpoint.
+It is separate from management: only owner/admin may update settings or use
+management review listing. Every successful decision creates audit/history and
+an in-app notification event. An approved activity's score change is performed
+in the same serialized decision mutation, so an idempotent repeat does not
+recalculate or append history again.
+
+Review-push payloads contain only `eventType`, `challengeId`, `reviewId`, and a
+short title/body. A review request targets eligible reviewers; a decision
+targets the requester. Events are stored before delivery and remain an in-app
+fallback on absent/unavailable APNs. Neither device tokens nor provider error
+details appear in responses, event records, or logs. An invalid/unregistered
+APNs token disables that device record.
+
+### APNs production configuration
+
+Set deployment-only environment variables (never in a native app, source tree,
+or API response): `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_BUNDLE_ID`, and
+`APNS_AUTH_KEY_BASE64`. The last is the complete UTF-8 contents of Apple’s
+`.p8` signing key encoded as base64 (not its filename and not a PEM path).
+Set `APNS_ENVIRONMENT=production` for production tokens; use `sandbox` only
+for a development/sandbox signing environment. Configure the iOS bundle ID for
+Push Notifications in Apple Developer, create an APNs Auth Key with its key ID
+and team ID, base64 encode its `.p8` once in the deployment secret manager,
+then restart the server with those secrets available. Permit outbound HTTP/2
+TLS to `api.push.apple.com` (or `api.sandbox.push.apple.com`) through any host
+proxy/firewall; do not MITM APNs TLS.
+
+`CHALLENGE_DEVICE_TOKEN_CRYPTO_SECRET` is also mandatory before device
+registration. Generate a high-entropy stable secret (for example
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`),
+store and back it up in the deployment secret manager, and keep it unchanged
+while encrypted registrations exist; rotating it without a migration makes old
+tokens undecryptable. Missing APNs credentials never means a successful push:
+delivery becomes `failed` while the in-app event persists. Missing encryption
+key rejects registration with `503`.
 
 ## Strava Challenge (the Challengers surface)
 

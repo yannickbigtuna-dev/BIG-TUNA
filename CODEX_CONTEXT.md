@@ -841,25 +841,37 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
 
 ## Authenticated Challenge Accounts
 
-- `/api/challenge-accounts/me`, `/api/challenges*`, and `/api/challenge-devices`
-  are a private browser API layered on the existing website bearer sessions;
-  they are not a second login or OAuth system. The complete contract is in
-  `docs/API_ENDPOINTS.md#authenticated-challenge-accounts`.
-- Durable state is versioned JSON at `data/challenge-accounts/state.json`,
-  serialized and atomically written. It contains challenge membership/rules,
-  activity summaries, review requests/audit entries, device fingerprints and
-  non-secret metadata, and redacted notification-event metadata—never website
-  sessions, Strava credentials, or raw device subscription targets.
-- Every challenge lookup is membership-scoped; owner/admin roles alone may
-  change settings or decide reviews. A requester cannot decide their own
-  request. Approval preserves an audit record and recalculates scores
-  idempotently. Current cached legacy Strava activities are imported only by a
-  server-side adapter into matching participants; there is no public activity
-  ingestion route.
-- Device notification registrations/events are persisted, but no device-push
-  sender is configured today. Events remain `delivery:"stored"` until a vetted
-  server-only delivery worker and credentials are deployed. No device token or
-  endpoint is returned through API responses.
+- `/api/challenge-accounts/me`, `/api/challenge-accounts/strava/connection*`,
+  `/api/challenge-review-inbox`, `/api/challenges*`, and `/api/challenge-devices`
+  use the existing website bearer session for browser and native Challenge
+  clients; they are not a second login, OAuth, Strava-connection, or challenge
+  store. The complete contract is in `docs/API_ENDPOINTS.md#authenticated-challenge-accounts`.
+- Durable account connections, account OAuth transactions/activity cache, and
+  challenge-account data are namespaced in the versioned existing
+  `data/strava-challenge/state.json` store. Account access/refresh tokens and
+  iOS device tokens are AES-256-GCM encrypted; OAuth/browser transaction values
+  are hash-only. A valid historical `data/challenge-accounts/state.json` is
+  copied once into this namespace on startup and then retained untouched only
+  as a recovery artifact. Never serialize this service state or create a parallel
+  `data/challenge-accounts/` store.
+- Account OAuth transactions last at most ten minutes, are account-bound and
+  single-use, and native completion redirects only to
+  `yannickchallenge://strava-complete?status=…&transaction=…`; neither that URL
+  nor API responses contains a bearer token, OAuth state, or Strava credential.
+  Website and native starts replace the same account connection on success.
+- Every challenge lookup is membership-scoped. Owner/admin roles alone may
+  change settings and management review lists. Peer review is deliberately
+  separate: in a two-person challenge the other participant may decide; in
+  larger challenges, only a non-requester owner/admin may decide. A requester
+  cannot decide their own request. Approval preserves one audit/history entry
+  and recalculates scores once; server-side adapters import only member account
+  activity caches, with no public ingestion route.
+- `POST /api/challenge-devices` accepts an iOS token only, stores its encrypted
+  value plus a fingerprint, and never returns or logs either raw token. The
+  server-side APNs service records `pending`, `sent`, or `failed`; missing APNs
+  deployment credentials truthfully result in `failed` while the redacted
+  in-app event persists. `APNS_*` credentials and
+  `CHALLENGE_DEVICE_TOKEN_CRYPTO_SECRET` are deployment-only requirements.
 
 ## Apple App Factory
 

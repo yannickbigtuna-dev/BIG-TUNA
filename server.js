@@ -84,6 +84,7 @@ const YHZ_RADAR_TIMEOUT_MS = 8000;
 const assignmentCoach = require('./lib/assignment-coach');
 const { createStravaChallenge } = require('./lib/strava-challenge');
 const { createChallengeAccounts } = require('./lib/challenge-accounts');
+const { createChallengeApns, createDeviceTokenCipher } = require('./lib/challenge-apns');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
 const { createTriviaTopicPool } = require('./lib/trivia-topic-pool');
@@ -147,6 +148,8 @@ const stravaChallengeLogger = Object.freeze({
 
 let stravaChallenge = null;
 let challengeAccounts = null;
+const challengeDeviceTokenCipher = createDeviceTokenCipher({ env: process.env });
+const challengeApns = createChallengeApns({ env: process.env, logger: stravaChallengeLogger });
 const CHALLENGE_REFRESH_COOLDOWN_MS = 5 * 60_000;
 let challengeRefreshInFlight = null;
 let challengeRefreshCooldownUntil = 0;
@@ -163,15 +166,58 @@ try {
   stravaChallengeLogger.error('service unavailable during startup:', error && error.message);
 }
 
+// Earlier challenge-account releases used their own ignored JSON file. Preserve
+// that user-owned state exactly once by copying a strictly shaped legacy record
+// into the new namespaced section of the existing Strava state. The source is
+// deliberately retained as a recovery artifact; runtime never writes it again.
+function migrateLegacyChallengeAccountState(adapter) {
+  const legacyFile = path.join(DATA, 'challenge-accounts', 'state.json');
+  if (!adapter || typeof adapter.mutate !== 'function' || !fs.existsSync(legacyFile)) return;
+  let legacy;
+  try {
+    if (fs.statSync(legacyFile).size > 10 * 1024 * 1024) throw new Error('legacy state exceeds the migration limit');
+    legacy = JSON.parse(fs.readFileSync(legacyFile, 'utf8'));
+    if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy) || legacy.version !== 1
+      || !legacy.challenges || typeof legacy.challenges !== 'object' || Array.isArray(legacy.challenges)
+      || !legacy.devices || typeof legacy.devices !== 'object' || Array.isArray(legacy.devices)
+      || !legacy.notificationEvents || typeof legacy.notificationEvents !== 'object' || Array.isArray(legacy.notificationEvents)) throw new Error('legacy state has an unsupported shape');
+  } catch (error) {
+    stravaChallengeLogger.warn('legacy challenge-account state was not migrated:', error && error.message);
+    return;
+  }
+  adapter.mutate(target => {
+    const hasSharedRecords = Object.keys(target.challenges || {}).length
+      || Object.keys(target.devices || {}).length
+      || Object.keys(target.notificationEvents || {}).length;
+    if (hasSharedRecords) return false;
+    target.version = 1;
+    target.challenges = legacy.challenges;
+    target.devices = legacy.devices;
+    target.notificationEvents = legacy.notificationEvents;
+    return true;
+  }).then(migrated => {
+    if (migrated) stravaChallengeLogger.info('migrated legacy challenge-account state into shared Strava storage');
+  }).catch(error => stravaChallengeLogger.warn('legacy challenge-account migration was not completed:', error && error.message));
+}
+
 // Challenge accounts deliberately reuse website sessions and the existing
 // Strava service. Their own store contains only user IDs and challenge state;
 // it is never a second login or OAuth credential store.
 try {
+  const challengeStateAdapter = stravaChallenge && typeof stravaChallenge.getChallengeAccountStateAdapter === 'function'
+    ? stravaChallenge.getChallengeAccountStateAdapter()
+    : null;
+  migrateLegacyChallengeAccountState(challengeStateAdapter);
   challengeAccounts = createChallengeAccounts({
-    dataDir: path.join(DATA, 'challenge-accounts'),
-    // No device-push sender exists in this deployment yet. Events are retained
-    // as `stored` until a vetted delivery worker and its credentials are added.
-    notificationConfigured: false,
+    // Challenge account records are a namespaced section of the existing
+    // Strava service state, never a parallel data directory or account store.
+    stateAdapter: challengeStateAdapter,
+    notificationConfigured: challengeApns.configured,
+    notificationSender: async ({ token, platform, event }) => {
+      const result = await challengeApns.send({ token, platform, eventType: event.type, challengeId: event.challengeId, reviewId: event.reviewId, title: event.title, body: event.body });
+      return { sent: result.delivery === 'sent', invalidToken: result.reason === 'invalid_token' };
+    },
+    deviceTokenCipher: challengeDeviceTokenCipher,
     getStravaStatus: getChallengeAccountStravaStatus,
   });
 } catch (error) {
@@ -1040,6 +1086,12 @@ function challengeError(res, error, fallback = 'Challenge request could not be c
 // raw Strava service record.
 async function getChallengeAccountStravaStatus(user) {
   if (!stravaChallenge || !user) return { connected: false, lastSyncAt: null, athlete: null };
+  // Account OAuth is the canonical connection for native and website clients.
+  // Fall back to the legacy fixed-participant adapter only for older records.
+  if (typeof stravaChallenge.getAccountStatus === 'function') {
+    try { return await stravaChallenge.getAccountStatus({ id: user.id, username: user.username }); }
+    catch { return { connected: false, lastSyncAt: null, athlete: null }; }
+  }
   const username = String(user.username || '').trim().toLowerCase();
   const participantId = username === 'yannick' ? 'yannick'
     : (username === 'fishyemma' || username === 'emma' ? 'emma' : null);
@@ -1084,7 +1136,7 @@ function challengeAccountsUser(req, res) {
 }
 function challengeAccountsError(res, error) {
   const status = Number(error && error.status);
-  const safeStatus = [400, 401, 403, 404, 409].includes(status) ? status : 500;
+  const safeStatus = [400, 401, 403, 404, 409, 503].includes(status) ? status : 500;
   if (safeStatus >= 500) stravaChallengeLogger.error('challenge account request failed:', error && error.message);
   return jsonRes(res, safeStatus, { error: safeStatus >= 500 ? 'Challenge request could not be completed' : String(error.message || 'Challenge request was rejected') });
 }
@@ -1135,6 +1187,48 @@ async function syncLegacyStravaActivitiesForChallenge(user, challengeId) {
     // legacy activity cache is temporarily unavailable.
     stravaChallengeLogger.warn('challenge activity adapter unavailable:', error && error.message);
   }
+}
+
+// The account-level cache is the normal source for native and website
+// connections. A member-triggered detail/review read may refresh only the
+// challenge's own participant accounts; it never accepts a target account ID
+// from the client and all imported activities remain membership-scoped.
+async function syncAccountStravaActivitiesForChallenge(user, challengeId) {
+  if (!challengeAccounts || !stravaChallenge || typeof stravaChallenge.syncAccountActivities !== 'function') return;
+  try {
+    const detail = await challengeAccounts.getChallenge(user, challengeId);
+    const participantIds = Array.isArray(detail && detail.participants)
+      ? detail.participants.map(participant => participant && participant.userId).filter(Boolean)
+      : [];
+    const connectedIds = (await Promise.all(participantIds.map(async participantId => {
+      try { return (await stravaChallenge.getAccountStatus({ id: participantId })).connected ? participantId : null; }
+      catch { return null; }
+    }))).filter(Boolean);
+    const results = await Promise.allSettled(connectedIds.map(async participantId => {
+      const synced = await stravaChallenge.syncAccountActivities({ id: participantId });
+      const activities = Array.isArray(synced && synced.activities) ? synced.activities.map(activity => ({
+        id: `account_${participantId}_${String(activity.id || '')}`,
+        userId: participantId,
+        sportType: activity.sportType,
+        name: activity.name,
+        startDate: activity.startDate,
+        distanceMeters: activity.distanceMeters,
+        movingTime: activity.movingTime,
+      })).filter(activity => activity.id !== `account_${participantId}_`) : [];
+      if (activities.length) await challengeAccounts.ingestActivities(user, challengeId, activities);
+    }));
+    // Disconnected or temporarily unavailable peer accounts do not prevent a
+    // member from viewing durable challenge data.
+    if (results.some(result => result.status === 'rejected')) stravaChallengeLogger.warn('challenge account activity sync partially unavailable');
+  } catch {
+    // The persisted challenge view remains available if an account cache is
+    // concurrently updated or a provider refresh is unavailable.
+  }
+}
+
+async function syncChallengeActivitiesForAccountView(user, challengeId) {
+  await syncLegacyStravaActivitiesForChallenge(user, challengeId);
+  await syncAccountStravaActivitiesForChallenge(user, challengeId);
 }
 
 function challengeOAuthPage(success) {
@@ -1996,6 +2090,41 @@ async function handleAPI(req, res, urlPath) {
     catch (error) { return challengeAccountsError(res, error); }
   }
 
+  // Native clients authenticate with the ordinary website bearer session, then
+  // open this one-use Strava URL in ASWebAuthenticationSession. OAuth state and
+  // credentials remain inside the existing Strava service.
+  if (urlPath === '/api/challenge-accounts/strava/connection/start' && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    const redirectMode = body && body.redirectMode === undefined ? 'native' : boundedString(body && body.redirectMode, 16);
+    if (!['native', 'web'].includes(redirectMode)) return jsonRes(res, 400, { error: 'Connection mode is invalid' });
+    if (typeof service.prepareAccountOAuth !== 'function') return jsonRes(res, 503, { error: 'Strava connection is temporarily unavailable' });
+    try {
+      const prepared = await service.prepareAccountOAuth({ user: { id: user.id, username: user.username }, redirectMode });
+      return jsonRes(res, 200, { authorizationUrl: prepared.authorizationUrl, transactionId: prepared.transactionId, expiresAt: prepared.expiresAt });
+    } catch (error) { return challengeError(res, error, 'Strava connection is temporarily unavailable'); }
+  }
+
+  if (urlPath === '/api/challenge-accounts/strava/connection' && ['GET', 'DELETE'].includes(req.method)) {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    try {
+      if (req.method === 'DELETE') {
+        if (typeof service.disconnectAccount !== 'function') return jsonRes(res, 503, { error: 'Strava connection is temporarily unavailable' });
+        await service.disconnectAccount({ id: user.id, username: user.username });
+      }
+      return jsonRes(res, 200, { strava: await getChallengeAccountStravaStatus(user) });
+    } catch (error) { return challengeError(res, error, 'Strava connection is temporarily unavailable'); }
+  }
+
   if (urlPath === '/api/challenges' && ['GET', 'POST'].includes(req.method)) {
     setSensitiveResponseHeaders(res);
     const user = challengeAccountsUser(req, res);
@@ -2022,6 +2151,16 @@ async function handleAPI(req, res, urlPath) {
     catch (error) { return challengeAccountsError(res, error); }
   }
 
+  if (urlPath === '/api/challenge-review-inbox' && req.method === 'GET') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    if (typeof challengeAccounts.listReviewInbox !== 'function') return jsonRes(res, 503, { error: 'Challenge review inbox is temporarily unavailable' });
+    try { return jsonRes(res, 200, { reviews: await challengeAccounts.listReviewInbox(user) }); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
   const challengeDetailMatch = urlPath.match(/^\/api\/challenges\/([A-Za-z0-9_-]{1,64})$/);
   if (challengeDetailMatch && req.method === 'GET') {
     setSensitiveResponseHeaders(res);
@@ -2029,7 +2168,7 @@ async function handleAPI(req, res, urlPath) {
     if (!user) return;
     if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
     try {
-      await syncLegacyStravaActivitiesForChallenge(user, challengeDetailMatch[1]);
+      await syncChallengeActivitiesForAccountView(user, challengeDetailMatch[1]);
       return jsonRes(res, 200, await challengeAccounts.getChallenge(user, challengeDetailMatch[1]));
     }
     catch (error) { return challengeAccountsError(res, error); }
@@ -2062,7 +2201,7 @@ async function handleAPI(req, res, urlPath) {
     const body = await challengeAccountsBody(req, res);
     if (body === null) return;
     try {
-      await syncLegacyStravaActivitiesForChallenge(user, challengeReviewsMatch[1]);
+      await syncChallengeActivitiesForAccountView(user, challengeReviewsMatch[1]);
       return jsonRes(res, 201, await challengeAccounts.createReviewRequest(user, challengeReviewsMatch[1], body));
     }
     catch (error) { return challengeAccountsError(res, error); }
@@ -2157,8 +2296,17 @@ async function handleAPI(req, res, urlPath) {
       error: boundedString(callback.get('error'), 128),
     };
     try {
-      if (values.error || !values.code || !values.state) throw Object.assign(new Error('OAuth callback rejected'), { status: 400 });
-      await service.completeOAuth(values);
+      // The service resolves a known native transaction to a terminal failure
+      // without releasing OAuth state back to the app. Legacy callbacks retain
+      // the HTML failure page below.
+      if ((!values.code || !values.state) && !values.error) throw Object.assign(new Error('OAuth callback rejected'), { status: 400 });
+      const completed = await service.completeOAuth(values);
+      if (completed && completed.native === true) {
+        const query = new URLSearchParams({ status: completed.status === 'failure' ? 'failure' : 'success' });
+        if (completed.transactionId) query.set('transaction', String(completed.transactionId));
+        res.writeHead(303, { Location: `yannickchallenge://strava-complete?${query.toString()}`, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+        return res.end();
+      }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(challengeOAuthPage(true));
     } catch (error) {

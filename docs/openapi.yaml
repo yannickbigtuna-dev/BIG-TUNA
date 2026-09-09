@@ -1,186 +1,155 @@
 openapi: 3.0.3
 info:
-  title: BIG TUNA Native App API
-  version: 1.0.0
-  license:
-    name: ISC
-  description: |
-    Supported server integration surface for Yannick Lights. The native API
-    uses physical-light terminology; do not use legacy relay inversion logic.
+  title: BIG TUNA Native API
+  version: 1.1.0
+  description: Native Lights and Challenge contract. Challenge endpoints use the ordinary BIG TUNA website bearer session; no separate native account exists.
 servers:
   - url: https://yannickmorgans.ca
-    description: Production
   - url: http://{host}:{port}
-    description: Local development
-    variables:
-      host: { default: localhost }
-      port: { default: '3000' }
+    variables: { host: { default: localhost }, port: { default: '3000' } }
 tags:
-  - name: Native Lights
-    description: Owner-controlled physical-light API for Apple clients.
-  - name: Public score
-    description: Read-only cached weekly score for native score surfaces.
+  - { name: Native Challenge }
+  - { name: Native Lights }
+  - { name: Public score }
 paths:
-  /api/lights/native/v1/session:
-    post:
-      tags: [Native Lights]
-      operationId: createNativeLightsSession
-      summary: Exchange an owner website session for a Lights-scoped token
+  /api/challenge-accounts/me:
+    get:
+      tags: [Native Challenge]
+      summary: Get the shared BIG TUNA account's sanitized Strava status
       security: [{ WebsiteBearerAuth: [] }]
       responses:
-        '200':
-          description: Scoped token issued
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/NativeSession' }
+        '200': { description: Sanitized profile, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeProfile' } } } }
         '401': { $ref: '#/components/responses/NotAuthenticated' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-    delete:
-      tags: [Native Lights]
-      operationId: deleteNativeLightsSession
-      summary: Revoke the supplied native token
-      security: [{ NativeLightsBearerAuth: [] }]
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/challenge-accounts/strava/connection/start:
+    post:
+      tags: [Native Challenge]
+      summary: Start a one-use account-level Strava browser transaction
+      description: The native default is redirectMode native. Open authorizationUrl in an authentication browser. It expires after at most 10 minutes and is replay-safe. Successful native callback is yannickchallenge://strava-complete?status=success&transaction=<id>; it contains no OAuth state, bearer token, or Strava credential.
+      security: [{ WebsiteBearerAuth: [] }]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/StravaStartRequest' } } } }
       responses:
-        '200':
-          description: Revocation completed (also returned when no token is supplied)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/OkResponse' }
-  /api/lights/native/v1:
+        '200': { description: Short-lived browser transaction, content: { application/json: { schema: { $ref: '#/components/schemas/StravaStartResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/challenge-accounts/strava/connection:
     get:
-      tags: [Native Lights]
-      operationId: getNativeLightsState
-      summary: Read authoritative desired physical state
-      security: [{ NativeLightsBearerAuth: [] }, { WebsiteBearerAuth: [] }]
+      tags: [Native Challenge]
+      summary: Read account-level Strava status
+      security: [{ WebsiteBearerAuth: [] }]
       responses:
-        '200':
-          description: Current confirmed state
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/NativeLightState' }
+        '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/StravaStatusResponse' } } } }
         '401': { $ref: '#/components/responses/NotAuthenticated' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-    put:
-      tags: [Native Lights]
-      operationId: setNativeLightsState
-      summary: Set an explicit physical state idempotently
-      security: [{ NativeLightsBearerAuth: [] }, { WebsiteBearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/SetNativeLightStateRequest' }
+    delete:
+      tags: [Native Challenge]
+      summary: Disconnect the authenticated account's shared Strava connection
+      security: [{ WebsiteBearerAuth: [] }]
       responses:
-        '200':
-          description: Authoritative command result
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/NativeLightState' }
+        '200': { description: Disconnected status, content: { application/json: { schema: { $ref: '#/components/schemas/StravaStatusResponse' } } } }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+  /api/challenge-devices:
+    post:
+      tags: [Native Challenge]
+      summary: Register an encrypted iOS APNs token
+      description: The raw token and fingerprint are write-only and are never returned, logged, or exposed.
+      security: [{ WebsiteBearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DeviceRegistration' } } } }
+      responses:
+        '201': { description: Safe registration acknowledgement, content: { application/json: { schema: { $ref: '#/components/schemas/DeviceRegistered' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/challenge-review-inbox:
+    get:
+      tags: [Native Challenge]
+      summary: Get pending reviews the caller may decide
+      description: Two participants: other participant. Three or more: non-requester owner/admin only.
+      security: [{ WebsiteBearerAuth: [] }]
+      responses:
+        '200': { description: Inbox, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewInboxResponse' } } } }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+  /api/challenges/{challengeId}/review-requests/{reviewId}/decision:
+    post:
+      tags: [Native Challenge]
+      summary: Decide another participant's manual review request
+      description: Requester self-decision is always 403. Same decision retry returns idempotent true; opposing retry is 409. Approval recalculates score exactly once.
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/ChallengeId' }, { $ref: '#/components/parameters/ReviewId' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewDecision' } } } }
+      responses:
+        '200': { description: Decision, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewDecisionResult' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/NotAuthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: commandId was previously used for a different target
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
-        '413':
-          description: Request body exceeds the server limit
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/challenges/{challengeId}/notification-events:
+    get:
+      tags: [Native Challenge]
+      summary: Get caller-only in-app notification fallback events
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
+      responses:
+        '200': { description: Events, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationEvents' } } } }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/lights/native/v1/session:
+    post:
+      tags: [Native Lights]
+      summary: Exchange an owner website session for a revocable Lights token
+      security: [{ WebsiteBearerAuth: [] }]
+      responses: { '200': { description: Scoped token, content: { application/json: { schema: { $ref: '#/components/schemas/NativeSession' } } } }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' } }
+    delete:
+      tags: [Native Lights]
+      summary: Revoke a supplied native token
+      security: [{ NativeLightsBearerAuth: [] }]
+      responses: { '200': { description: Revoked, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } } }
+  /api/lights/native/v1:
+    get:
+      tags: [Native Lights]
+      security: [{ NativeLightsBearerAuth: [] }, { WebsiteBearerAuth: [] }]
+      responses: { '200': { description: State, content: { application/json: { schema: { $ref: '#/components/schemas/NativeLightState' } } } } }
+    put:
+      tags: [Native Lights]
+      security: [{ NativeLightsBearerAuth: [] }, { WebsiteBearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SetNativeLightState' } } } }
+      responses: { '200': { description: State, content: { application/json: { schema: { $ref: '#/components/schemas/NativeLightState' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/strava-challenge/public:
     get:
       tags: [Public score]
-      operationId: getPublicChallengeScore
-      summary: Read the cached public weekly score
       security: []
-      responses:
-        '200':
-          description: Cached public challenge dashboard
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/PublicChallengeDashboard' }
-        '503':
-          description: Challenge service is unavailable
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
+      responses: { '200': { description: Cached public dashboard, content: { application/json: { schema: { type: object } } } }, '503': { $ref: '#/components/responses/Unavailable' } }
 components:
   securitySchemes:
-    WebsiteBearerAuth:
-      type: http
-      scheme: bearer
-      description: Temporary authenticated BIG TUNA website session.
-    NativeLightsBearerAuth:
-      type: http
-      scheme: bearer
-      description: Revocable Lights-only token issued by the session exchange.
+    WebsiteBearerAuth: { type: http, scheme: bearer, description: Normal BIG TUNA website session, also used by native Challenge. }
+    NativeLightsBearerAuth: { type: http, scheme: bearer, description: Revocable owner-only Lights token. }
+  parameters:
+    ChallengeId: { name: challengeId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
+    ReviewId: { name: reviewId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,96}$' } }
   responses:
-    BadRequest:
-      description: Invalid JSON, unsupported fields, or invalid state/command ID
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ErrorResponse' }
-    NotAuthenticated:
-      description: Missing, expired, or invalid bearer token
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ErrorResponse' }
-    Forbidden:
-      description: Authenticated caller is not the Yannick Lights owner
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotAuthenticated: { description: Missing, expired, or invalid bearer, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Not eligible, including requester self-decision, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: Membership-scoped object missing, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Conflicting repeat/already decided, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unavailable: { description: Server-side service or deployment credential unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   schemas:
-    NativeSession:
-      type: object
-      required: [token, username]
-      properties:
-        token: { type: string, description: Redacted in logs; store only in the app group. }
-        username: { type: string, example: yannick }
-    SetNativeLightStateRequest:
-      type: object
-      additionalProperties: false
-      required: [physicalOn]
-      properties:
-        physicalOn: { type: boolean, description: Explicit physical relay target. }
-        commandId: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
-    NativeLightState:
-      type: object
-      required: [physicalOn, reportedPhysicalOn, recentlyPolled, revision, updatedAt]
-      properties:
-        physicalOn: { type: boolean, description: Desired physical light state. }
-        reportedPhysicalOn: { type: boolean, nullable: true, description: Last trusted relay report. }
-        recentlyPolled: { type: boolean, description: True when trusted relay polling is within the current server heartbeat window. }
-        revision: { type: string, description: 'Monotonically increasing desired-state revision, serialized as a string.' }
-        updatedAt: { type: string, format: date-time }
-    PublicChallengeDashboard:
-      type: object
-      required: [configured]
-      properties:
-        configured: { type: boolean }
-        currentWeek:
-          type: object
-          nullable: true
-          properties:
-            weekStart: { type: string, format: date }
-            dateLabel: { type: string }
-            score:
-              type: object
-              properties:
-                yannick: { type: integer }
-                emma: { type: integer }
-            winner: { type: string, nullable: true }
-        lastUpdatedAt: { type: string, format: date-time, nullable: true }
-        stale: { type: boolean }
-    OkResponse:
-      type: object
-      required: [ok]
-      properties:
-        ok: { type: boolean, example: true }
-    ErrorResponse:
-      type: object
-      required: [error]
-      properties:
-        error: { type: string }
+    ChallengeProfile: { type: object, required: [id, username, strava], properties: { id: { type: string }, username: { type: string }, strava: { $ref: '#/components/schemas/StravaStatus' } } }
+    StravaStartRequest: { type: object, additionalProperties: false, properties: { redirectMode: { type: string, enum: [native, web], default: native } } }
+    StravaStartResponse: { type: object, required: [authorizationUrl, transactionId, expiresAt], properties: { authorizationUrl: { type: string, format: uri }, transactionId: { type: string, description: Completion correlation only, not OAuth state or credential. }, expiresAt: { type: string, format: date-time } } }
+    StravaStatusResponse: { type: object, required: [strava], properties: { strava: { $ref: '#/components/schemas/StravaStatus' } } }
+    StravaStatus: { type: object, required: [connected, athlete, lastSyncAt], properties: { connected: { type: boolean }, athlete: { type: object, nullable: true, properties: { id: { type: string }, firstname: { type: string, nullable: true } } }, lastSyncAt: { type: string, format: date-time, nullable: true } } }
+    DeviceRegistration: { type: object, additionalProperties: false, required: [token, platform], properties: { token: { type: string, minLength: 32, maxLength: 512, pattern: '^[A-Fa-f0-9]+$', writeOnly: true }, platform: { type: string, enum: [ios] } } }
+    DeviceRegistered: { type: object, required: [id, platform, registered], properties: { id: { type: string }, platform: { type: string, enum: [ios] }, registered: { type: boolean, enum: [true] } } }
+    ReviewInboxResponse: { type: object, required: [reviews], properties: { reviews: { type: array, items: { $ref: '#/components/schemas/ReviewInboxItem' } } } }
+    ReviewInboxItem: { type: object, properties: { challenge: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }, review: { type: object, required: [id, requesterDisplayName, activity, reason, createdAt], properties: { id: { type: string }, requesterDisplayName: { type: string }, activity: { $ref: '#/components/schemas/SafeActivity' }, reason: { type: string, nullable: true }, createdAt: { type: string, format: date-time } } } } }
+    SafeActivity: { type: object, properties: { id: { type: string }, sportType: { type: string, nullable: true }, name: { type: string }, startDate: { type: string, format: date-time }, distanceMeters: { type: number }, movingTime: { type: number }, qualifies: { type: boolean }, reviewState: { type: string, nullable: true } } }
+    ReviewDecision: { type: object, additionalProperties: false, required: [decision], properties: { decision: { type: string, enum: [approve, reject] }, reason: { type: string, maxLength: 500 } } }
+    ReviewDecisionResult: { type: object, required: [review, challenge, idempotent], properties: { review: { type: object }, challenge: { type: object }, idempotent: { type: boolean } } }
+    NotificationEvents: { type: object, required: [events], properties: { events: { type: array, items: { type: object, properties: { id: { type: string }, type: { type: string, enum: [review_requested, review_approved, review_rejected] }, reviewId: { type: string, nullable: true }, createdAt: { type: string, format: date-time }, delivery: { type: string, enum: [pending, sent, failed] } } } } } }
+    NativeSession: { type: object, required: [token, username], properties: { token: { type: string }, username: { type: string } } }
+    SetNativeLightState: { type: object, additionalProperties: false, required: [physicalOn], properties: { physicalOn: { type: boolean }, commandId: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' } } }
+    NativeLightState: { type: object, properties: { physicalOn: { type: boolean }, reportedPhysicalOn: { type: boolean, nullable: true }, recentlyPolled: { type: boolean }, revision: { type: string }, updatedAt: { type: string, format: date-time } } }
+    Ok: { type: object, required: [ok], properties: { ok: { type: boolean } } }
+    Error: { type: object, required: [error], properties: { error: { type: string } } }

@@ -4,7 +4,8 @@ Base URL: `https://yannickmorgans.ca` (local development: `http://localhost:3000
 This document records the current server routes relevant to supported clients.
 For the complete live HTTP inventory, see `docs/API_ENDPOINTS.md`.
 `server.js` remains the executable authority; `docs/openapi.yaml` is the
-machine-readable contract for the native Yannick Lights integration surface.
+machine-readable contract for the supported native Lights and Challenge
+surfaces.
 
 ## Authentication and errors
 
@@ -21,12 +22,36 @@ bearer token, relay token, or Apple credential to an untrusted client or log.
 
 ## Authenticated challenge accounts
 
-The supported browser challenge-account API is documented authoritatively in
+The supported browser and native challenge-account API is documented
+authoritatively in
 [`API_ENDPOINTS.md`](API_ENDPOINTS.md#authenticated-challenge-accounts),
-including request/response examples and status codes. It uses the normal
-website bearer session, membership-scoped object lookup, owner/admin settings
-authorization, and no-store responses. It does not change the legacy public
+including request/response examples, status codes, APNs deployment setup, and
+safe error behavior. It uses the normal BIG TUNA website bearer session for
+both browser and native clients; there is no native account/session exchange,
+second account, or second Strava connection store. All these responses are
+`no-store` and membership-scoped. It does not change the legacy public
 `/api/strava-challenge/public` scoreboard or expose Strava OAuth credentials.
+
+| Method | Route | Bearer access | Contract |
+| --- | --- | --- | --- |
+| GET | `/api/challenge-accounts/me` | Any website session | Sanitized account and `strava.connected` state. |
+| POST | `/api/challenge-accounts/strava/connection/start` | Any website session | `{redirectMode:"native"|"web"}` → short-lived `{authorizationUrl,transactionId,expiresAt}`. |
+| GET/DELETE | `/api/challenge-accounts/strava/connection` | Any website session | Read or disconnect the same account-level Strava record. |
+| POST | `/api/challenge-devices` | Any website session | Register encrypted iOS APNs token with `{token,platform:"ios"}`. |
+| GET | `/api/challenge-review-inbox` | Eligible participant | Pending reviews the caller may decide. |
+| POST | `/api/challenges/{id}/review-requests/{reviewId}/decision` | Eligible participant | Approve/reject another participant's request idempotently. |
+| GET | `/api/challenges/{id}/notification-events` | Participant | Redacted in-app fallback events and safe delivery state. |
+
+For `redirectMode:"native"`, open `authorizationUrl` in an authentication
+browser session. The server redirects success to
+`yannickchallenge://strava-complete?status=success&transaction=<id>`; the
+callback never has a bearer token, Strava credential, or OAuth state. The
+transaction expires after at most 10 minutes and is single-use/replay-safe.
+On return, fetch `/api/challenge-accounts/me` to learn `strava.connected`.
+For peer review, a two-person challenge lets the other participant decide;
+three-or-more participants require a non-requester owner/admin. Settings stay
+owner/admin-only. See the endpoint reference and OpenAPI schemas for exact
+JSON shapes and error codes.
 
 ## Yannick Lights native integration
 

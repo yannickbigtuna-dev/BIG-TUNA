@@ -7,7 +7,7 @@ const path = require('path');
 const { createChallengeAccounts, ChallengeAccountsError } = require('../lib/challenge-accounts');
 
 const now = () => new Date('2026-09-09T12:00:00.000Z');
-function service(options = {}) { return createChallengeAccounts({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'challenge-accounts-')), now, ...options }); }
+function service(options = {}) { return createChallengeAccounts({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'challenge-accounts-')), now, deviceTokenCipher: { encrypt: token => Buffer.from(token).toString('base64'), decrypt: cipher => Buffer.from(cipher, 'base64').toString() }, ...options }); }
 const user = (id, username = id) => ({ id, username });
 async function challenge(s, owner = user('owner')) { return s.createChallenge(owner, { template: 'custom', name: 'Test', participants: [{ userId: 'owner', role: 'owner' }, { userId: 'member', role: 'member' }], qualifyingActivities: ['Run'], thresholds: { distanceMeters: 5000 }, manualReview: true }); }
 async function seedActivity(s, challengeId, activity) { await s._mutate(state => { state.challenges[challengeId].activities[activity.id] = activity; }); }
@@ -79,14 +79,60 @@ test('approval is idempotent, recalculates score, and retains redacted events', 
   const again = await s.decideReviewRequest(user('owner'), c.id, review.id, { decision: 'approve' });
   assert.equal(again.idempotent, true); assert.equal(again.challenge.currentScore.member, 1);
   const events = await s.listNotificationEvents(user('member'), c.id);
-  assert.equal(events[0].delivery, 'stored'); assert.equal(JSON.stringify(events).includes('endpoint'), false);
+  assert.equal(events[0].delivery, 'failed'); assert.equal(JSON.stringify(events).includes('endpoint'), false);
 });
 
 test('profile and device registration redact Strava credentials and subscriptions', async () => {
   const s = service({ notificationConfigured: true, getStravaStatus: () => ({ connected: true, accessToken: 'secret', refreshToken: 'secret2', athlete: { id: 9, firstname: 'A', lastname: 'Private' } }) });
   const profile = await s.getProfile(user('owner', 'Owner'));
   assert.equal(profile.strava.connected, true); assert.equal(JSON.stringify(profile).includes('secret'), false);
-  const device = await s.registerDevice(user('owner'), { endpoint: 'https://push.example/private', platform: 'webpush' });
+  const token = 'a'.repeat(64);
+  const device = await s.registerDevice(user('owner'), { token, platform: 'ios' });
   assert.equal(device.registered, true); assert.equal(JSON.stringify(device).includes('private'), false);
-  assert.equal(JSON.stringify(s._readState()).includes('https://push.example/private'), false);
+  assert.equal(JSON.stringify(s._readState()).includes(token), false);
+});
+
+test('two-person peers can decide each other’s reviews while settings stay manager-only', async () => {
+  const s = service(); const c = await challenge(s);
+  await seedActivity(s, c.id, { id: 'a1', userId: 'owner', sportType: 'Run', distanceMeters: 1000, movingTime: 300, startDate: now().toISOString() });
+  const review = await s.createReviewRequest(user('owner'), c.id, { activityId: 'a1' });
+  const inbox = await s.listReviewInbox(user('member'));
+  assert.equal(inbox.length, 1); assert.equal(inbox[0].challenge.id, c.id); assert.equal(inbox[0].review.id, review.id);
+  await rejectsCode(s.updateSettings(user('member'), c.id, { manualReview: false }), 'forbidden');
+  const decision = await s.decideReviewRequest(user('member'), c.id, review.id, { decision: 'approve' });
+  assert.equal(decision.review.status, 'approved');
+  assert.equal(decision.challenge.currentScore.owner, 1);
+  const again = await s.decideReviewRequest(user('member'), c.id, review.id, { decision: 'approve' });
+  assert.equal(again.idempotent, true);
+  const state = s._readState().challenges[c.id];
+  assert.equal(state.history.filter(x => x.type === 'review_approved').length, 1);
+  assert.equal(state.audit.filter(x => x.type === 'review_approved').length, 1);
+});
+
+test('three-or-more participant reviews require a non-requester manager', async () => {
+  const s = service(); const c = await s.createChallenge(user('owner'), { template: 'custom', name: 'Three', participants: [{ userId: 'owner', role: 'owner' }, { userId: 'member', role: 'member' }, { userId: 'peer', role: 'member' }], qualifyingActivities: ['Run'], thresholds: { distanceMeters: 5000 }, manualReview: true });
+  await seedActivity(s, c.id, { id: 'a1', userId: 'member', sportType: 'Run', distanceMeters: 1, movingTime: 1, startDate: now().toISOString() });
+  const review = await s.createReviewRequest(user('member'), c.id, { activityId: 'a1' });
+  assert.equal((await s.listReviewInbox(user('peer'))).length, 0);
+  await rejectsCode(s.decideReviewRequest(user('peer'), c.id, review.id, { decision: 'approve' }), 'forbidden');
+  assert.equal((await s.listReviewInbox(user('owner'))).length, 1);
+});
+
+test('push fallback persists events and invalid tokens are disabled without leakage', async () => {
+  const sends = [];
+  const s = service({ notificationSender: async input => { sends.push(input); return { invalidToken: true }; } }); const c = await challenge(s);
+  const token = 'b'.repeat(64); await s.registerDevice(user('owner'), { token, platform: 'ios' });
+  await seedActivity(s, c.id, { id: 'a1', userId: 'member', sportType: 'Run', distanceMeters: 1, movingTime: 1, startDate: now().toISOString() });
+  await s.createReviewRequest(user('member'), c.id, { activityId: 'a1' });
+  assert.equal(sends.length, 1); assert.equal(sends[0].token, token);
+  const state = s._readState(); assert.equal(Object.values(state.devices)[0].disabledAt !== null, true);
+  assert.equal(JSON.stringify(await s.listNotificationEvents(user('owner'), c.id)).includes(token), false);
+  await rejectsCode(s.registerDevice(user('owner'), { token: 'not-a-token', platform: 'ios' }), 'invalid_device');
+});
+
+test('shared state adapter stores challenge account data in the existing state transaction', async () => {
+  const root = {}; const adapter = { read: fn => fn(root), mutate: async fn => fn(root) };
+  const s = createChallengeAccounts({ stateAdapter: adapter, now, deviceTokenCipher: { encrypt: token => Buffer.from(token).toString('base64'), decrypt: cipher => Buffer.from(cipher, 'base64').toString() } });
+  await s.createChallenge(user('owner'), { template: 'custom', name: 'Shared', qualifyingActivities: ['Run'] });
+  assert.ok(root.challengeAccounts); assert.equal(Object.keys(root.challengeAccounts.challenges).length, 1);
 });
