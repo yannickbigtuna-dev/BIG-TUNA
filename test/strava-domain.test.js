@@ -30,3 +30,4 @@ test('current activity rules refresh stale stored evaluations without changing f
   assert.equal(d.buildPublicWeek(state, '2026-03-09').activities[0].qualifies, false);
   assert.equal(d.buildPublicWeek(state, '2026-03-09').activities[0].required, 4000);
 });
+test('manual approval affects current score and exposes safe review state', () => { const activity = { ...a('yannick', 'Run', { distance: 2000, moving_time: 300 }), manualQualification: true, reviewState: 'approved' }; assert.equal(d.calculateWeekResult([activity], getWeekBounds('2026-03-18T12:00:00Z')).yannick.qualifyingActivities, 1); const publicState = d.buildPublicDashboard({ activities: { one: activity }, weeks: {} }, new Date('2026-03-18T12:00:00Z')); assert.equal(publicState.currentWeek.activities[0].reviewState, 'approved'); assert.equal(JSON.stringify(publicState).includes('manualQualification'), false); });

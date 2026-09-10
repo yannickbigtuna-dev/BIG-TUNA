@@ -885,3 +885,64 @@ archive the non-distributable `YannickLightsWidgets` extension.
   archive or TestFlight processing result.
 - Commit and push only the completed app-repository patch. Xcode Cloud then
   performs the signed archive/upload; verify its remote status separately.
+
+---
+
+# Active Extension — Authoritative Strava manual reviews
+
+## Goal and mode
+
+DEEP: make the Yannick-versus-Emma public Strava scoreboard's durable service
+state the single source of truth for peer manual-review records. A review made
+through the website or native app is the same record and an approval changes the
+cached public scoreboard through the existing weekly calculation.
+
+## Scope, constraints, and design
+
+- Add only `/api/strava-challenge/review-requests`,
+  `/api/strava-challenge/review-requests/:reviewId/decision`, and
+  `/api/strava-challenge/notification-events`; do not use or create generic
+  `/api/challenges` records for this scoreboard.
+- Derive a fixed participant mapping from the authenticated website account:
+  `yannick` -> `yannick`, `fishyemma` -> `emma`. Never accept a participant id
+  from the request or disclose a review/activity to another account.
+- Persist compact review records and activity review/manual-qualification fields
+  inside the existing serialized Strava store mutation. Keep finalized weekly
+  snapshots immutable.
+- Reuse the service's qualification, current-week, tiebreaker, stats, and
+  public-dashboard serializers. A manual override affects only a live
+  activity's qualification; it does not weaken automatic qualification rules.
+- Store an in-app notification event before using the existing APNs sender;
+  expose only its safe event fields. APNs payloads use
+  `challengeId: website_yannick_emma`, `reviewId`, and the requested event type.
+- The web scoreboard calls these endpoints directly for request, inbox, and
+  decision workflows. It continues to reload the same public dashboard after a
+  decision. Native clients can use the identical record and notification shapes.
+
+## Disjoint ownership
+
+- Service/domain package: `lib/strava-challenge/service.js`,
+  `lib/strava-challenge/domain.js`, `lib/strava-challenge/store.js`, and focused
+  Strava service/domain/store tests.
+- HTTP/UI package: `server.js`, `apps/strava-challenge.js`,
+  `apps/strava-challenge.css`, and focused route/UI tests.
+- Contract package: `docs/openapi.yaml`, `docs/API_CONTRACT.md`,
+  `docs/API_ENDPOINTS.md`, `README.md`, and `CODEX_CONTEXT.md`.
+- Root: integration, security review, combined diff review, validation, commit,
+  and push. The service and HTTP/UI packages are implemented in parallel under
+  these disjoint boundaries; the root owns their final integration.
+
+## Acceptance and rollback
+
+- Unauthenticated and non-allowlisted callers fail safely; ownership, duplicate
+  pending review, not-current-week, automatic qualification, and self-decision
+  are rejected.
+- Approve/reject records have the documented safe shape; the same decision is
+  idempotent while an opposing retry conflicts. Approval changes current score,
+  tiebreaker, stats, and public `reviewState` exactly once.
+- Request and decision events are addressed only to the peer/requester,
+  respectively, retain safe fallback state, and never expose device tokens,
+  emails, credentials, or internal store data.
+- Run focused Node tests, full `npm test`, syntax/contract parsing, a security
+  scan, and root diff/status review. Rollback is the scoped Git commit; no live
+  `data/` state is edited by this work.

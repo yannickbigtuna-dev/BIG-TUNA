@@ -215,6 +215,10 @@ refresh tokens, or invitation credentials in an app.
 | `GET /api/strava-challenge/public` | Public | Current cached public dashboard; `503` if service unavailable. |
 | `GET /api/strava-challenge/public/weeks/{YYYY-MM-DD}` | Public | Sanitized finalized week data; `404`/`503` as applicable. |
 | `POST /api/strava-challenge/refresh` | Challenge participant | No body → refresh status without private sync detail; may return `401`, `403`, `429`, or `503`. |
+| `POST /api/strava-challenge/review-requests` | `yannick` or `fishyemma` website session | `{activityId,reason?}` creates a durable review of the caller's own current-week, non-qualifying authoritative activity; `201`, `400`, `403`, `404`, or `409`. The server maps `fishyemma` to Emma; no client participant ID is accepted. |
+| `GET /api/strava-challenge/review-requests?status=` | `yannick` or `fishyemma` website session | `{reviews:[...]}` contains only other-participant reviews the caller can decide; accepts `pending`, `approved`, or `rejected`. |
+| `POST /api/strava-challenge/review-requests/{reviewId}/decision` | Other fixed participant | `{decision:"approve"|"reject",reason?}`; same decision is idempotent; approval returns `{review,scoreboard,idempotent}` and persists the activity override in the authoritative store. |
+| `GET /api/strava-challenge/notification-events` | `yannick` or `fishyemma` website session | Caller-only redacted `{events:[...]}` for `review_requested`, `review_approved`, and `review_rejected`; APNs delivery is `pending`, `sent`, or `failed`. |
 | `POST /api/strava-challenge/oauth/prepare` | Public invitation flow | `{inviteToken}` → `{participantId,authorizationUrl}`; the token is body-only, never a URL. |
 | `GET /api/strava-challenge/oauth/callback` | Public Strava redirect | Query `code,state,scope` or `error` → success/failure HTML page, not JSON. |
 | `GET /api/admin/strava-challenge/status` | Owner | Private challenge configuration/connection status. |

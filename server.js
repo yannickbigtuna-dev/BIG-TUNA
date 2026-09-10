@@ -160,6 +160,19 @@ try {
     sendEmail: assignmentCoach.sendEmail,
     fetchImpl: global.fetch,
     logger: stravaChallengeLogger,
+    // Authoritative Yannick-vs-Emma review events use the existing encrypted
+    // APNs-device pipeline.  The service stores only redacted delivery state.
+    notificationConfigured: challengeApns.configured,
+    notificationSender: async ({ token, platform, event }) => {
+      const result = await challengeApns.send({ token, platform, eventType: event.eventType || event.type, challengeId: event.challengeId, reviewId: event.reviewId, title: event.title, body: event.body });
+      return { sent: result.delivery === 'sent', invalidToken: result.reason === 'invalid_token' };
+    },
+    deviceTokenCipher: challengeDeviceTokenCipher,
+    participantAccountIdFor: participantId => {
+      const username = { yannick: 'yannick', emma: 'fishyemma' }[participantId];
+      const matched = username && readUsers().find(account => normalizedChallengeUsername(account) === username);
+      return matched && matched.id;
+    },
   });
 } catch (error) {
   // A missing Strava configuration must never take down the public site.
@@ -1024,6 +1037,17 @@ function challengeRefreshUser(req, res) {
   return user;
 }
 
+// The public scoreboard has exactly two fixed people.  Resolve the scoreboard
+// participant exclusively from the authenticated website account; routes never
+// accept a participant identifier from a browser or native client.
+function challengeReviewUser(req, res) {
+  const user = challengeAccountsUser(req, res);
+  if (!user) return null;
+  const participantId = { yannick: 'yannick', fishyemma: 'emma' }[normalizedChallengeUsername(user)];
+  if (!participantId) { jsonRes(res, 403, { error: 'Forbidden' }); return null; }
+  return { user, participantId };
+}
+
 async function refreshChallengeScoreboard(service) {
   if (challengeRefreshInFlight) {
     return { ...await challengeRefreshInFlight, coalesced: true };
@@ -1072,6 +1096,12 @@ function challengeError(res, error, fallback = 'Challenge request could not be c
     invalid_athlete: 400, invalid_week: 400, invalid_config: 400,
     missing_email: 400, missing_base_url: 400, confirmation_required: 400,
     unknown_participant: 404, not_connected: 409, athlete_already_connected: 409,
+    invalid_review: 400, invalid_review_status: 400, review_not_found: 404,
+    review_not_decidable: 403, review_self_decision: 403,
+    duplicate_review: 409, already_qualifies: 409, review_decision_conflict: 409,
+    not_found: 404, review_pending: 409, activity_qualified: 409,
+    self_approval_forbidden: 403, review_decided: 409, invalid_decision: 400,
+    forbidden: 403,
     missing_scope: 422, oauth_denied: 422, unconfigured: 503,
   }[code];
   const safeStatus = [400, 401, 403, 404, 409, 422, 429, 503].includes(status)
@@ -2227,6 +2257,51 @@ async function handleAPI(req, res, urlPath) {
     if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
     try { return jsonRes(res, 200, { events: await challengeAccounts.listNotificationEvents(user, challengeNotificationEventsMatch[1]) }); }
     catch (error) { return challengeAccountsError(res, error); }
+  }
+
+  // ── Authoritative Yannick vs Emma manual reviews ───────────────────────
+  // These deliberately bypass generic /api/challenges records.  The Strava
+  // service owns review durability, activity overrides, scoring, and APNs
+  // event delivery alongside the fixed public scoreboard.
+  if (urlPath === '/api/strava-challenge/review-requests' && ['GET', 'POST'].includes(req.method)) {
+    setSensitiveResponseHeaders(res);
+    const identity = challengeReviewUser(req, res);
+    if (!identity) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    if (req.method === 'GET') {
+      const status = boundedString(new URL(req.url, 'http://localhost').searchParams.get('status'), 16);
+      if (status && !['pending', 'approved', 'rejected'].includes(status)) return jsonRes(res, 400, { error: 'Review status is invalid' });
+      try { return jsonRes(res, 200, { reviews: await service.listWebsiteReviews({ ...identity, status: status || undefined }) }); }
+      catch (error) { return challengeError(res, error, 'Challenge reviews are temporarily unavailable'); }
+    }
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    try { return jsonRes(res, 201, await service.createWebsiteReview({ ...identity, body })); }
+    catch (error) { return challengeError(res, error, 'Challenge review could not be created'); }
+  }
+
+  const stravaReviewDecisionMatch = urlPath.match(/^\/api\/strava-challenge\/review-requests\/([A-Za-z0-9_-]{1,128})\/decision$/);
+  if (stravaReviewDecisionMatch && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    const identity = challengeReviewUser(req, res);
+    if (!identity) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    try { return jsonRes(res, 200, await service.decideWebsiteReview({ ...identity, reviewId: stravaReviewDecisionMatch[1], body })); }
+    catch (error) { return challengeError(res, error, 'Challenge review could not be decided'); }
+  }
+
+  if (urlPath === '/api/strava-challenge/notification-events' && req.method === 'GET') {
+    setSensitiveResponseHeaders(res);
+    const identity = challengeReviewUser(req, res);
+    if (!identity) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    try { return jsonRes(res, 200, { events: await service.listWebsiteNotificationEvents(identity) }); }
+    catch (error) { return challengeError(res, error, 'Challenge notifications are temporarily unavailable'); }
   }
 
   // ── Public Yannick vs Emma Strava Challenge ─────────────────────────────

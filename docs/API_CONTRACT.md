@@ -66,6 +66,9 @@ server boundary. See `docs/openapi.yaml` for schemas and error responses.
 | GET | `/api/lights/native/v1` | owner Lights-scoped token | Read authoritative desired physical state and trusted relay status. |
 | PUT | `/api/lights/native/v1` | owner Lights-scoped token | Set explicit `physicalOn` with a retry-safe `commandId`. |
 | GET | `/api/strava-challenge/public` | public | Read the cached weekly Yannick-versus-Emma score used by native score surfaces. |
+| POST/GET | `/api/strava-challenge/review-requests` | `yannick` or `fishyemma` website session | Create/list durable fixed-scoreboard manual reviews; server maps those usernames to Yannick/Emma and never accepts a participant ID. |
+| POST | `/api/strava-challenge/review-requests/{reviewId}/decision` | Other fixed participant | Idempotently approve/reject; approval returns the same safe public-scoreboard shape and updates the authoritative activity. |
+| GET | `/api/strava-challenge/notification-events` | `yannick` or `fishyemma` website session | Caller-only redacted review APNs/in-app events. |
 
 `commandId` is a 1–128 character URL-safe identifier. Repeating an ID for the
 same target is idempotent; using it for a different target returns `409`.
@@ -130,6 +133,9 @@ external consumer; it is not permission to expose a private route.
 | `GET /api/lights/native/v1` | Native Lights Bearer | Physical state object; `401/403` | iPhone, Watch, widgets, controls |
 | `PUT /api/lights/native/v1` | `{physicalOn:boolean,commandId}` | Physical state object; `400/401/403/409/413` | iPhone, Watch, widgets, controls |
 | `GET /api/strava-challenge/public` | None | Sanitized cached dashboard; `503` if unavailable | Homepage, native score widgets |
+| `POST/GET /api/strava-challenge/review-requests` | `{activityId,reason?}` / status filter | Durable review or actionable other-party review list; `400/401/403/404/409` | Fixed Yannick/Emma accounts only |
+| `POST /api/strava-challenge/review-requests/{reviewId}/decision` | `{decision:"approve"|"reject",reason?}` | `{review,scoreboard,idempotent}`; `400/401/403/404/409` | Fixed other participant only |
+| `GET /api/strava-challenge/notification-events` | None | Caller-only redacted review events | Fixed Yannick/Emma accounts only |
 
 ### Lights, HomeKit, and ESP8266/ESP32 relay
 

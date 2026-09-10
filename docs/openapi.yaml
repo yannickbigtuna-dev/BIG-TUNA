@@ -64,7 +64,7 @@ paths:
     get:
       tags: [Native Challenge]
       summary: Get pending reviews the caller may decide
-      description: Two participants: other participant. Three or more: non-requester owner/admin only.
+      description: "Two participants: other participant. Three or more: non-requester owner/admin only."
       security: [{ WebsiteBearerAuth: [] }]
       responses:
         '200': { description: Inbox, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewInboxResponse' } } } }
@@ -120,13 +120,42 @@ paths:
       tags: [Public score]
       security: []
       responses: { '200': { description: Cached public dashboard, content: { application/json: { schema: { type: object } } } }, '503': { $ref: '#/components/responses/Unavailable' } }
+  /api/strava-challenge/review-requests:
+    get:
+      tags: [Native Challenge]
+      summary: List authoritative Yannick-vs-Emma reviews the caller may decide
+      description: Only website usernames yannick and fishyemma are eligible. The participant slot is server-mapped; requester-owned reviews are excluded.
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }]
+      responses: { '200': { description: Reviews, content: { application/json: { schema: { $ref: '#/components/schemas/AuthoritativeReviewList' } } } }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' } }
+    post:
+      tags: [Native Challenge]
+      summary: Request manual qualification of caller-owned current-week activity
+      security: [{ WebsiteBearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AuthoritativeReviewRequest' } } } }
+      responses: { '201': { description: Created review, content: { application/json: { schema: { $ref: '#/components/schemas/AuthoritativeReview' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/strava-challenge/review-requests/{reviewId}/decision:
+    post:
+      tags: [Native Challenge]
+      summary: Decide the other fixed participant's authoritative review
+      description: Self-decision is forbidden. Repeating the same decision is idempotent; approval returns the safe public scoreboard shape.
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/ReviewId' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AuthoritativeReviewDecision' } } } }
+      responses: { '200': { description: Decision and scoreboard, content: { application/json: { schema: { $ref: '#/components/schemas/AuthoritativeReviewDecisionResult' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/strava-challenge/notification-events:
+    get:
+      tags: [Native Challenge]
+      summary: List caller-only authoritative review notification events
+      security: [{ WebsiteBearerAuth: [] }]
+      responses: { '200': { description: Events, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationEvents' } } } }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' } }
 components:
   securitySchemes:
     WebsiteBearerAuth: { type: http, scheme: bearer, description: Normal BIG TUNA website session, also used by native Challenge. }
     NativeLightsBearerAuth: { type: http, scheme: bearer, description: Revocable owner-only Lights token. }
   parameters:
     ChallengeId: { name: challengeId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
-    ReviewId: { name: reviewId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,96}$' } }
+    ReviewId: { name: reviewId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' } }
   responses:
     BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     NotAuthenticated: { description: Missing, expired, or invalid bearer, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -148,6 +177,11 @@ components:
     ReviewDecision: { type: object, additionalProperties: false, required: [decision], properties: { decision: { type: string, enum: [approve, reject] }, reason: { type: string, maxLength: 500 } } }
     ReviewDecisionResult: { type: object, required: [review, challenge, idempotent], properties: { review: { type: object }, challenge: { type: object }, idempotent: { type: boolean } } }
     NotificationEvents: { type: object, required: [events], properties: { events: { type: array, items: { type: object, properties: { id: { type: string }, type: { type: string, enum: [review_requested, review_approved, review_rejected] }, reviewId: { type: string, nullable: true }, createdAt: { type: string, format: date-time }, delivery: { type: string, enum: [pending, sent, failed] } } } } } }
+    AuthoritativeReviewRequest: { type: object, additionalProperties: false, required: [activityId], properties: { activityId: { type: string, minLength: 1, maxLength: 128 }, reason: { type: string, maxLength: 500 } } }
+    AuthoritativeReviewDecision: { type: object, additionalProperties: false, required: [decision], properties: { decision: { type: string, enum: [approve, reject] }, reason: { type: string, maxLength: 500 } } }
+    AuthoritativeReview: { type: object, required: [id, activityId, requester, reason, status, createdAt, decidedAt, decidedBy, decisionReason], properties: { id: { type: string }, activityId: { type: string }, requester: { type: object, required: [id, username], properties: { id: { type: string }, username: { type: string } } }, reason: { type: string, nullable: true }, status: { type: string, enum: [pending, approved, rejected] }, createdAt: { type: string, format: date-time }, decidedAt: { type: string, format: date-time, nullable: true }, decidedBy: { type: object, nullable: true, properties: { id: { type: string }, username: { type: string } } }, decisionReason: { type: string, nullable: true } } }
+    AuthoritativeReviewList: { type: object, required: [reviews], properties: { reviews: { type: array, items: { $ref: '#/components/schemas/AuthoritativeReview' } } } }
+    AuthoritativeReviewDecisionResult: { type: object, required: [review, scoreboard, idempotent], properties: { review: { $ref: '#/components/schemas/AuthoritativeReview' }, scoreboard: { type: object, description: Same safe shape as GET /api/strava-challenge/public. }, idempotent: { type: boolean } } }
     NativeSession: { type: object, required: [token, username], properties: { token: { type: string }, username: { type: string } } }
     SetNativeLightState: { type: object, additionalProperties: false, required: [physicalOn], properties: { physicalOn: { type: boolean }, commandId: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' } } }
     NativeLightState: { type: object, properties: { physicalOn: { type: boolean }, reportedPhysicalOn: { type: boolean, nullable: true }, recentlyPolled: { type: boolean }, revision: { type: string }, updatedAt: { type: string, format: date-time } } }

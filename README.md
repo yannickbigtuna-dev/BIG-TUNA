@@ -386,6 +386,9 @@ PUT               /api/challenges/:id/settings
 GET/POST          /api/challenges/:id/review-requests
 POST              /api/challenges/:id/review-requests/:reviewId/decision
 GET               /api/challenges/:id/notification-events
+GET/POST          /api/strava-challenge/review-requests
+POST              /api/strava-challenge/review-requests/:reviewId/decision
+GET               /api/strava-challenge/notification-events
 POST              /api/challenge-devices
 GET               /api/waquatics/search
 GET               /api/waquatics/athlete
