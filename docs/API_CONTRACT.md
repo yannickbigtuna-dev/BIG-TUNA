@@ -38,6 +38,9 @@ second account, or second Strava connection store. All these responses are
 | POST | `/api/challenge-accounts/strava/connection/start` | Any website session | `{redirectMode:"native"|"web"}` → short-lived `{authorizationUrl,transactionId,expiresAt}`. |
 | GET/DELETE | `/api/challenge-accounts/strava/connection` | Any website session | Read or disconnect the same account-level Strava record. |
 | POST | `/api/challenge-devices` | Any website session | Register encrypted iOS APNs token with `{token,platform:"ios"}`. |
+| GET/POST | `/api/challenges` | Website session | List memberships or create a challenge. Creation accepts `sportRules` for per-sport time/distance/no-minimum qualification and a retry-safe `idempotencyKey`. |
+| GET/DELETE | `/api/challenges/{id}` | Participant / owner | Read challenge detail, or permanently delete the owner’s challenge → `{deleted:true}`. |
+| PUT | `/api/challenges/{id}/settings` | Owner/admin | Update challenge name, scoring, cadence, and sport rules. |
 | GET | `/api/challenge-review-inbox` | Eligible participant | Pending reviews the caller may decide. |
 | POST | `/api/challenges/{id}/review-requests/{reviewId}/decision` | Eligible participant | Approve/reject another participant's request idempotently. |
 | GET | `/api/challenges/{id}/notification-events` | Participant | Redacted in-app fallback events and safe delivery state. |

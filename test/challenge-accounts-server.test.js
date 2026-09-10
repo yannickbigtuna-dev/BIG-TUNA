@@ -70,6 +70,9 @@ test('challenge routes enforce sessions, membership, and owner-only settings', a
   assert.equal((await request('GET', `/api/challenges/${id}`, { token: MEMBER })).status, 200);
   assert.equal((await request('PUT', `/api/challenges/${id}/settings`, { token: MEMBER, body: { manualReview: false } })).status, 403);
   assert.equal((await request('GET', `/api/challenges/${id}`, { token: OUTSIDER })).status, 404);
+  assert.equal((await request('DELETE', `/api/challenges/${id}`, { token: MEMBER })).status, 403);
+  assert.deepEqual((await request('DELETE', `/api/challenges/${id}`, { token: OWNER })).body, { deleted: true });
+  assert.equal((await request('GET', `/api/challenges/${id}`, { token: OWNER })).status, 404);
 });
 
 test('ordinary website login bearer session accesses the challenge account profile', async () => {

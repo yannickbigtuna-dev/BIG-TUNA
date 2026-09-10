@@ -30,6 +30,38 @@ test('creation grants the authenticated creator owner control for every template
   assert.deepEqual(supplied.participants.find(p => p.userId === 'creator'), { userId: 'creator', role: 'owner' });
 });
 
+test('sport rules give every counted sport its own minimum', async () => {
+  const s = service();
+  const c = await s.createChallenge(user('owner'), {
+    template: 'custom', name: 'Mixed training', qualifyingActivities: ['Run', 'Swim'],
+    sportRules: [
+      { sportType: 'Run', minimum: { type: 'distance', value: 5000 } },
+      { sportType: 'Swim', minimum: { type: 'time', value: 1800 } },
+    ],
+  });
+  assert.equal(c.rules.sportRules[0].minimum.value, 5000);
+  assert.equal(s.evaluateActivity({ sportType: 'Run', distanceMeters: 4999, movingTime: 9_999 }, c.rules), false);
+  assert.equal(s.evaluateActivity({ sportType: 'Run', distanceMeters: 5000, movingTime: 1 }, c.rules), true);
+  assert.equal(s.evaluateActivity({ sportType: 'Swim', distanceMeters: 1, movingTime: 1799 }, c.rules), false);
+  assert.equal(s.evaluateActivity({ sportType: 'Swim', distanceMeters: 1, movingTime: 1800 }, c.rules), true);
+});
+
+test('challenge creation is idempotent when the client retries one request', async () => {
+  const s = service();
+  const input = { template: 'custom', name: 'One only', qualifyingActivities: ['Run'], idempotencyKey: '6FA8D95E-7EAD-4F79-BCFD-29A41C08DF8D' };
+  const first = await s.createChallenge(user('owner'), input);
+  const second = await s.createChallenge(user('owner'), input);
+  assert.equal(first.id, second.id);
+  assert.equal(Object.keys(s._readState().challenges).length, 1);
+});
+
+test('only a challenge owner can permanently delete a challenge', async () => {
+  const s = service(); const c = await challenge(s);
+  await rejectsCode(s.deleteChallenge(user('member'), c.id), 'forbidden');
+  assert.deepEqual(await s.deleteChallenge(user('owner'), c.id), { deleted: true });
+  await rejectsCode(s.getChallenge(user('owner'), c.id), 'not_found');
+});
+
 test('rejects malformed object inputs with public 400 errors', async () => {
   const s = service(); const c = await challenge(s);
   await rejectsCode(s.createChallenge(user('owner'), null), 'invalid_challenge');

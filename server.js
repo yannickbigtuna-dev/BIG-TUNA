@@ -2218,12 +2218,13 @@ async function handleAPI(req, res, urlPath) {
   }
 
   const challengeDetailMatch = urlPath.match(/^\/api\/challenges\/([A-Za-z0-9_-]{1,64})$/);
-  if (challengeDetailMatch && req.method === 'GET') {
+  if (challengeDetailMatch && ['GET', 'DELETE'].includes(req.method)) {
     setSensitiveResponseHeaders(res);
     const user = challengeAccountsUser(req, res);
     if (!user) return;
     if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
     try {
+      if (req.method === 'DELETE') return jsonRes(res, 200, await challengeAccounts.deleteChallenge(user, challengeDetailMatch[1]));
       await syncChallengeActivitiesForAccountView(user, challengeDetailMatch[1]);
       return jsonRes(res, 200, await challengeAccounts.getChallenge(user, challengeDetailMatch[1]));
     }

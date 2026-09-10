@@ -87,8 +87,9 @@ authenticated account; excess requests receive `429`.
 | `GET /api/challenge-accounts/strava/connection` | Website/native website session | Current `{strava:{connected,athlete,lastSyncAt}}`; safe status/reconnect probe. |
 | `DELETE /api/challenge-accounts/strava/connection` | Website/native website session | Removes this account's existing Strava connection → the same disconnected `strava` status. |
 | `GET /api/challenges` | Website session | Lists only challenges containing the caller. |
-| `POST /api/challenges` | Website session | Creates a challenge from `yannick-emma-default`, `weekly`, `season`, `distance`, `streak`, or `custom`; returns `201`, or `400` for invalid template/rules. The creator is always an owner. |
+| `POST /api/challenges` | Website session | Creates a challenge from `yannick-emma-default`, `weekly`, `season`, `distance`, `streak`, or `custom`; returns `201`, or `400` for invalid template/rules. The creator is always an owner. Supplying a valid `idempotencyKey` makes a retry return the original challenge instead of creating another. |
 | `GET /api/challenges/{id}` | Participant | Detail with participants, rules, current/season score, activity/history/tiebreaker summaries, and pending-review count; `401`/`404`. |
+| `DELETE /api/challenges/{id}` | Owner | Permanently removes the challenge, its activities, reviews, and related in-app events → `{deleted:true}`; `403` for admins/members. |
 | `PUT /api/challenges/{id}/settings` | Owner or admin | Replaces validated rule settings/participants; `403` for a member, `400` invalid shape. |
 | `POST /api/challenges/{id}/review-requests` | Participant | `{activityId,reason?}` creates a request for the caller's unqualified activity; `201`, `400`, `404`, or `409` when one is pending/already qualified. |
 | `GET /api/challenges/{id}/review-requests?status=pending` | Owner or admin | Lists review requests awaiting a decision; `403` for participants without management rights. `approved` and `rejected` are also accepted filters. |
@@ -108,21 +109,29 @@ POST /api/challenges
     { "userId": "member-id", "role": "member" }
   ],
   "qualifyingActivities": ["Run", "Walk"],
-  "thresholds": { "distanceMeters": 5000 },
+  "sportRules": [
+    { "sportType": "Run", "minimum": { "type": "distance", "value": 5000 } },
+    { "sportType": "Walk", "minimum": { "type": "time", "value": 1800 } }
+  ],
   "scoring": { "mode": "count", "pointsPerActivity": 1 },
   "cadence": { "type": "weekly" },
   "timezone": "America/Halifax",
-  "manualReview": true
+  "manualReview": true,
+  "idempotencyKey": "6fa8d95e-7ead-4f79-bcfd-29a41c08df8d"
 }
 ```
 
 `201` returns a sanitized challenge record such as
 `{"id":"challenge_…","name":"September Miles","participants":[{"userId":"caller-id","role":"owner"},{"userId":"member-id","role":"member"}],"rules":{…}}`.
-Settings accept the same rule fields (`qualifyingActivities`, `thresholds`,
-`scoring`, `cadence`, `timezone`, `participants`, `manualReview`) plus `name`.
-Threshold keys are `distanceMeters`, `durationSeconds`, `elevationMeters`, and
-`activityCount`; scoring modes are `count`, `distance`, `duration`, and
-`streak`; cadence is `weekly`, `monthly`, or `season`.
+Settings accept the same rule fields (`qualifyingActivities`, `sportRules`,
+`thresholds`, `scoring`, `cadence`, `timezone`, `participants`, `manualReview`)
+plus `name`. `sportRules` must cover every qualifying activity exactly once;
+each rule has a `sportType` and a minimum of `{type:"none",value:null}`,
+`{type:"time",value:<seconds>}`, or `{type:"distance",value:<meters>}`.
+Legacy challenges without `sportRules` continue to use the shared `thresholds`
+object. Threshold keys are `distanceMeters`, `durationSeconds`,
+`elevationMeters`, and `activityCount`; scoring modes are `count`, `distance`,
+`duration`, and `streak`; cadence is `weekly`, `monthly`, or `season`.
 
 Detail response shape (all values are sanitized):
 
