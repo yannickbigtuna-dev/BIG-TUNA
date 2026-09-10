@@ -1177,6 +1177,32 @@ async function challengeAccountsBody(req, res) {
     return null;
   }
 }
+async function challengeAccountsEmptyBody(req, res) {
+  const declared = req.headers['content-length'];
+  if (declared !== undefined && (!/^\d+$/.test(String(declared)) || Number(declared) !== 0)) {
+    req.resume();
+    jsonRes(res, 400, { error: 'This request must not include a body' });
+    return false;
+  }
+  return new Promise(resolve => {
+    let settled = false;
+    const reject = () => {
+      if (settled) return;
+      settled = true;
+      req.resume();
+      jsonRes(res, 400, { error: 'This request must not include a body' });
+      resolve(false);
+    };
+    req.once('data', reject);
+    req.once('end', () => {
+      if (!settled) {
+        settled = true;
+        resolve(true);
+      }
+    });
+    req.once('error', reject);
+  });
+}
 function challengeCreateInput(user, body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
   if (body.template !== 'yannick-emma-default' || body.participants !== undefined) return body;
@@ -2302,6 +2328,18 @@ async function handleAPI(req, res, urlPath) {
     if (!service) return;
     try { return jsonRes(res, 200, { events: await service.listWebsiteNotificationEvents(identity) }); }
     catch (error) { return challengeError(res, error, 'Challenge notifications are temporarily unavailable'); }
+  }
+
+  const stravaNotificationAcknowledgeMatch = urlPath.match(/^\/api\/strava-challenge\/notification-events\/([A-Za-z0-9_-]{1,128})\/acknowledge$/);
+  if (stravaNotificationAcknowledgeMatch && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    const identity = challengeReviewUser(req, res);
+    if (!identity) return;
+    const service = challengeServiceOrUnavailable(res);
+    if (!service) return;
+    if (!await challengeAccountsEmptyBody(req, res)) return;
+    try { return jsonRes(res, 200, await service.acknowledgeWebsiteNotificationEvent({ ...identity, eventId: stravaNotificationAcknowledgeMatch[1] })); }
+    catch (error) { return challengeError(res, error, 'Challenge notification acknowledgement could not be recorded'); }
   }
 
   // ── Public Yannick vs Emma Strava Challenge ─────────────────────────────

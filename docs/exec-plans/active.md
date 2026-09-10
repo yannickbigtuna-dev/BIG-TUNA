@@ -946,3 +946,65 @@ cached public scoreboard through the existing weekly calculation.
 - Run focused Node tests, full `npm test`, syntax/contract parsing, a security
   scan, and root diff/status review. Rollback is the scoped Git commit; no live
   `data/` state is edited by this work.
+
+## Receipt acknowledgement extension — implementation specification
+
+### Scope and decision
+
+The current implementation already satisfies the core website/API workflow:
+it maps the two authenticated website accounts to fixed scoreboard participants,
+persists a manual-review request before attempting APNs delivery, displays the
+peer's inbox on the website, and recalculates only the live weekly scoreboard
+when the peer approves. Do not duplicate that system or introduce generic
+`/api/challenges` records.
+
+Extend the authoritative fixed-scoreboard flow by adding one recipient-only,
+idempotent acknowledgement endpoint:
+`POST /api/strava-challenge/notification-events/:eventId/acknowledge`. The
+native app calls it after it has processed a review push or its in-app fallback
+event. This records `acknowledgedAt` using the server clock. It is an
+application receipt, not a claim that APNs delivered or displayed a notification;
+APNs provider acceptance remains the existing `delivery` state.
+
+### Ownership and approach
+
+- Service implementer owns `lib/strava-challenge/service.js` and focused
+  service tests: safely serialize `acknowledgedAt`; find only an event addressed
+  to the authenticated account; set the server timestamp once; return the safe
+  event and `idempotent` flag.
+- HTTP/contract implementer owns `server.js`, `docs/openapi.yaml`,
+  `docs/API_CONTRACT.md`, `docs/API_ENDPOINTS.md`, `README.md`, and focused
+  route/contract tests: validate a bounded opaque event ID, apply existing
+  bearer/account mapping and no-store headers, publish the exact request and
+  response contract, and never add a client-supplied recipient or timestamp.
+- Root owns this plan, security review, combined-diff review, validation,
+  context update, the native-app integration prompt, and commit/push.
+
+### Acceptance checks
+
+1. The intended recipient can acknowledge their own authoritative event;
+   repeated acknowledgement returns `200` and `idempotent:true` without
+   changing its timestamp.
+2. A nonparticipant, the other challenge participant, an unauthenticated
+   caller, malformed event ID, and unknown event cannot observe or acknowledge
+   the event (`401`, `403`, or `404` as appropriate).
+3. List responses expose only redacted event fields plus nullable
+   `acknowledgedAt`; neither raw device tokens, APNs provider errors, account
+   IDs outside the caller, nor client-controlled receipt timestamps are exposed.
+4. Existing request, decision, score recalculation, APNs delivery fallback,
+   and finalized-week immutability behavior stays unchanged.
+5. Run focused service/route tests, OpenAPI parse, full `npm test`, and root
+   security/diff/status review. Rollback is the scoped Git commit; no live data
+   or server restart is authorized.
+
+### Progress
+
+- [x] Audited the existing website/manual-review/APNs flow and identified the
+  missing explicit native receipt state without duplicating the authoritative
+  challenge store.
+- [x] Added the recipient-only, server-clock, idempotent receipt service and
+  bounded body-free HTTP route.
+- [x] Updated the API/OpenAPI/context documentation, including the protected
+  route's `429` rate-limit response.
+- [x] Completed focused service/route checks, independent runtime/security
+  smoke tests, OpenAPI parsing, root diff review, and the full Node test suite.

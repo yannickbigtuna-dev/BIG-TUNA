@@ -838,10 +838,14 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
 - Public API: `/api/strava-challenge/public` and `/api/strava-challenge/public/weeks/:weekStart`.
   Authenticated fixed-scoreboard review API: `/api/strava-challenge/review-requests`,
   `/api/strava-challenge/review-requests/:reviewId/decision`, and
-  `/api/strava-challenge/notification-events`. Only website usernames `yannick`
+  `/api/strava-challenge/notification-events`, and
+  `/api/strava-challenge/notification-events/:eventId/acknowledge`. Only website usernames `yannick`
   and `fishyemma` may use it; the server maps them respectively to scoreboard
   participant IDs `yannick` and `emma`, without accepting a client participant ID.
-  Reviews, overrides, APNs/in-app events, and score recalculation remain in the
+  The acknowledgement endpoint is recipient-only and idempotently records the
+  server-generated `acknowledgedAt` time after a native client processes an
+  event; it confirms application receipt, not APNs delivery/display. Reviews,
+  overrides, APNs/in-app events, and score recalculation remain in the
   authoritative Strava Challenge store, not generic `/api/challenges` records.
   Challenge administration is Yannick-only under `/api/admin/strava-challenge/*`.
   Invitation tokens are fragment-only, hashed server-side, and separate from OAuth state.

@@ -389,6 +389,7 @@ GET               /api/challenges/:id/notification-events
 GET/POST          /api/strava-challenge/review-requests
 POST              /api/strava-challenge/review-requests/:reviewId/decision
 GET               /api/strava-challenge/notification-events
+POST              /api/strava-challenge/notification-events/:eventId/acknowledge
 POST              /api/challenge-devices
 GET               /api/waquatics/search
 GET               /api/waquatics/athlete
@@ -556,6 +557,13 @@ process, alongside the existing site jobs:
   succeed;
 - overdue unfinalized weeks are retryable after outages or restarts;
 - homepage requests read local cached state and never call Strava.
+
+Authoritative review notification events are recipient-only. Native clients may
+acknowledge an event after processing its push or in-app fallback with
+`POST /api/strava-challenge/notification-events/:eventId/acknowledge` and no
+body. The idempotent `{event,idempotent}` response includes the server-recorded
+`acknowledgedAt`; that value confirms app processing only, never APNs delivery
+or notification display.
 
 Initial connection paginates back to `STRAVA_CHALLENGE_START_DATE`, subject to the
 activities Strava makes available to the authorized account and current API rate

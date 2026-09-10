@@ -68,7 +68,8 @@ server boundary. See `docs/openapi.yaml` for schemas and error responses.
 | GET | `/api/strava-challenge/public` | public | Read the cached weekly Yannick-versus-Emma score used by native score surfaces. |
 | POST/GET | `/api/strava-challenge/review-requests` | `yannick` or `fishyemma` website session | Create/list durable fixed-scoreboard manual reviews; server maps those usernames to Yannick/Emma and never accepts a participant ID. |
 | POST | `/api/strava-challenge/review-requests/{reviewId}/decision` | Other fixed participant | Idempotently approve/reject; approval returns the same safe public-scoreboard shape and updates the authoritative activity. |
-| GET | `/api/strava-challenge/notification-events` | `yannick` or `fishyemma` website session | Caller-only redacted review APNs/in-app events. |
+| GET | `/api/strava-challenge/notification-events` | `yannick` or `fishyemma` website session | Caller-only redacted review APNs/in-app events, each with nullable `acknowledgedAt`. |
+| POST | `/api/strava-challenge/notification-events/{eventId}/acknowledge` | Fixed event recipient only | No request body. Returns `{event,idempotent}` after recording the server-clock `acknowledgedAt` app-processing receipt. It is not an APNs delivery/display receipt; may return `400/401/403/404/429/503`. |
 
 `commandId` is a 1–128 character URL-safe identifier. Repeating an ID for the
 same target is idempotent; using it for a different target returns `409`.
@@ -135,7 +136,8 @@ external consumer; it is not permission to expose a private route.
 | `GET /api/strava-challenge/public` | None | Sanitized cached dashboard; `503` if unavailable | Homepage, native score widgets |
 | `POST/GET /api/strava-challenge/review-requests` | `{activityId,reason?}` / status filter | Durable review or actionable other-party review list; `400/401/403/404/409` | Fixed Yannick/Emma accounts only |
 | `POST /api/strava-challenge/review-requests/{reviewId}/decision` | `{decision:"approve"|"reject",reason?}` | `{review,scoreboard,idempotent}`; `400/401/403/404/409` | Fixed other participant only |
-| `GET /api/strava-challenge/notification-events` | None | Caller-only redacted review events | Fixed Yannick/Emma accounts only |
+| `GET /api/strava-challenge/notification-events` | None | Caller-only redacted review events, including nullable `acknowledgedAt` | Fixed Yannick/Emma accounts only |
+| `POST /api/strava-challenge/notification-events/{eventId}/acknowledge` | No body | Recipient-only `{event,idempotent}`; server records `acknowledgedAt` on first receipt, `400/401/403/404/429/503` | Fixed Yannick/Emma accounts only; not APNs delivery/display |
 
 ### Lights, HomeKit, and ESP8266/ESP32 relay
 

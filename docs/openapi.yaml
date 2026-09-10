@@ -149,6 +149,14 @@ paths:
       summary: List caller-only authoritative review notification events
       security: [{ WebsiteBearerAuth: [] }]
       responses: { '200': { description: Events, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationEvents' } } } }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/strava-challenge/notification-events/{eventId}/acknowledge:
+    post:
+      tags: [Native Challenge]
+      summary: Record the recipient app's processing receipt for an authoritative review event
+      description: "Recipient-only and idempotent. This endpoint has no request body: the server derives the recipient from the bearer session and records acknowledgedAt with its own clock. It means the app processed the event, not that APNs delivered or displayed a notification."
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses: { '200': { description: Receipt recorded or already present, content: { application/json: { schema: { $ref: '#/components/schemas/AuthoritativeNotificationReceipt' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '429': { $ref: '#/components/responses/TooManyRequests' }, '503': { $ref: '#/components/responses/Unavailable' } }
 components:
   securitySchemes:
     WebsiteBearerAuth: { type: http, scheme: bearer, description: Normal BIG TUNA website session, also used by native Challenge. }
@@ -156,12 +164,14 @@ components:
   parameters:
     ChallengeId: { name: challengeId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
     ReviewId: { name: reviewId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' } }
+    EventId: { name: eventId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' } }
   responses:
     BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     NotAuthenticated: { description: Missing, expired, or invalid bearer, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     Forbidden: { description: Not eligible, including requester self-decision, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     NotFound: { description: Membership-scoped object missing, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     Conflict: { description: Conflicting repeat/already decided, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    TooManyRequests: { description: Challenge API rate limit exceeded, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     Unavailable: { description: Server-side service or deployment credential unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   schemas:
     ChallengeProfile: { type: object, required: [id, username, strava], properties: { id: { type: string }, username: { type: string }, strava: { $ref: '#/components/schemas/StravaStatus' } } }
@@ -176,7 +186,8 @@ components:
     SafeActivity: { type: object, properties: { id: { type: string }, sportType: { type: string, nullable: true }, name: { type: string }, startDate: { type: string, format: date-time }, distanceMeters: { type: number }, movingTime: { type: number }, qualifies: { type: boolean }, reviewState: { type: string, nullable: true } } }
     ReviewDecision: { type: object, additionalProperties: false, required: [decision], properties: { decision: { type: string, enum: [approve, reject] }, reason: { type: string, maxLength: 500 } } }
     ReviewDecisionResult: { type: object, required: [review, challenge, idempotent], properties: { review: { type: object }, challenge: { type: object }, idempotent: { type: boolean } } }
-    NotificationEvents: { type: object, required: [events], properties: { events: { type: array, items: { type: object, properties: { id: { type: string }, type: { type: string, enum: [review_requested, review_approved, review_rejected] }, reviewId: { type: string, nullable: true }, createdAt: { type: string, format: date-time }, delivery: { type: string, enum: [pending, sent, failed] } } } } } }
+    NotificationEvents: { type: object, required: [events], properties: { events: { type: array, items: { type: object, properties: { id: { type: string }, type: { type: string, enum: [review_requested, review_approved, review_rejected] }, reviewId: { type: string, nullable: true }, createdAt: { type: string, format: date-time }, delivery: { type: string, enum: [pending, sent, failed] }, acknowledgedAt: { type: string, format: date-time, nullable: true, description: Server-recorded app-processing receipt; not APNs delivery or display. } } } } } }
+    AuthoritativeNotificationReceipt: { type: object, required: [event, idempotent], properties: { event: { type: object, required: [id, type, reviewId, createdAt, delivery, acknowledgedAt], properties: { id: { type: string }, type: { type: string, enum: [review_requested, review_approved, review_rejected] }, reviewId: { type: string, nullable: true }, createdAt: { type: string, format: date-time }, delivery: { type: string, enum: [pending, sent, failed] }, acknowledgedAt: { type: string, format: date-time, nullable: true, description: Server-recorded app-processing receipt. } } }, idempotent: { type: boolean, description: True when this recipient had already acknowledged the event. } } }
     AuthoritativeReviewRequest: { type: object, additionalProperties: false, required: [activityId], properties: { activityId: { type: string, minLength: 1, maxLength: 128 }, reason: { type: string, maxLength: 500 } } }
     AuthoritativeReviewDecision: { type: object, additionalProperties: false, required: [decision], properties: { decision: { type: string, enum: [approve, reject] }, reason: { type: string, maxLength: 500 } } }
     AuthoritativeReview: { type: object, required: [id, activityId, requester, reason, status, createdAt, decidedAt, decidedBy, decisionReason], properties: { id: { type: string }, activityId: { type: string }, requester: { type: object, required: [id, username], properties: { id: { type: string }, username: { type: string } } }, reason: { type: string, nullable: true }, status: { type: string, enum: [pending, approved, rejected] }, createdAt: { type: string, format: date-time }, decidedAt: { type: string, format: date-time, nullable: true }, decidedBy: { type: object, nullable: true, properties: { id: { type: string }, username: { type: string } } }, decisionReason: { type: string, nullable: true } } }

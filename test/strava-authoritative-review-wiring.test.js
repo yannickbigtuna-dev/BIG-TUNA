@@ -16,10 +16,14 @@ test('authoritative review routes use fixed authenticated identity mapping and s
   assert.match(server, /urlPath === '\/api\/strava-challenge\/review-requests'/);
   assert.match(server, /stravaReviewDecisionMatch/);
   assert.match(server, /urlPath === '\/api\/strava-challenge\/notification-events'/);
+  assert.match(server, /stravaNotificationAcknowledgeMatch/);
+  assert.match(server, /notification-events\\\/\(\[A-Za-z0-9_-\]\{1,128\}\)\\\/acknowledge/);
   assert.match(server, /service\.createWebsiteReview\(\{ \.\.\.identity, body \}\)/);
   assert.match(server, /service\.listWebsiteReviews\(\{ \.\.\.identity, status: status \|\| undefined \}\)/);
   assert.match(server, /service\.decideWebsiteReview\(\{ \.\.\.identity, reviewId: stravaReviewDecisionMatch\[1\], body \}\)/);
   assert.match(server, /service\.listWebsiteNotificationEvents\(identity\)/);
+  assert.match(server, /challengeAccountsEmptyBody\(req, res\)/);
+  assert.match(server, /service\.acknowledgeWebsiteNotificationEvent\(\{ \.\.\.identity, eventId: stravaNotificationAcknowledgeMatch\[1\] \}\)/);
   assert.match(server, /setSensitiveResponseHeaders\(res\)/);
 });
 
@@ -34,9 +38,12 @@ test('homepage review UI calls only the authoritative review and notification AP
   assert.doesNotMatch(ui, /\/api\/challenges\//);
 });
 
-test('OpenAPI publishes the three authoritative review surfaces', () => {
+test('OpenAPI publishes the authoritative review surfaces and notification receipt contract', () => {
   assert.match(openapi, /\/api\/strava-challenge\/review-requests:/);
   assert.match(openapi, /\/api\/strava-challenge\/review-requests\/\{reviewId\}\/decision:/);
   assert.match(openapi, /\/api\/strava-challenge\/notification-events:/);
+  assert.match(openapi, /\/api\/strava-challenge\/notification-events\/\{eventId\}\/acknowledge:/);
   assert.match(openapi, /AuthoritativeReviewDecisionResult/);
+  assert.match(openapi, /AuthoritativeNotificationReceipt/);
+  assert.match(openapi, /acknowledgedAt/);
 });
