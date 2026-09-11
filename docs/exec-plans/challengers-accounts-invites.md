@@ -109,4 +109,4 @@ Activation status: the source pushes are verified. Public static pages return 20
 but the current backend process still lacks the new routes. Windows denied PM2
 control socket access (EPERM); restart must be run from the server's privileged
 operator session. A complete local data backup was saved before handoff. The
-iOS macOS simulator workflow is pending its final test result.
+iOS macOS simulator workflow passed all 19 tests, app/widget compilation, and the built URL-scheme check in run 34655706810 (app commit bbfa686).
