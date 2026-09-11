@@ -1008,3 +1008,7 @@ APNs provider acceptance remains the existing `delivery` state.
   route's `429` rate-limit response.
 - [x] Completed focused service/route checks, independent runtime/security
   smoke tests, OpenAPI parsing, root diff review, and the full Node test suite.
+
+## CHALLENGERS account creation and invites (2026-09-11)
+
+This independent extension is specified in docs/exec-plans/challengers-accounts-invites.md. Existing unfinished plans above are preserved. Scope: shared BIG TUNA registration, explicit-consent challenge invitations, browser fallback, native sharing and login branding.

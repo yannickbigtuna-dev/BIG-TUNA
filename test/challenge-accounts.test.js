@@ -168,3 +168,47 @@ test('shared state adapter stores challenge account data in the existing state t
   await s.createChallenge(user('owner'), { template: 'custom', name: 'Shared', qualifyingActivities: ['Run'] });
   assert.ok(root.challengeAccounts); assert.equal(Object.keys(root.challengeAccounts.challenges).length, 1);
 });
+
+test('manager invitations store only hashes, preview safely, and accept the authenticated member idempotently', async () => {
+  const s = service(); const c = await challenge(s);
+  await rejectsCode(s.createInvite(user('member'), c.id), 'forbidden');
+  const invite = await s.createInvite(user('owner'), c.id);
+  const persisted = s._readState().challenges[c.id].invite;
+  assert.match(invite.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(JSON.stringify(persisted).includes(invite.token), false);
+  assert.equal((await s.previewInvite({ token: invite.token })).participantCount, 2);
+  await rejectsCode(s.acceptInvite(user('outsider'), { token: invite.token, userId: 'owner', role: 'owner' }), 'invalid_invite');
+  const accepted = await s.acceptInvite(user('outsider'), { token: invite.token });
+  assert.equal(accepted.alreadyMember, false);
+  assert.deepEqual(accepted.challenge.participants.find(p => p.userId === 'outsider'), { userId: 'outsider', role: 'member' });
+  assert.equal((await s.acceptInvite(user('outsider'), { token: invite.token })).alreadyMember, true);
+  await s.revokeInvite(user('owner'), c.id);
+  await rejectsCode(s.previewInvite({ token: invite.token }), 'invite_revoked');
+});
+
+test('invitations reject special defaults, expired tokens, and full challenges', async () => {
+  let current = new Date('2026-09-01T00:00:00.000Z');
+  const s = createChallengeAccounts({ initialState: {}, now: () => current, deviceTokenCipher: { encrypt: x => x, decrypt: x => x } });
+  const defaultChallenge = await s.createChallenge(user('owner'), { template: 'yannick-emma-default' });
+  await rejectsCode(s.createInvite(user('owner'), defaultChallenge.id), 'invite_forbidden');
+  const c = await s.createChallenge(user('owner'), { template: 'custom', name: 'Invite', qualifyingActivities: ['Run'] });
+  const invite = await s.createInvite(user('owner'), c.id);
+  current = new Date('2026-09-09T00:00:00.000Z');
+  await rejectsCode(s.previewInvite({ token: invite.token }), 'invite_expired');
+  await s._mutate(state => { state.challenges[c.id].invite.expiresAt = '2026-09-20T00:00:00.000Z'; state.challenges[c.id].participants = Array.from({ length: 50 }, (_, index) => ({ userId: `user${index}`, role: index === 0 ? 'owner' : 'member' })); });
+  await rejectsCode(s.acceptInvite(user('outsider'), { token: invite.token }), 'invite_full');
+});
+
+test('concurrent joins, settings updates, regeneration and reload preserve consent boundaries',async()=>{
+  const s=service(), c=await challenge(s), invite=await s.createInvite(user('owner'),c.id);
+  const joined=await Promise.all([1,2].map(()=>s.acceptInvite(user('outsider'),{token:invite.token})));
+  assert.equal(joined.filter(x=>!x.alreadyMember).length,1);
+  await s.updateSettings(user('owner'),c.id,{name:'Renamed'});
+  assert.equal((await s.getChallenge(user('outsider'),c.id)).participants.filter(p=>p.userId==='outsider').length,1);
+  const next=await s.createInvite(user('owner'),c.id);
+  await rejectsCode(s.previewInvite({token:invite.token}),'invite_not_found');
+  const restored=createChallengeAccounts({initialState:s._readState(),now});
+  assert.equal((await restored.previewInvite({token:next.token})).name,'Renamed');
+  await s.deleteChallenge(user('owner'),c.id);
+  await rejectsCode(s.previewInvite({token:next.token}),'invite_not_found');
+});

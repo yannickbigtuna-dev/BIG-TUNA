@@ -41,6 +41,9 @@ second account, or second Strava connection store. All these responses are
 | GET/POST | `/api/challenges` | Website session | List memberships or create a challenge. Creation accepts `sportRules` for per-sport time/distance/no-minimum qualification and a retry-safe `idempotencyKey`. |
 | GET/DELETE | `/api/challenges/{id}` | Participant / owner | Read challenge detail, or permanently delete the owner’s challenge → `{deleted:true}`. |
 | PUT | `/api/challenges/{id}/settings` | Owner/admin | Update challenge name, scoring, cadence, and sport rules. |
+| POST/DELETE | `/api/challenges/{id}/invites` | Owner/admin | Generate a seven-day link and QR code, or revoke the current link. |
+| POST | `/api/challenge-invites/preview` | Public | `{token}` → challenge name, ID, member count and expiry only. |
+| POST | `/api/challenge-invites/accept` | Website session | `{token}` → `{challenge,alreadyMember}`; adds only the signed-in account as a member after explicit confirmation. |
 | GET | `/api/challenge-review-inbox` | Eligible participant | Pending reviews the caller may decide. |
 | POST | `/api/challenges/{id}/review-requests/{reviewId}/decision` | Eligible participant | Approve/reject another participant's request idempotently. |
 | GET | `/api/challenges/{id}/notification-events` | Participant | Redacted in-app fallback events and safe delivery state. |
@@ -55,6 +58,21 @@ For peer review, a two-person challenge lets the other participant decide;
 three-or-more participants require a non-requester owner/admin. Settings stay
 owner/admin-only. See the endpoint reference and OpenAPI schemas for exact
 JSON shapes and error codes.
+
+CHALLENGERS registration calls the existing `POST /api/auth/register` with
+`{username,password}` and receives the same website session used by login.
+There is no account synchronization job: registration writes directly to BIG
+TUNA's authoritative account store. Native sessions remain in Keychain.
+
+Invite URLs use `https://yannickmorgans.ca/challenge-invite/#token=<token>`.
+The browser removes the fragment and retains the pending invite in session
+storage through sign-in or registration. The explicit Open in app action uses
+`yannickchallenge://invite?token=<token>`; associated domains are not required.
+Both clients require Join confirmation after authentication and permit dismissal.
+Only SHA-256 invite digests and expiry are persisted by the server. Generating
+a new link invalidates the previous one; revocation and challenge deletion also
+invalidate it. Repeated acceptance does not duplicate membership. Invites cannot
+modify the fixed Yannick/Emma scoreboard or grant owner/admin access.
 
 ## Yannick Lights native integration
 
@@ -113,7 +131,7 @@ external consumer; it is not permission to expose a private route.
 
 | Method/path | Request | Response and errors | Auth / used by |
 | --- | --- | --- | --- |
-| `POST /api/auth/register` | JSON username/password (and accepted account fields) | Created user/session shape; `400` validation/conflict | Public; login UI |
+| `POST /api/auth/register` | JSON `{username,password}` | Created user/session shape; `400` validation, `409` duplicate username, `429` rate limit | Public; website and native signup |
 | `POST /api/auth/login` | JSON username/password | Session token/user; `401` invalid credentials | Public; website and native sign-in bootstrap |
 | `POST /api/auth/logout` | Bearer website session | `{ok:true}`; safe repeated logout | Website session; browser auth client |
 | `GET /api/auth/me` | Bearer website session | Current sanitized user; `401` | Website auth client |

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <title>CHALLENGERS invitation</title><link rel="stylesheet" href="/styles/tokens.css">
+  <style>
+    :root { --accent: var(--c-pink); } body{min-height:100svh;display:grid;place-items:center;padding:var(--space-5)}
+    main{width:min(100%,560px)} .brand{font-size:clamp(2.7rem,12vw,5.4rem);font-weight:var(--weight-black);letter-spacing:-.07em;line-height:.9;margin-bottom:var(--space-2)} .brand-sub{color:var(--text-muted);font-size:var(--text-lg);margin-bottom:var(--space-10)}
+    .invite-name{font-size:var(--text-2xl);margin:var(--space-2) 0}.meta{color:var(--text-muted);margin-top:var(--space-3)}.actions{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-6)}.native{margin-top:var(--space-6);font-size:var(--text-sm)}.status{min-height:1.5em;color:var(--text-muted);margin-top:var(--space-4)}.error{color:var(--danger)}
+  </style>
+  <script>window.AuthOptions={allowGuest:true,brand:{title:'CHALLENGERS',subtitle:'Train together.'}};</script>
+  <script src="/topbar.js"></script><script src="/auth.js"></script>
+</head>
+<body><main><h1 class="brand">CHALLENGERS</h1><p class="brand-sub">Train together.</p>
+  <section class="card" aria-live="polite"><p class="label">Challenge invitation</p><h2 class="invite-name" id="invite-name">Checking invitation…</h2><p class="meta" id="invite-meta"></p><p class="status" id="invite-status"></p><div class="actions" id="invite-actions" hidden><button class="btn btn-primary" id="join-btn" type="button">Join challenge</button><button class="btn btn-ghost" id="later-btn" type="button">Not now</button></div><p class="native" id="native-link" hidden></p></section>
+</main><script src="/challenge-invite/invite.js"></script></body></html>

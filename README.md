@@ -23,6 +23,10 @@ The main server is a plain Node.js HTTP server with no web framework. It serves 
 
 ## Features
 
+- CHALLENGERS app and website accounts share the same BIG TUNA identity. Open
+  `/challengers/` for account challenges and manager invite links/QR codes;
+  invite recipients can sign in or create an account and explicitly join in
+  the browser or app. Links expire after seven days and can be revoked.
 - Hosts multiple standalone HTML apps from one server.
 - Automatically lists app folders on the homepage and app dropdown.
 - Provides shared authentication and navigation scripts.

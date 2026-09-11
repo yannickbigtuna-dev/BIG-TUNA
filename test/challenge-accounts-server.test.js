@@ -83,6 +83,30 @@ test('ordinary website login bearer session accesses the challenge account profi
   assert.equal(profile.body.id, 'owner-id');
 });
 
+test('invite routes keep tokens out of state, expose safe previews, and join only the current account', async () => {
+  const created = await request('POST', '/api/challenges', { token: OWNER, body: {
+    template: 'custom', name: 'Invite workflow', qualifyingActivities: ['Run'], thresholds: { distanceMeters: 5000 }, manualReview: true,
+  } });
+  const id = created.body.id;
+  assert.equal((await request('POST', `/api/challenges/${id}/invites`, { token: MEMBER, body: {} })).status, 404);
+  const minted = await request('POST', `/api/challenges/${id}/invites`, { token: OWNER, body: {} });
+  assert.equal(minted.status, 201);
+  assert.match(minted.body.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(minted.body.url, new RegExp(`#token=${minted.body.token}$`));
+  assert.match(minted.body.qrDataURL, /^data:image\/png;base64,/);
+  assert.equal(JSON.stringify(_test.getChallengeAccounts()._readState()).includes(minted.body.token), false);
+  const preview = await request('POST', '/api/challenge-invites/preview', { body: { token: minted.body.token } });
+  assert.equal(preview.status, 200);
+  assert.deepEqual(Object.keys(preview.body).sort(), ['challengeId', 'expiresAt', 'name', 'participantCount']);
+  assert.equal((await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token, userId: 'owner-id', role: 'owner' } })).status, 400);
+  const joined = await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token } });
+  assert.equal(joined.status, 200); assert.equal(joined.body.alreadyMember, false);
+  assert.deepEqual(joined.body.challenge.participants.find(p => p.userId === 'outsider-id'), { userId: 'outsider-id', role: 'member' });
+  assert.equal((await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token } })).body.alreadyMember, true);
+  assert.equal((await request('DELETE', `/api/challenges/${id}/invites`, { token: OWNER })).status, 200);
+  assert.equal((await request('POST', '/api/challenge-invites/preview', { body: { token: minted.body.token } })).status, 410);
+});
+
 test('review decisions prevent self-approval, are idempotent, and emit safe events', async () => {
   const created = await request('POST', '/api/challenges', { token: OWNER, body: {
     template: 'custom', name: 'Review workflow', participants: [{ userId: 'member-id', role: 'member' }],
@@ -120,4 +144,33 @@ test('device registration fails safely when the deployment encryption key is abs
   const result = await request('POST', '/api/challenge-devices', { token: OWNER, body: { token, platform: 'ios' } });
   assert.equal(result.status, 503);
   assert.equal(JSON.stringify(result.body).includes(token), false);
+});
+
+test('registration creates a shared scrypt account and concurrent duplicate signup is safe', async () => {
+  const results = await Promise.all([1,2].map(() => request('POST','/api/auth/register',{body:{username:'new_runner',password:'a secure test password'}})));
+  assert.deepEqual(results.map(x=>x.status).sort(),[200,409]);
+  const registered = results.find(x=>x.status===200);
+  assert.equal(registered.headers['cache-control'],'no-store');
+  const users = JSON.parse(fs.readFileSync(path.join(dataDir,'users.json')));
+  assert.equal(users.filter(x=>x.username==='new_runner').length,1);
+  const saved = users.find(x=>x.username==='new_runner');
+  assert.match(saved.passwordHash,/^scrypt\$/);
+  assert.equal(JSON.stringify(saved).includes('a secure test password'),false);
+  const login = await request('POST','/api/auth/login',{body:{username:'NEW_RUNNER',password:'a secure test password'}});
+  assert.equal(login.status,200); assert.equal(login.body.id,registered.body.id);
+  const profile = await request('GET','/api/challenge-accounts/me',{token:registered.body.token});
+  assert.equal(profile.body.id,registered.body.id);
+  assert.equal((await request('POST','/api/auth/login',{body:{username:'new_runner',password:'wrong'}})).status,401);
+  assert.equal((await request('POST','/api/auth/register',{body:{username:[],password:{}}})).status,400);
+});
+
+test('concurrent password resets are single-use and retain unrelated registrations',async()=>{
+  const users = JSON.parse(fs.readFileSync(path.join(dataDir,'users.json')));
+  const target=users.find(x=>x.username==='new_runner');
+  writeJson(path.join(dataDir,'password-resets.json'),[{token:'test-reset',userId:target.id,expiresAt:new Date(Date.now()+60000).toISOString()}]);
+  const results=await Promise.all([1,2].map(()=>request('POST','/api/auth/reset-password',{body:{token:'test-reset',password:'changed-password'}})));
+  assert.deepEqual(results.map(x=>x.status).sort(),[200,400]);
+  assert.equal((await request('POST','/api/auth/login',{body:{username:'new_runner',password:'changed-password'}})).status,200);
+  assert.equal((await request('POST','/api/auth/login',{body:{username:'new_runner',password:'a secure test password'}})).status,401);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir,'users.json'))).length,users.length);
 });

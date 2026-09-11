@@ -20,6 +20,7 @@ const Topbar = (() => {
     { name: 'Assignments',     href: '/assignments/',     icon: '✓', color: 'var(--c-blue)' },
     { name: 'World Map',       href: '/world-map/',       icon: '🌍', color: 'var(--c-indigo)' },
     { name: 'Pace Calculator', href: '/pace-calculator/', icon: '🏃', color: 'var(--c-purple)' },
+    { name: 'Challengers',     href: '/challengers/',     icon: '🏁', color: 'var(--c-pink)' },
     { name: 'Lights',          href: '/lights/',          icon: '💡', color: 'var(--c-amber)' },
     { name: 'Terminal',        href: '/terminal/',        icon: '🖥', color: 'var(--c-green)' },
   ];

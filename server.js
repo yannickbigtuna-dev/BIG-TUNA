@@ -1142,22 +1142,40 @@ async function getChallengeAccountStravaStatus(user) {
 }
 
 const challengeApiRateLimits = new Map();
+const challengeInvitePreviewRateLimits = new Map();
+const authRateLimits = new Map();
 const CHALLENGE_API_RATE_WINDOW_MS = 60_000;
 const CHALLENGE_API_READ_LIMIT = 90;
 const CHALLENGE_API_WRITE_LIMIT = 30;
-function allowChallengeApiRequest(user, req) {
-  const isWrite = !['GET', 'HEAD'].includes(req.method);
-  const key = `${user.id}:${isWrite ? 'write' : 'read'}`;
-  const now = Date.now();
-  const current = challengeApiRateLimits.get(key);
+const CHALLENGE_INVITE_PREVIEW_LIMIT = 30;
+const AUTH_RATE_WINDOW_MS = 60_000;
+const AUTH_LOGIN_LIMIT = 20;
+const AUTH_REGISTER_LIMIT = 10;
+function requestAddress(req) {
+  const remote = String(req.socket && req.socket.remoteAddress || '');
+  // Cloudflared connects locally and supplies Cloudflare's client address. A
+  // direct connection cannot choose the rate-limit key via a forged header.
+  const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+  const cloudflareAddress = req.headers['cf-connecting-ip'];
+  return String(loopback && typeof cloudflareAddress === 'string' && /^[0-9a-f:.]{1,64}$/i.test(cloudflareAddress) ? cloudflareAddress : (remote || 'unknown')).slice(0, 128);
+}
+function allowWindowedRequest(store, key, limit, now = Date.now(), windowMs = 60_000) {
+  const current = store.get(key);
   if (!current || current.resetAt <= now) {
-    challengeApiRateLimits.set(key, { count: 1, resetAt: now + CHALLENGE_API_RATE_WINDOW_MS });
-    if (challengeApiRateLimits.size > 500) for (const [oldKey, value] of challengeApiRateLimits) if (value.resetAt <= now) challengeApiRateLimits.delete(oldKey);
+    store.set(key, { count: 1, resetAt: now + windowMs });
+    if (store.size > 500) for (const [oldKey, value] of store) if (value.resetAt <= now) store.delete(oldKey);
     return true;
   }
   current.count++;
-  return current.count <= (isWrite ? CHALLENGE_API_WRITE_LIMIT : CHALLENGE_API_READ_LIMIT);
+  return current.count <= limit;
 }
+function allowChallengeApiRequest(user, req) {
+  const isWrite = !['GET', 'HEAD'].includes(req.method);
+  const key = `${user.id}:${isWrite ? 'write' : 'read'}`;
+  return allowWindowedRequest(challengeApiRateLimits, key, isWrite ? CHALLENGE_API_WRITE_LIMIT : CHALLENGE_API_READ_LIMIT, Date.now(), CHALLENGE_API_RATE_WINDOW_MS);
+}
+function allowChallengeInvitePreview(req) { return allowWindowedRequest(challengeInvitePreviewRateLimits, requestAddress(req), CHALLENGE_INVITE_PREVIEW_LIMIT); }
+function allowAuthRequest(req, action) { return allowWindowedRequest(authRateLimits, `${requestAddress(req)}:${action}`, action === 'register' ? AUTH_REGISTER_LIMIT : AUTH_LOGIN_LIMIT, Date.now(), AUTH_RATE_WINDOW_MS); }
 function challengeAccountsUser(req, res) {
   const user = getSessionUser(getToken(req));
   if (!user) { jsonRes(res, 401, { error: 'Not authenticated' }); return null; }
@@ -1166,7 +1184,7 @@ function challengeAccountsUser(req, res) {
 }
 function challengeAccountsError(res, error) {
   const status = Number(error && error.status);
-  const safeStatus = [400, 401, 403, 404, 409, 503].includes(status) ? status : 500;
+  const safeStatus = [400, 401, 403, 404, 409, 410, 429, 503].includes(status) ? status : 500;
   if (safeStatus >= 500) stravaChallengeLogger.error('challenge account request failed:', error && error.message);
   return jsonRes(res, safeStatus, { error: safeStatus >= 500 ? 'Challenge request could not be completed' : String(error.message || 'Challenge request was rejected') });
 }
@@ -1306,6 +1324,32 @@ function radarJsonRes(res, data) {
 
 function hashPassword(password, salt) {
   return crypto.createHash('sha256').update(salt + password).digest('hex');
+}
+const SCRYPT_PREFIX = 'scrypt$';
+const SCRYPT_OPTIONS = Object.freeze({ N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+function scryptPassword(password, salt) {
+  return new Promise((resolve, reject) => crypto.scrypt(password, salt, 32, SCRYPT_OPTIONS, (error, derived) => error ? reject(error) : resolve(derived)));
+}
+async function hashNewPassword(password) {
+  const salt = crypto.randomBytes(16).toString('base64url');
+  const derived = await scryptPassword(password, salt);
+  return `${SCRYPT_PREFIX}${salt}$${derived.toString('base64url')}`;
+}
+async function verifyPassword(password, user) {
+  if (!user || typeof user.passwordHash !== 'string') return false;
+  if (user.passwordHash.startsWith(SCRYPT_PREFIX)) {
+    const parts = user.passwordHash.split('$');
+    if (parts.length !== 3 || !/^[A-Za-z0-9_-]{16,64}$/.test(parts[1]) || !/^[A-Za-z0-9_-]{40,64}$/.test(parts[2])) return false;
+    try {
+      const expected = Buffer.from(parts[2], 'base64url');
+      const actual = await scryptPassword(password, parts[1]);
+      return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+    } catch { return false; }
+  }
+  if (typeof user.salt !== 'string') return false;
+  const expected = Buffer.from(user.passwordHash, 'hex');
+  const actual = Buffer.from(hashPassword(password, user.salt), 'hex');
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
 // ── Analytics: IP / geo / device resolution ──────────────────────────────────
@@ -2134,6 +2178,29 @@ async function handleAPI(req, res, urlPath) {
     return sendAppleAppFactoryFile(res, ipaPath, `${slug}-${version}.ipa`, 'application/octet-stream');
   }
 
+  // Invitation previews deliberately expose only a minimal, unguessable-token
+  // view. The token stays in the URL fragment on clients and is never logged.
+  if (urlPath === '/api/challenge-invites/preview' && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    if (!allowChallengeInvitePreview(req)) return jsonRes(res, 429, { error: 'Too many invitation previews. Please retry shortly.' });
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    try { return jsonRes(res, 200, await challengeAccounts.previewInvite(body)); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
+  if (urlPath === '/api/challenge-invites/accept' && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    try { return jsonRes(res, 200, await challengeAccounts.acceptInvite(user, body)); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
   // ── Authenticated Challenge Accounts ────────────────────────────────────
   // Keep this private surface separate from the legacy public Strava
   // scoreboard. All object resolution is membership-scoped by the service.
@@ -2241,6 +2308,28 @@ async function handleAPI(req, res, urlPath) {
     if (body === null) return;
     try { return jsonRes(res, 200, await challengeAccounts.updateSettings(user, challengeSettingsMatch[1], body)); }
     catch (error) { return challengeAccountsError(res, error); }
+  }
+
+  const challengeInviteMatch = urlPath.match(/^\/api\/challenges\/([A-Za-z0-9_-]{1,64})\/invites$/);
+  if (challengeInviteMatch && ['POST', 'DELETE'].includes(req.method)) {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    if (req.method === 'DELETE') {
+      if (!await challengeAccountsEmptyBody(req, res)) return;
+      try { return jsonRes(res, 200, await challengeAccounts.revokeInvite(user, challengeInviteMatch[1])); }
+      catch (error) { return challengeAccountsError(res, error); }
+    }
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) return jsonRes(res, 400, { error: 'Invitation creation does not accept fields' });
+    try {
+      const invite = await challengeAccounts.createInvite(user, challengeInviteMatch[1]);
+      const url = `https://yannickmorgans.ca/challenge-invite/#token=${invite.token}`;
+      const qrDataURL = await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 4, width: 512 });
+      return jsonRes(res, 201, { url, token: invite.token, expiresAt: invite.expiresAt, qrDataURL });
+    } catch (error) { return challengeAccountsError(res, error); }
   }
 
   const challengeReviewsMatch = urlPath.match(/^\/api\/challenges\/([A-Za-z0-9_-]{1,64})\/review-requests$/);
@@ -2724,27 +2813,35 @@ async function handleAPI(req, res, urlPath) {
 
   // POST /api/auth/register
   if (req.method === 'POST' && urlPath === '/api/auth/register') {
-    const { username, password } = await parseBody(req);
-    if (!username || !password)
+    setSensitiveResponseHeaders(res);
+    if (!allowAuthRequest(req, 'register')) return jsonRes(res, 429, { error: 'Too many registration attempts. Please retry shortly.' });
+    let body;
+    try { body = await parseBoundedJson(req, 8 * 1024); }
+    catch (error) { return jsonRes(res, error && error.code === 'BODY_TOO_LARGE' ? 413 : 400, { error: error && error.code === 'BODY_TOO_LARGE' ? 'Request body is too large' : 'Request body must be valid JSON' }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonRes(res, 400, { error: 'Username and password required' });
+    const { username, password } = body;
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password)
       return jsonRes(res, 400, { error: 'Username and password required' });
     const u = String(username).trim();
     if (u.length < 2 || u.length > 32)
       return jsonRes(res, 400, { error: 'Username must be 2–32 characters' });
     if (!/^[a-zA-Z0-9_-]+$/.test(u))
       return jsonRes(res, 400, { error: 'Username: letters, numbers, _ and - only' });
-    if (String(password).length < 4)
-      return jsonRes(res, 400, { error: 'Password must be at least 4 characters' });
+    if (password.length < 4 || password.length > 1024)
+      return jsonRes(res, 400, { error: password.length > 1024 ? 'Password is too long' : 'Password must be at least 4 characters' });
 
+    let passwordHash;
+    try { passwordHash = await hashNewPassword(password); }
+    catch { return jsonRes(res, 503, { error: 'Account registration is temporarily unavailable' }); }
+    // Read after the asynchronous derivation so simultaneous registrations are
+    // serialized by the synchronous file write and cannot overwrite a user.
     const users = readUsers();
-    if (users.find(x => x.username.toLowerCase() === u.toLowerCase()))
+    if (users.find(x => String(x.username || '').toLowerCase() === u.toLowerCase()))
       return jsonRes(res, 409, { error: 'Username already taken' });
-
-    const salt = crypto.randomBytes(16).toString('hex');
     const user = {
       id: crypto.randomUUID(),
       username: u,
-      passwordHash: hashPassword(String(password), salt),
-      salt,
+      passwordHash,
       createdAt: new Date().toISOString(),
     };
     users.push(user);
@@ -2760,13 +2857,22 @@ async function handleAPI(req, res, urlPath) {
 
   // POST /api/auth/login
   if (req.method === 'POST' && urlPath === '/api/auth/login') {
-    const { username, password } = await parseBody(req);
-    if (!username || !password)
+    setSensitiveResponseHeaders(res);
+    if (!allowAuthRequest(req, 'login')) return jsonRes(res, 429, { error: 'Too many login attempts. Please retry shortly.' });
+    let body;
+    try { body = await parseBoundedJson(req, 8 * 1024); }
+    catch (error) { return jsonRes(res, error && error.code === 'BODY_TOO_LARGE' ? 413 : 400, { error: error && error.code === 'BODY_TOO_LARGE' ? 'Request body is too large' : 'Request body must be valid JSON' }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonRes(res, 400, { error: 'Username and password required' });
+    const { username, password } = body;
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password || username.length > 128 || password.length > 1024)
       return jsonRes(res, 400, { error: 'Username and password required' });
 
     const users = readUsers();
     const user  = users.find(x => x.username.toLowerCase() === String(username).toLowerCase().trim());
-    if (!user || hashPassword(String(password), user.salt) !== user.passwordHash)
+    if (!user || !await verifyPassword(password, user))
+      return jsonRes(res, 401, { error: 'Invalid username or password' });
+    const currentUser = readUsers().find(candidate => candidate.id === user.id);
+    if (!currentUser || currentUser.passwordHash !== user.passwordHash)
       return jsonRes(res, 401, { error: 'Invalid username or password' });
 
     const token    = generateToken();
@@ -2838,23 +2944,35 @@ async function handleAPI(req, res, urlPath) {
 
   // POST /api/auth/reset-password — consume a reset token and set a new password
   if (req.method === 'POST' && urlPath === '/api/auth/reset-password') {
-    const { token, password } = await parseBody(req);
-    if (!token || !password)
+    setSensitiveResponseHeaders(res);
+    if (!allowAuthRequest(req, 'reset')) return jsonRes(res, 429, { error: 'Too many reset attempts. Please retry shortly.' });
+    let body;
+    try { body = await parseBoundedJson(req, 8 * 1024); }
+    catch (error) { return jsonRes(res, error.code === 'BODY_TOO_LARGE' ? 413 : 400, { error: 'Invalid password reset request' }); }
+    const { token, password } = body || {};
+    if (typeof token !== 'string' || typeof password !== 'string' || !token || !password || token.length > 256 || password.length > 1024)
       return jsonRes(res, 400, { error: 'Token and new password required' });
     if (String(password).length < 4)
       return jsonRes(res, 400, { error: 'Password must be at least 4 characters' });
 
-    const resets = readPasswordResets();
-    const reset = resets.find(r => r.token === token && new Date(r.expiresAt) > new Date());
+    let resets = readPasswordResets();
+    let reset = resets.find(r => r.token === token && new Date(r.expiresAt) > new Date());
+    if (!reset) return jsonRes(res, 400, { error: 'Invalid or expired reset link' });
+
+    let passwordHash;
+    try { passwordHash = await hashNewPassword(password); }
+    catch { return jsonRes(res, 503, { error: 'Password reset is temporarily unavailable' }); }
+    // Revalidate after derivation to consume once and preserve concurrent writes.
+    resets = readPasswordResets();
+    reset = resets.find(r => r.token === token && new Date(r.expiresAt) > new Date());
     if (!reset) return jsonRes(res, 400, { error: 'Invalid or expired reset link' });
 
     const users = readUsers();
     const user = users.find(u => u.id === reset.userId);
     if (!user) return jsonRes(res, 400, { error: 'Invalid or expired reset link' });
 
-    const salt = crypto.randomBytes(16).toString('hex');
-    user.salt = salt;
-    user.passwordHash = hashPassword(String(password), salt);
+    user.passwordHash = passwordHash;
+    delete user.salt;
     writeUsers(users);
 
     // Token is single-use; also drop any other outstanding reset tokens for this user.

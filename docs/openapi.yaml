@@ -12,6 +12,86 @@ tags:
   - { name: Native Lights }
   - { name: Public score }
 paths:
+  /api/auth/register:
+    post:
+      tags: [Native Challenge]
+      summary: Create one shared BIG TUNA website and app account
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WebsiteCredentials' } } } }
+      responses:
+        '200': { description: Shared account and bearer session, content: { application/json: { schema: { $ref: '#/components/schemas/WebsiteSession' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { description: Request body too large }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/auth/login:
+    post:
+      tags: [Native Challenge]
+      summary: Sign into an existing BIG TUNA account
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WebsiteCredentials' } } } }
+      responses:
+        '200': { description: Shared account and bearer session, content: { application/json: { schema: { $ref: '#/components/schemas/WebsiteSession' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '413': { description: Request body too large }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/challenges/{challengeId}/invites:
+    post:
+      tags: [Native Challenge]
+      summary: Generate a seven-day invite and invalidate any previous link
+      description: Owner/admin only. Fixed Yannick/Emma challenges cannot be invited into. Raw token returned only here; server stores its digest. QR contains the same fragment-based HTTPS URL.
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false } } } }
+      responses:
+        '201': { description: Link and QR, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInvite' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [Native Challenge]
+      summary: Revoke the current challenge invite
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
+      responses:
+        '200': { description: Revoked, content: { application/json: { schema: { type: object, required: [revoked], properties: { revoked: { type: boolean } } } } } }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/challenge-invites/preview:
+    post:
+      tags: [Native Challenge]
+      summary: Preview limited challenge information without joining
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInviteToken' } } } }
+      responses:
+        '200': { description: Safe preview, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInvitePreview' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { description: Invite expired or revoked }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/challenge-invites/accept:
+    post:
+      tags: [Native Challenge]
+      summary: Explicitly join as the signed-in member
+      description: Revalidates expiry and capacity in a serialized mutation. Repeated acceptance is idempotent. Never accepts a role or target user ID.
+      security: [{ WebsiteBearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInviteToken' } } } }
+      responses:
+        '200': { description: Joined challenge, content: { application/json: { schema: { type: object, required: [challenge, alreadyMember], properties: { challenge: { $ref: '#/components/schemas/Challenge' }, alreadyMember: { type: boolean } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { description: Invite expired or revoked }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/challenge-accounts/me:
     get:
       tags: [Native Challenge]
@@ -209,6 +289,28 @@ components:
     TooManyRequests: { description: Challenge API rate limit exceeded, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     Unavailable: { description: Server-side service or deployment credential unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   schemas:
+    Challenge:
+      type: object
+      required: [id, name, template, createdAt, updatedAt, participants, rules]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        template: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        participants: { type: array, items: { type: object, required: [userId, role], properties: { userId: { type: string }, role: { type: string, enum: [owner, admin, member] } } } }
+        rules: { type: object }
+        currentScore: { type: object, additionalProperties: { type: number } }
+        seasonScore: { type: object, additionalProperties: { type: number } }
+        activities: { type: array, items: { type: object } }
+        history: { type: array, items: { type: object } }
+        tiebreakers: { type: array, items: { type: object } }
+        reviewState: { type: object }
+    WebsiteCredentials: { type: object, required: [username, password], properties: { username: { type: string, description: Registration requires 2-32 letters/numbers/underscore/hyphen. }, password: { type: string, format: password, writeOnly: true, description: Registration retains the existing minimum of four characters. } } }
+    WebsiteSession: { type: object, required: [token, id, username], properties: { token: { type: string }, id: { type: string }, username: { type: string }, email: { type: string, nullable: true } } }
+    ChallengeInviteToken: { type: object, additionalProperties: false, required: [token], properties: { token: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' } } }
+    ChallengeInvite: { type: object, required: [url, token, expiresAt, qrDataURL], properties: { url: { type: string, format: uri }, token: { type: string }, expiresAt: { type: string, format: date-time }, qrDataURL: { type: string, description: PNG data URL generated by BIG TUNA without an external QR service. } } }
+    ChallengeInvitePreview: { type: object, additionalProperties: false, required: [challengeId, name, participantCount, expiresAt], properties: { challengeId: { type: string }, name: { type: string }, participantCount: { type: integer }, expiresAt: { type: string, format: date-time } } }
     ChallengeProfile: { type: object, required: [id, username, strava], properties: { id: { type: string }, username: { type: string }, strava: { $ref: '#/components/schemas/StravaStatus' } } }
     StravaStartRequest: { type: object, additionalProperties: false, properties: { redirectMode: { type: string, enum: [native, web], default: native } } }
     StravaStartResponse: { type: object, required: [authorizationUrl, transactionId, expiresAt], properties: { authorizationUrl: { type: string, format: uri }, transactionId: { type: string, description: Completion correlation only, not OAuth state or credential. }, expiresAt: { type: string, format: date-time } } }

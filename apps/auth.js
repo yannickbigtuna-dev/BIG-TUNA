@@ -7,6 +7,13 @@
 const Auth = (() => {
   'use strict';
 
+  // Pages that have a useful public state (such as an invitation preview) may
+  // opt in before loading this script. Existing apps keep the normal blocking
+  // sign-in behavior because this remains false unless explicitly requested.
+  const options = window.AuthOptions && typeof window.AuthOptions === 'object' ? window.AuthOptions : {};
+  const allowGuest = options.allowGuest === true;
+  const brand = options.brand && typeof options.brand === 'object' ? options.brand : null;
+
   const TOKEN_KEY = 'auth_token';
   const USER_KEY  = 'auth_user';
 
@@ -175,8 +182,8 @@ const Auth = (() => {
     _modal.id = 'auth-modal-overlay';
     _modal.innerHTML = `
       <div id="auth-card">
-        <span class="auth-logo">BIG TUNA</span>
-        <span class="auth-subtitle">yannickmorgans.ca</span>
+        <span class="auth-logo"></span>
+        <span class="auth-subtitle"></span>
         <h2 id="auth-title">Welcome back</h2>
         <div class="auth-field">
           <label>Username</label>
@@ -195,6 +202,9 @@ const Auth = (() => {
       </div>
     `;
     document.body.appendChild(_modal);
+
+    _modal.querySelector('.auth-logo').textContent = brand?.title || 'BIG TUNA';
+    _modal.querySelector('.auth-subtitle').textContent = brand?.subtitle || 'yannickmorgans.ca';
 
     let mode = initialMode || 'login'; // 'login' | 'register' | 'forgot'
     const titleEl    = _modal.querySelector('#auth-title');
@@ -245,6 +255,7 @@ const Auth = (() => {
     forgotDiv.querySelector('#auth-forgot-link').onclick = () => setMode('forgot');
 
     async function doSubmit() {
+      if (submitBtn.disabled) return;
       const username = unameInput.value.trim();
       if (!username) { errorDiv.textContent = 'Please enter a username.'; return; }
 
@@ -294,6 +305,7 @@ const Auth = (() => {
         injectWidget();
         identifyTopbar();
         fireReady();
+        window.dispatchEvent(new CustomEvent('auth:user-changed', { detail: _user }));
       } catch {
         errorDiv.textContent = 'Connection error. Please try again.';
         submitBtn.disabled = false;
@@ -508,6 +520,7 @@ const Auth = (() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     _token = null; _user = null;
+    window.dispatchEvent(new CustomEvent('auth:user-changed', { detail: null }));
     window.location.reload();
   }
 
@@ -568,6 +581,11 @@ const Auth = (() => {
       // Verification failed or network error — clear token and ask to log in
       localStorage.removeItem(TOKEN_KEY);
       _token = null;
+    }
+    if (allowGuest) {
+      identifyTopbar();
+      fireReady();
+      return;
     }
     showModal();
   }
@@ -655,5 +673,7 @@ const Auth = (() => {
     init();
   }
 
-  return { onReady, logout, beforeLogout, saveSettings, loadSettings, autoSync, get user() { return _user; }, get token() { return _token; } };
+  return { onReady, logout, beforeLogout, saveSettings, loadSettings, autoSync,
+    showLogin: () => { if (!_modal) showModal('login'); },
+    get user() { return _user; }, get token() { return _token; } };
 })();

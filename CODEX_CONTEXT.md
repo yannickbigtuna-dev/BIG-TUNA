@@ -191,12 +191,39 @@ Static serving:
 
 ## Authentication
 
+### CHALLENGERS registration and invitations (2026-09-11)
+
+The native CHALLENGERS app creates accounts directly through the existing
+`/api/auth/register` route, receiving the normal website bearer session. There
+is no separate native identity store or account-forwarding job. Registration
+and login enforce bounded typed input and rate limits while preserving existing
+account/password compatibility.
+
+`/challengers/` provides browser access to the caller's challenges and manager
+link/QR sharing. `/challenge-invite/#token=...` is the public invitation entry;
+it previews limited challenge metadata, preserves the token through shared
+sign-in/signup, and requires explicit authenticated Join confirmation. Native
+handoff is a user-tapped `yannickchallenge://invite?token=...` link using the
+existing scheme, not a new associated-domains entitlement.
+
+Invitations are reusable for seven days, manager-created/revocable, with one
+current SHA-256 token digest per challenge in the existing serialized state.
+Regeneration invalidates the prior link. Public preview returns only challenge
+ID/name/member count/expiry. Acceptance adds only the current account as member,
+is idempotent, checks the 50-member limit atomically, and does not change the
+fixed two-person scoreboard. See `docs/API_CONTRACT.md`, `docs/openapi.yaml`,
+and `docs/exec-plans/challengers-accounts-invites.md`.
+
 Auth is custom and file-backed.
 
 - Users live in `data/users.json`. Each user optionally carries an `email` field (nullable) used only for password-reset delivery — it is not required at registration and is not shown to other users.
 - Sessions live in `data/sessions.json`.
 - Sessions are bearer tokens with 30-day expiry.
-- Passwords are SHA-256 with per-user random salt, not bcrypt.
+- New and reset passwords use asynchronous Node scrypt (`N=16384,r=8,p=1`)
+  with a random salt and tagged `scrypt$<salt>$<digest>` format. Existing salted
+  SHA-256 records remain login-compatible and are not bulk-rewritten. Login
+  rechecks the stored hash after verification; reset rechecks its one-use token
+  after derivation so concurrent registration/reset writes are preserved.
 - `writeSessions()` prunes expired sessions on write.
 - Password-reset tokens live in `data/password-resets.json`: `{ token, userId, createdAt, expiresAt }`, 1-hour TTL, pruned on write via `writePasswordResets()` (same prune-on-write pattern as sessions). A reset token is single-use and is deleted the moment it's redeemed; redeeming one also invalidates every existing session for that user (`writeSessions(sessions.filter(s => s.userId !== user.id))`), forcing re-login everywhere.
 - Frontend token and user cache are in `localStorage` keys `auth_token` and `auth_user` (the cached user object now also carries `email`).
