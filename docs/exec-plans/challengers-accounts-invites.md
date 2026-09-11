@@ -91,7 +91,7 @@ is not proof of iPhone installation. Existing unrelated active plans remain.
 - [x] Defined shared contract, ownership, failure behavior and acceptance checks.
 - [x] Implement backend, website and iOS packages.
 - [x] Complete root diff/security review and local validation (164 server tests).
-- [ ] Update docs and deliver verified commits to both remotes.
+- [x] Update docs and deliver verified commits to both remotes.
 
 Implementation review added scrypt for new/reset passwords with legacy login
 compatibility and race checks around asynchronous password derivation. The app
@@ -104,3 +104,9 @@ completed integration corrections and ran the full validation suite.
 Rollback must preserve scrypt verification for accounts created after this
 release; reverting to a SHA-256-only login implementation would prevent those
 accounts from signing in. Invitation fields are additive and may remain stored.
+
+Activation status: the source pushes are verified. Public static pages return 200,
+but the current backend process still lacks the new routes. Windows denied PM2
+control socket access (EPERM); restart must be run from the server's privileged
+operator session. A complete local data backup was saved before handoff. The
+iOS macOS simulator workflow is pending its final test result.

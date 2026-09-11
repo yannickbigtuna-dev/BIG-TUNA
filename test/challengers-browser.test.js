@@ -5,6 +5,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { before, after, test } = require('node:test');
 const puppeteer = require('puppeteer');
+const QRCode = require('qrcode');
 const ROOT = path.join(__dirname, '..', 'apps');
 const TOKEN = 'a'.repeat(43);
 let server, browser, base, fixture;
@@ -29,7 +30,7 @@ async function handler(req,res) {
   if (url.pathname === '/api/challenges/challenge_fixture') return reply(res,200,challenge);
   if (url.pathname === '/api/challenges/challenge_fixture/invites') {
     if(req.method==='DELETE'){fixture.revoked++;return reply(res,200,{revoked:true});}
-    fixture.invites++; return reply(res,201,{token:TOKEN,url:`https://yannickmorgans.ca/challenge-invite/#token=${TOKEN}`,expiresAt:'2099-10-01T12:00:00.000Z',qrDataURL:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j7X8AAAAASUVORK5CYII='});
+    fixture.invites++; return reply(res,201,{token:TOKEN,url:`https://yannickmorgans.ca/challenge-invite/#token=${TOKEN}`,expiresAt:'2099-10-01T12:00:00.000Z',qrDataURL:await QRCode.toDataURL('https://yannickmorgans.ca/challenge-invite/#token='+TOKEN)});
   }
   if(req.method==='GET' && ['/auth.js','/styles/tokens.css','/challenge-invite/','/challenge-invite/invite.js','/challengers/','/challengers/challengers.js'].includes(url.pathname)) {
     const file=path.join(ROOT,url.pathname.replace(/^\//,'')+(url.pathname.endsWith('/')?'index.html':''));
@@ -38,7 +39,7 @@ async function handler(req,res) {
   }
   reply(res,404,{error:'Not found'});
 }
-before(async()=>{server=http.createServer((req,res)=>handler(req,res).catch(error=>reply(res,500,{error:error.message})));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base=`http://127.0.0.1:${server.address().port}`;browser=await puppeteer.launch({headless:true,args:['--no-sandbox']});});
+before(async()=>{fs.mkdirSync(path.join(ROOT,'..','artifacts'),{recursive:true});server=http.createServer((req,res)=>handler(req,res).catch(error=>reply(res,500,{error:error.message})));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base=`http://127.0.0.1:${server.address().port}`;browser=await puppeteer.launch({headless:true,args:['--no-sandbox']});});
 after(async()=>{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
 async function pageFor(url, signedIn=false) {
   reset(); const page=await browser.newPage(); page.setDefaultTimeout(8000); await page.setViewport({width:375,height:812});
