@@ -2298,6 +2298,17 @@ async function handleAPI(req, res, urlPath) {
     catch (error) { return challengeAccountsError(res, error); }
   }
 
+  const challengeLeaveMatch = urlPath.match(/^\/api\/challenges\/([A-Za-z0-9_-]{1,64})\/leave$/);
+  if (challengeLeaveMatch && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    if (await challengeAccountsBody(req, res) === null) return;
+    try { return jsonRes(res, 200, await challengeAccounts.leaveChallenge(user, challengeLeaveMatch[1])); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
   const challengeSettingsMatch = urlPath.match(/^\/api\/challenges\/([A-Za-z0-9_-]{1,64})\/settings$/);
   if (challengeSettingsMatch && req.method === 'PUT') {
     setSensitiveResponseHeaders(res);
