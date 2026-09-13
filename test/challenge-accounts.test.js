@@ -26,9 +26,46 @@ test('validates rules and isolates challenge visibility by membership', async ()
 test('creation grants the authenticated creator owner control for every template', async () => {
   const s = service();
   const c = await s.createChallenge(user('actual-user'), { template: 'yannick-emma-default' });
-  assert.deepEqual(c.participants.find(p => p.userId === 'actual-user'), { userId: 'actual-user', username: null, role: 'owner' });
+  assert.deepEqual(c.participants.find(p => p.userId === 'actual-user'), { userId: 'actual-user', username: null, role: 'owner', team: 'red' });
   const supplied = await s.createChallenge(user('creator'), { template: 'custom', participants: [{ userId: 'someone-else', role: 'owner' }] });
-  assert.deepEqual(supplied.participants.find(p => p.userId === 'creator'), { userId: 'creator', username: null, role: 'owner' });
+  assert.deepEqual(supplied.participants.find(p => p.userId === 'creator'), { userId: 'creator', username: null, role: 'owner', team: 'red' });
+});
+
+test('teams default deterministically and members can change only their own team', async () => {
+  const s = service();
+  const c = await challenge(s);
+  assert.deepEqual(c.participants.map(p => ({ userId: p.userId, role: p.role, team: p.team })), [
+    { userId: 'owner', role: 'owner', team: 'red' },
+    { userId: 'member', role: 'member', team: 'blue' },
+  ]);
+  const changed = await s.updateTeam(user('member'), c.id, { team: 'red' });
+  assert.deepEqual(changed.participants.map(p => ({ userId: p.userId, role: p.role, team: p.team })), [
+    { userId: 'owner', role: 'owner', team: 'blue' },
+    { userId: 'member', role: 'member', team: 'red' },
+  ]);
+  assert.deepEqual(s._readState().challenges[c.id].participants, [
+    { userId: 'owner', role: 'owner', team: 'blue' },
+    { userId: 'member', role: 'member', team: 'red' },
+  ]);
+  await rejectsCode(s.updateTeam(user('outsider'), c.id, { team: 'blue' }), 'not_found');
+  await rejectsCode(s.updateTeam(user('member'), c.id, { team: 'green' }), 'invalid_team');
+  await rejectsCode(s.updateTeam(user('member'), c.id, { team: 'blue', userId: 'owner' }), 'invalid_team');
+});
+
+test('legacy team serialization is deterministic and settings cannot assign a peer team', async () => {
+  const s = service();
+  const c = await challenge(s);
+  await s._mutate(state => { for (const participant of state.challenges[c.id].participants) delete participant.team; });
+  const legacy = await s.getChallenge(user('owner'), c.id);
+  assert.deepEqual(legacy.participants.map(p => p.team), ['red', 'blue']);
+  const updated = await s.updateSettings(user('owner'), c.id, {
+    participants: [
+      { userId: 'owner', role: 'owner', team: 'blue' },
+      { userId: 'member', role: 'member', team: 'red' },
+    ],
+  });
+  assert.deepEqual(updated.participants.map(p => p.team), ['red', 'blue']);
+  assert.deepEqual(s._readState().challenges[c.id].participants.map(p => p.team), ['red', 'blue']);
 });
 
 test('sport rules give every counted sport its own minimum', async () => {
@@ -204,7 +241,7 @@ test('manager invitations store only hashes, preview by link or normalized code,
   await rejectsCode(s.acceptInvite(user('outsider'), { token: invite.token, userId: 'owner', role: 'owner' }), 'invite_unavailable');
   const accepted = await s.acceptInvite(user('outsider'), { code: invite.code.toLowerCase() });
   assert.equal(accepted.alreadyMember, false);
-  assert.deepEqual(accepted.challenge.participants.find(p => p.userId === 'outsider'), { userId: 'outsider', username: null, role: 'member' });
+  assert.deepEqual(accepted.challenge.participants.find(p => p.userId === 'outsider'), { userId: 'outsider', username: null, role: 'member', team: 'red' });
   assert.equal(Object.hasOwn(accepted.challenge.rules, 'participants'), false);
   assert.equal((await s.acceptInvite(user('outsider'), { token: invite.token })).alreadyMember, true);
   await s.revokeInvite(user('owner'), c.id);

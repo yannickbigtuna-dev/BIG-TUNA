@@ -388,8 +388,10 @@ GET               /api/shared-lists/:id/events
 GET               /api/users/lookup
 GET               /api/challenge-accounts/me
 GET/POST          /api/challenges
+POST              /api/challenges/refresh
 GET               /api/challenges/:id
 PUT               /api/challenges/:id/settings
+PUT               /api/challenges/:id/team
 GET/POST          /api/challenges/:id/review-requests
 POST              /api/challenges/:id/review-requests/:reviewId/decision
 GET               /api/challenges/:id/notification-events

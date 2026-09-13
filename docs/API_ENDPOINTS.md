@@ -97,9 +97,11 @@ authenticated account; excess requests receive `429`.
 | `DELETE /api/challenge-accounts/strava/connection` | Website/native website session | Removes this account's existing Strava connection → the same disconnected `strava` status. |
 | `GET /api/challenges` | Website session | Lists only challenges containing the caller. |
 | `POST /api/challenges` | Website session | Creates a challenge from `yannick-emma-default`, `weekly`, `season`, `distance`, `streak`, or `custom`; returns `201`, or `400` for invalid template/rules. The creator is always an owner. Supplying a valid `idempotencyKey` makes a retry return the original challenge instead of creating another. |
-| `GET /api/challenges/{id}` | Participant | Detail with participants, rules, current/season score, activity/history/tiebreaker summaries, and pending-review count; `401`/`404`. |
+| `POST /api/challenges/refresh` | Website session | No body → `{challenges,refreshedAt,partial}`. Syncs each unique connected participant in the caller's memberships at most once, waits no more than 12 seconds, imports available cached/fresh activity into all visible challenges, and returns durable detail even when `partial:true`. |
+| `GET /api/challenges/{id}` | Participant | Durable detail with participants, rules, current/season score, activity/history/tiebreaker summaries, and pending-review count; never waits on Strava; `401`/`404`. |
 | `DELETE /api/challenges/{id}` | Owner | Permanently removes the challenge, its activities, reviews, and related in-app events → `{deleted:true}`; `403` for admins/members. |
 | `PUT /api/challenges/{id}/settings` | Owner or admin | Replaces validated rule settings/participants; `403` for a member, `400` invalid shape. |
+| `PUT /api/challenges/{id}/team` | Participant | Exactly `{team:"red"|"blue"}` → updated detail. Changes only the caller's selection; with exactly two participants the peer becomes the opposite team atomically. Fixed Yannick/Emma teams return `403`; outsiders receive `404`. |
 | `POST /api/challenges/{id}/review-requests` | Participant | `{activityId,reason?}` creates a request for the caller's unqualified activity; `201`, `400`, `404`, or `409` when one is pending/already qualified. |
 | `GET /api/challenges/{id}/review-requests?status=pending` | Owner or admin | Lists review requests awaiting a decision; `403` for participants without management rights. `approved` and `rejected` are also accepted filters. |
 | `GET /api/challenge-review-inbox` | Eligible reviewer | Pending requests in challenges containing the caller that were requested by someone else and that caller can decide. Response `{reviews:[{challenge:{id,name},review:{id,requesterDisplayName,activity,reason,createdAt}}]}`. |
@@ -146,11 +148,18 @@ link/QR/code sharing. Invite regeneration/revocation affects future
 joins only; existing memberships stay intact.
 
 Challenge responses include `participants[].username`, resolved from the account
-store rather than trusting a caller-provided display name. Generic activity DTOs
-include `participantID`. Neither addition exposes emails or Strava credentials.
+store rather than trusting a caller-provided display name, and a persisted
+`participants[].team` of `red` or `blue`. Creators default red, second
+participants default blue, and legacy teamless records serialize deterministically.
+Only the participant can change their selection through the team endpoint;
+manager settings cannot assign a peer's team and team changes never alter roles.
+The fixed template stays Yannick-red/Emma-blue. Generic activity DTOs include
+`participantID`. None of these additions exposes emails or Strava credentials.
 Visible clients refresh membership and discard challenges that are authoritatively
 deleted or no longer accessible. A server response of `API route not found` means
 the runtime is missing the route and must not be treated as confirmed deletion.
+The Show in widgets preference is device-specific and therefore stays only in
+the native App Group; the server does not store or expose it.
 
 Creation example:
 
@@ -176,7 +185,7 @@ POST /api/challenges
 ```
 
 `201` returns a sanitized challenge record such as
-`{"id":"challenge_…","name":"September Miles","participants":[{"userId":"caller-id","role":"owner"},{"userId":"member-id","role":"member"}],"rules":{…}}`.
+`{"id":"challenge_…","name":"September Miles","participants":[{"userId":"caller-id","role":"owner","team":"red"},{"userId":"member-id","role":"member","team":"blue"}],"rules":{…}}`.
 Settings accept the same rule fields (`qualifyingActivities`, `sportRules`,
 `thresholds`, `scoring`, `cadence`, `timezone`, `participants`, `manualReview`)
 plus `name`. `sportRules` must cover every qualifying activity exactly once;

@@ -39,9 +39,11 @@ second account, or second Strava connection store. All these responses are
 | GET/DELETE | `/api/challenge-accounts/strava/connection` | Any website session | Read or disconnect the same account-level Strava record. |
 | POST | `/api/challenge-devices` | Any website session | Register encrypted iOS APNs token with `{token,platform:"ios"}`. |
 | GET/POST | `/api/challenges` | Website session | List memberships or create a challenge. Creation accepts `sportRules` for per-sport time/distance/no-minimum qualification and a retry-safe `idempotencyKey`. |
-| GET/DELETE | `/api/challenges/{id}` | Participant / owner | Read challenge detail, or permanently delete the owner’s challenge → `{deleted:true}`. |
+| POST | `/api/challenges/refresh` | Website session | No body. Bounded refresh of each unique connected participant, then `{challenges,refreshedAt,partial}` from durable state. |
+| GET/DELETE | `/api/challenges/{id}` | Participant / owner | Read durable challenge detail without waiting on Strava, or permanently delete the owner’s challenge → `{deleted:true}`. |
 | POST | `/api/challenges/{id}/leave` | Non-owner participant | `{}` → `{left:true}`; remove caller membership and related activity/review/event data. |
 | PUT | `/api/challenges/{id}/settings` | Owner/admin | Update challenge name, scoring, cadence, and sport rules. |
+| PUT | `/api/challenges/{id}/team` | Participant | Exactly `{team:"red"|"blue"}` changes only the caller's team; in a two-person challenge the peer is assigned the opposite team atomically. |
 | POST/DELETE | `/api/challenges/{id}/invites` | Owner/admin | Generate a seven-day link, QR and six-letter code, or revoke both credentials. |
 | POST | `/api/challenge-invites/preview` | Public, rate limited | Exactly one `{token}` or `{code}` → challenge name, ID, member count and expiry only. |
 | POST | `/api/challenge-invites/accept` | Website session, rate limited | Exactly one `{token}` or `{code}` → `{challenge,alreadyMember}`; adds only the signed-in account as a member after explicit confirmation. |
@@ -84,13 +86,26 @@ invalidate it. Repeated acceptance does not duplicate membership. Invites cannot
 modify the fixed Yannick/Emma scoreboard or grant owner/admin access.
 
 Membership-scoped challenge responses resolve `participants[].username` from
-the account store. Clients use this for display, keeping `userId` for identity.
+the account store and include persisted `participants[].team` as `red` or
+`blue`. New creators default red and second participants default blue. Legacy
+records without a team serialize deterministically; choosing a team persists
+the canonical values without changing owner/admin/member roles. The fixed
+Yannick/Emma template remains Yannick-red and Emma-blue. Clients use the
+username for display, keeping `userId` for identity.
 Generic activity responses include `participantID` so the app can attribute
 workouts and offer review requests only for the caller's own activity. Deleted
 or inaccessible challenges return `404`; clients reconcile the list and clear
 stale detail/widget state. A missing HTTP route is a deployment failure, not
 proof that a specific challenge was deleted. See the CHALLENGERS App Store
 readiness plan for validation and deployment prerequisites.
+
+`POST /api/challenges/refresh` is the only challenge-account read flow that
+waits on Strava. It accepts no request body, coalesces a participant shared by
+multiple visible challenges, waits at most 12 seconds for provider work, then
+imports each participant's available cache into every caller-visible challenge.
+It still returns `200` and the last durable challenge data when Strava fails or
+times out; `partial:true` tells clients the refresh was incomplete. Widget
+visibility is intentionally device-local App Group state and has no server API.
 
 ## Yannick Lights native integration
 

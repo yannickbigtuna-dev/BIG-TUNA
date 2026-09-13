@@ -171,10 +171,22 @@ paths:
       security: [{ WebsiteBearerAuth: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeCreate' } } } }
       responses: { '201': { description: Created challenge, content: { application/json: { schema: { type: object } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { $ref: '#/components/responses/NotAuthenticated' } }
+  /api/challenges/refresh:
+    post:
+      tags: [Native Challenge]
+      summary: Refresh all caller-visible challenges within a bounded wait
+      description: Accepts no body. Each unique connected participant shared by the caller's challenges is synchronized at most once and concurrent requests reuse in-flight participant work. Available cached or fresh activity is imported into every visible challenge. Provider failures or the 12-second deadline return HTTP 200 with partial true and durable last-known challenge details.
+      security: [{ WebsiteBearerAuth: [] }]
+      responses:
+        '200': { description: Durable refreshed challenge collection, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeRefreshResult' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/challenges/{challengeId}:
     get:
       tags: [Native Challenge]
-      summary: Get membership-scoped challenge detail
+      summary: Get durable membership-scoped challenge detail without waiting on Strava
       security: [{ WebsiteBearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
       responses: { '200': { description: Challenge detail, content: { application/json: { schema: { type: object } } } }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '404': { $ref: '#/components/responses/NotFound' } }
@@ -209,6 +221,21 @@ paths:
       parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeSettings' } } } }
       responses: { '200': { description: Updated challenge, content: { application/json: { schema: { type: object } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/challenges/{challengeId}/team:
+    put:
+      tags: [Native Challenge]
+      summary: Select the authenticated participant's red or blue team
+      description: Only the caller's participant record may be selected. In a two-person challenge the peer is atomically assigned the opposite team. Roles are unchanged. The fixed Yannick-red/Emma-blue challenge cannot be changed.
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeTeamSelection' } } } }
+      responses:
+        '200': { description: Updated challenge detail, content: { application/json: { schema: { $ref: '#/components/schemas/Challenge' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /api/challenges/{challengeId}/review-requests/{reviewId}/decision:
     post:
       tags: [Native Challenge]
@@ -340,7 +367,7 @@ components:
       oneOf:
         - { $ref: '#/components/schemas/ChallengeInviteToken' }
         - { $ref: '#/components/schemas/ChallengeInviteCode' }
-    ChallengeParticipant: { type: object, required: [userId, role], properties: { userId: { type: string }, role: { type: string, enum: [owner, admin, member] }, username: { type: string, nullable: true, description: Server-resolved display identity. Never render an opaque userId as a fallback. } } }
+    ChallengeParticipant: { type: object, required: [userId, role, team], properties: { userId: { type: string }, role: { type: string, enum: [owner, admin, member] }, team: { type: string, enum: [red, blue], description: Persisted display team independent from role. }, username: { type: string, nullable: true, description: Server-resolved display identity. Never render an opaque userId as a fallback. } } }
     ChallengeInvite: { type: object, required: [url, token, code, expiresAt, qrDataURL], properties: { url: { type: string, format: uri }, token: { type: string }, code: { type: string, pattern: '^[A-Z]{6}$' }, expiresAt: { type: string, format: date-time }, qrDataURL: { type: string, description: PNG data URL generated by BIG TUNA without an external QR service. } } }
     ChallengeInvitePreview: { type: object, additionalProperties: false, required: [challengeId, name, participantCount, expiresAt], properties: { challengeId: { type: string }, name: { type: string }, participantCount: { type: integer }, expiresAt: { type: string, format: date-time } } }
     ChallengeProfile: { type: object, required: [id, username, strava], properties: { id: { type: string }, username: { type: string }, strava: { $ref: '#/components/schemas/StravaStatus' } } }
@@ -354,6 +381,8 @@ components:
     ChallengeSportRule: { type: object, required: [sportType, minimum], properties: { sportType: { type: string, maxLength: 40 }, minimum: { $ref: '#/components/schemas/ChallengeSportMinimum' } } }
     ChallengeCreate: { type: object, required: [template, name, qualifyingActivities, sportRules], properties: { template: { type: string, enum: [yannick-emma-default, weekly, season, distance, streak, custom] }, name: { type: string, maxLength: 120 }, participants: { type: array, items: { type: object } }, qualifyingActivities: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 40 } }, sportRules: { type: array, minItems: 1, maxItems: 20, items: { $ref: '#/components/schemas/ChallengeSportRule' } }, scoring: { type: object }, cadence: { type: object }, timezone: { type: string }, manualReview: { type: boolean }, idempotencyKey: { type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' } } }
     ChallengeSettings: { type: object, required: [qualifyingActivities, sportRules], properties: { name: { type: string, maxLength: 120 }, qualifyingActivities: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 40 } }, sportRules: { type: array, minItems: 1, maxItems: 20, items: { $ref: '#/components/schemas/ChallengeSportRule' } }, thresholds: { type: object }, scoring: { type: object }, cadence: { type: object }, timezone: { type: string }, manualReview: { type: boolean }, participants: { type: array, items: { type: object } } } }
+    ChallengeTeamSelection: { type: object, additionalProperties: false, required: [team], properties: { team: { type: string, enum: [red, blue] } } }
+    ChallengeRefreshResult: { type: object, additionalProperties: false, required: [challenges, refreshedAt, partial], properties: { challenges: { type: array, items: { $ref: '#/components/schemas/Challenge' } }, refreshedAt: { type: string, format: date-time }, partial: { type: boolean, description: "True when any connected participant sync, cache read/import, or the refresh deadline was incomplete." } } }
     ChallengeDeleted: { type: object, required: [deleted], properties: { deleted: { type: boolean, enum: [true] } } }
     ReviewInboxResponse: { type: object, required: [reviews], properties: { reviews: { type: array, items: { $ref: '#/components/schemas/ReviewInboxItem' } } } }
     ReviewInboxItem: { type: object, properties: { challenge: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }, review: { type: object, required: [id, requesterDisplayName, activity, reason, createdAt], properties: { id: { type: string }, requesterDisplayName: { type: string }, activity: { $ref: '#/components/schemas/SafeActivity' }, reason: { type: string, nullable: true }, createdAt: { type: string, format: date-time } } } } }

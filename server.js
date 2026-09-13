@@ -1148,6 +1148,7 @@ function getChallengeAccountUsername(userId) {
 }
 
 const challengeApiRateLimits = new Map();
+const challengeAccountSyncsByService = new WeakMap();
 const challengeInvitePreviewRateLimits = new Map();
 const challengeInviteAcceptRateLimits = new Map();
 const authRateLimits = new Map();
@@ -1249,14 +1250,16 @@ function challengeCreateInput(user, body) {
   return { ...body, participants };
 }
 
-async function syncLegacyStravaActivitiesForChallenge(user, challengeId) {
-  if (!challengeAccounts || !stravaChallenge) return;
+async function syncLegacyStravaActivitiesForChallenge(user, challengeId, { accounts = challengeAccounts, service = stravaChallenge } = {}) {
+  if (!accounts || !service) return false;
   try {
-    const dashboard = await stravaChallenge.getPublicDashboard();
-    const accounts = readUsers();
+    const dashboard = await service.getPublicDashboard();
+    const detail = await accounts.getChallenge(user, challengeId);
+    const challengeParticipantIds = new Set((detail.participants || []).map(participant => participant.userId));
+    const userAccounts = readUsers();
     const ownerByLegacyParticipant = {
-      yannick: accounts.find(account => String(account.username || '').trim().toLowerCase() === 'yannick')?.id,
-      emma: accounts.find(account => ['fishyemma', 'emma'].includes(String(account.username || '').trim().toLowerCase()))?.id,
+      yannick: userAccounts.find(account => String(account.username || '').trim().toLowerCase() === 'yannick')?.id,
+      emma: userAccounts.find(account => ['fishyemma', 'emma'].includes(String(account.username || '').trim().toLowerCase()))?.id,
     };
     const activities = Array.isArray(dashboard && dashboard.currentWeek && dashboard.currentWeek.activities)
       ? dashboard.currentWeek.activities.map(activity => ({
@@ -1267,14 +1270,148 @@ async function syncLegacyStravaActivitiesForChallenge(user, challengeId) {
         startDate: activity.startDate,
         distanceMeters: activity.distanceMeters ?? activity.distance,
         movingTime: activity.movingTime ?? activity.durationSeconds,
-      })).filter(activity => activity.userId && activity.id !== 'strava_')
+      })).filter(activity => activity.userId && challengeParticipantIds.has(activity.userId) && activity.id !== 'strava_')
       : [];
-    if (activities.length) await challengeAccounts.ingestActivities(user, challengeId, activities);
+    if (activities.length) await accounts.ingestActivities(user, challengeId, activities);
+    return true;
   } catch (error) {
     // Detail reads must remain available from the durable account store if the
     // legacy activity cache is temporarily unavailable.
     stravaChallengeLogger.warn('challenge activity adapter unavailable:', error && error.message);
+    return false;
   }
+}
+
+function coalescedChallengeAccountSync(service, participantId, timeoutMs) {
+  let serviceSyncs = challengeAccountSyncsByService.get(service);
+  if (!serviceSyncs) {
+    serviceSyncs = new Map();
+    challengeAccountSyncsByService.set(service, serviceSyncs);
+  }
+  const existing = serviceSyncs.get(participantId);
+  if (existing) return existing;
+  const upstream = Promise.resolve().then(async () => {
+    const status = await service.getAccountStatus({ id: participantId });
+    if (!status || !status.connected) return { connected: false };
+    await service.syncAccountActivities({ id: participantId });
+    return { connected: true };
+  });
+  let timer;
+  const operation = Promise.race([
+    upstream,
+    new Promise((resolve, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('Challenge account refresh timed out.'), { code: 'refresh_timeout' })), Math.max(1, timeoutMs)); }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+    if (serviceSyncs.get(participantId) === operation) serviceSyncs.delete(participantId);
+  });
+  serviceSyncs.set(participantId, operation);
+  return operation;
+}
+
+function boundedChallengeRefreshOperation(operation, timeoutMs, label) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return Promise.reject(Object.assign(new Error(`${label} exceeded the challenge refresh deadline.`), { code: 'refresh_timeout' }));
+  }
+  const upstream = Promise.resolve().then(operation);
+  let timer;
+  return Promise.race([
+    upstream,
+    new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(`${label} exceeded the challenge refresh deadline.`), { code: 'refresh_timeout' })), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function refreshChallengeAccountData(user, { accounts = challengeAccounts, service = stravaChallenge, timeoutMs = 12_000 } = {}) {
+  if (!accounts) throw Object.assign(new Error('Challenge accounts are temporarily unavailable.'), { status: 503 });
+  // Capture complete durable detail before any provider wait. If Strava uses
+  // the entire deadline, the response must still contain the saved scores and
+  // activities rather than replacing the app's cards with list summaries.
+  const initialSummaries = await accounts.listChallenges(user);
+  const initialChallenges = await Promise.all(initialSummaries.map(challenge => accounts.getChallenge(user, challenge.id)));
+  const deadlineAt = Date.now() + Math.max(1, timeoutMs);
+  const remainingMs = () => deadlineAt - Date.now();
+  const participantIds = [...new Set(initialChallenges.flatMap(challenge => (challenge.participants || []).map(participant => participant.userId).filter(Boolean)))];
+  let partial = false;
+
+  if (service && typeof service.getAccountStatus === 'function' && typeof service.syncAccountActivities === 'function') {
+    const results = await Promise.allSettled(participantIds.map(participantId => coalescedChallengeAccountSync(service, participantId, remainingMs())));
+    partial = results.some(result => result.status === 'rejected');
+  } else if (participantIds.length) {
+    partial = true;
+  }
+
+  const cachedByParticipant = new Map();
+  if (service && typeof service.getAccountActivities === 'function') {
+    for (const participantId of participantIds) {
+      try {
+        const cached = await boundedChallengeRefreshOperation(
+          () => service.getAccountActivities({ id: participantId }),
+          remainingMs(),
+          'Challenge activity cache read',
+        );
+        cachedByParticipant.set(participantId, (Array.isArray(cached) ? cached : []).map(activity => ({
+          id: `account_${participantId}_${String(activity.id || '')}`,
+          userId: participantId,
+          sportType: activity.sportType,
+          name: activity.name,
+          startDate: activity.startDate,
+          distanceMeters: activity.distanceMeters,
+          movingTime: activity.movingTime,
+        })).filter(activity => activity.id !== `account_${participantId}_`));
+      } catch {
+        partial = true;
+        cachedByParticipant.set(participantId, []);
+      }
+    }
+  } else if (participantIds.length) partial = true;
+
+  for (const challenge of initialChallenges) {
+    for (const participant of challenge.participants || []) {
+      const cached = cachedByParticipant.get(participant.userId) || [];
+      try {
+        for (let offset = 0; offset < cached.length; offset += 500) {
+          await boundedChallengeRefreshOperation(
+            () => accounts.ingestActivities(user, challenge.id, cached.slice(offset, offset + 500)),
+            remainingMs(),
+            'Challenge activity import',
+          );
+        }
+      } catch {
+        partial = true;
+      }
+    }
+    try {
+      const synced = await boundedChallengeRefreshOperation(
+        () => syncLegacyStravaActivitiesForChallenge(user, challenge.id, { accounts, service }),
+        remainingMs(),
+        'Legacy challenge activity cache read',
+      );
+      if (!synced) partial = true;
+    } catch {
+      partial = true;
+    }
+  }
+
+  let currentSummaries = initialChallenges;
+  try {
+    currentSummaries = await accounts.listChallenges(user);
+  } catch {
+    partial = true;
+  }
+  const initialByID = new Map(initialChallenges.map(challenge => [challenge.id, challenge]));
+  const challenges = [];
+  for (const challenge of currentSummaries) {
+    try {
+      challenges.push(await accounts.getChallenge(user, challenge.id));
+    } catch {
+      partial = true;
+      challenges.push(initialByID.get(challenge.id) || challenge);
+    }
+  }
+  return { challenges, refreshedAt: new Date().toISOString(), partial };
 }
 
 // The account-level cache is the normal source for native and website
@@ -2278,6 +2415,16 @@ async function handleAPI(req, res, urlPath) {
     catch (error) { return challengeAccountsError(res, error); }
   }
 
+  if (urlPath === '/api/challenges/refresh' && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    if (!await challengeAccountsEmptyBody(req, res)) return;
+    try { return jsonRes(res, 200, await refreshChallengeAccountData(user)); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
   if (urlPath === '/api/challenge-devices' && req.method === 'POST') {
     setSensitiveResponseHeaders(res);
     const user = challengeAccountsUser(req, res);
@@ -2307,7 +2454,6 @@ async function handleAPI(req, res, urlPath) {
     if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
     try {
       if (req.method === 'DELETE') return jsonRes(res, 200, await challengeAccounts.deleteChallenge(user, challengeDetailMatch[1]));
-      await syncChallengeActivitiesForAccountView(user, challengeDetailMatch[1]);
       return jsonRes(res, 200, await challengeAccounts.getChallenge(user, challengeDetailMatch[1]));
     }
     catch (error) { return challengeAccountsError(res, error); }
@@ -2333,6 +2479,18 @@ async function handleAPI(req, res, urlPath) {
     const body = await challengeAccountsBody(req, res);
     if (body === null) return;
     try { return jsonRes(res, 200, await challengeAccounts.updateSettings(user, challengeSettingsMatch[1], body)); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
+  const challengeTeamMatch = urlPath.match(/^\/api\/challenges\/([A-Za-z0-9_-]{1,64})\/team$/);
+  if (challengeTeamMatch && req.method === 'PUT') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    try { return jsonRes(res, 200, await challengeAccounts.updateTeam(user, challengeTeamMatch[1], body)); }
     catch (error) { return challengeAccountsError(res, error); }
   }
 
@@ -5023,4 +5181,4 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
 
-module.exports = { server, resolveHomeKitBindAddress, _test: { getChallengeAccounts: () => challengeAccounts } };
+module.exports = { server, resolveHomeKitBindAddress, _test: { getChallengeAccounts: () => challengeAccounts, getStravaChallenge: () => stravaChallenge, setStravaChallenge: value => { stravaChallenge = value; }, refreshChallengeAccountData } };

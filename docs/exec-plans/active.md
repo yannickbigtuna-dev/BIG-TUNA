@@ -1,3 +1,101 @@
+# Active Extension — CHALLENGERS refresh, teams, and configurable widgets (2026-09-13)
+
+## Goal and mode
+
+DEEP Apple/server change. Fix the native pull-to-refresh failure and indefinite
+spinner, make two-person red/blue identity user-selectable, simplify challenge
+creation/join and Strava settings UI, and let each enabled challenge drive the
+existing small score, medium activity, and small time widget templates.
+
+## Scope and constraints
+
+- Preserve the released app and widget bundle identifiers, App Group,
+  deployment targets, signing configuration, API authentication, scoring rules,
+  invitations, reviews, and the fixed Yannick/Emma public scoreboard.
+- Ordinary challenge detail reads must return durable data without waiting on
+  Strava. Add a membership-scoped `POST /api/challenges/refresh` that syncs each
+  unique connected participant at most once per request, has a bounded wait,
+  imports cached/fresh activities into every caller-visible challenge, and
+  returns detailed challenges plus `refreshedAt` and a truthful `partial` flag.
+  Provider failure or timeout must not erase cached challenge data.
+- Persist participant `team` as `red` or `blue`. The creator defaults red, the
+  second participant defaults blue, and a member-only team endpoint lets the
+  caller choose only their own team. In a two-person challenge the peer is
+  atomically assigned the opposite team. Roles/ownership are unchanged.
+- Keep “Show in widgets” device-local in the existing App Group because widget
+  placement is device-specific. Store a versioned challenge catalogue, expose
+  enabled challenges through an AppEntity query, and convert the three existing
+  widget kinds to AppIntent configuration without changing their layouts.
+- The fixed public challenge keeps its established Yannick-red/Emma-blue identity
+  but remains eligible for the local widget toggle.
+- Remove the main-screen invitation-code box. Selecting New challenge presents
+  Join with code or Create new; joining retains the existing preview/consent
+  flow. Compress connected Strava UI to one status row with a Remove action.
+- Do not touch live `data/`, secrets, Apple signing assets, the pre-existing
+  untracked `artifacts/` or `backups/`, or unrelated app files.
+
+## Disjoint ownership
+
+- Server implementer: `lib/challenge-accounts.js`, `server.js`, focused challenge
+  tests, `docs/API_CONTRACT.md`, `docs/API_ENDPOINTS.md`, `docs/openapi.yaml`,
+  `README.md`, and `CODEX_CONTEXT.md`.
+- Native core/widget implementer: `YannickChallengeIOS/ChallengeModels.swift`,
+  `YannickChallengeIOS/ChallengeStore.swift`,
+  `ChallengeWidgets/ChallengeWidgets.swift`, and iOS tests.
+- Native UI implementer: `YannickChallengeIOS/ManagementViews.swift` and
+  `YannickChallengeIOS/ScoreboardView.swift` only.
+- Root: this plan, cross-repository integration, project/signing review, actual
+  combined-diff review, final validation, scoped commits, and verified pushes.
+  Implementers do not commit or push and must preserve concurrent/user work.
+
+## Acceptance checks
+
+1. A normal detail GET responds from durable state without invoking Strava.
+   Refresh returns within its bound, imports activities, coalesces participant
+   sync work across challenges, and returns `200` with `partial:true` on a
+   provider failure/timeout while leaving cached data intact.
+2. Pull-to-refresh always completes, cannot overlap itself, keeps the last good
+   dashboard on transient errors, and visibly reports updated/partial/failure;
+   only an actual expired session signs the user out.
+3. New and legacy challenges serialize deterministic red/blue teams. A member
+   can choose only red/blue for self; two-person peer assignment flips
+   atomically; outsiders cannot observe or mutate; team changes never alter role.
+4. The home screen has no code-entry card. New challenge offers Join with code
+   and Create new. The connected Strava section is a compact rectangle with
+   “Strava connected” and “Remove”.
+5. Every challenge settings screen has a Show in widgets toggle. Applicable
+   non-fixed challenges show an obvious textual red/blue selector to every
+   participant, while challenge-rule controls remain manager-only.
+6. All three existing widget kinds retain their score/activity/time layouts and
+   can independently select any locally enabled challenge. Missing/deleted
+   selections fall back safely and never expose another account’s catalogue.
+7. Run focused Node challenge tests, full `npm test`, JavaScript/OpenAPI parsing,
+   iOS tests/build where available, Swift static contract checks, plist/project
+   review, `git diff --check`, and secret/unrelated-file review. Windows cannot
+   claim a signed Xcode archive, TestFlight processing, or physical widget test.
+
+## Rollback and delivery
+
+Rollback is one scoped commit in each repository. The server state addition is
+backward-compatible and requires no manual migration. Push server main only
+after tests pass; its auto-updater performs live activation. Push app main only
+after the server contract is ready; the owner-provided Xcode Cloud workflow then
+handles archive/TestFlight. Do not restart PM2 or alter Apple configuration.
+
+## Progress
+
+- [x] Read repository, server-debug, deployment, and Apple workflow guidance.
+- [x] Trace current refresh/detail sync, team color fallback, widget snapshot,
+      Strava settings, and join-code UI paths.
+- [x] Define disjoint implementation and acceptance packages.
+- [x] Implement server contract/runtime and focused tests.
+- [x] Implement native core/widget catalogue and configuration.
+- [x] Implement native UI changes.
+- [x] Review combined diffs and run independent/full validation.
+- [x] Commit and verify both remote pushes.
+
+---
+
 # Previous Completed Execution Plan — Trivia
 
 ## CHALLENGERS App Store readiness (2026-09-12)

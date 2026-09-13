@@ -921,6 +921,20 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   cannot decide their own request. Approval preserves one audit/history entry
   and recalculates scores once; server-side adapters import only member account
   activity caches, with no public ingestion route.
+- Challenge participants persist an independent `team` value of `red` or
+  `blue`; creators default red and second participants blue. Only a member may
+  change their own team through `PUT /api/challenges/{id}/team`, and a
+  two-person peer flips to the opposite team atomically without changing roles.
+  Legacy records serialize deterministic teams; the fixed template remains
+  Yannick-red/Emma-blue. Widget enablement is device-local App Group state and
+  is not a server setting.
+- `GET /api/challenges/{id}` is a durable, membership-scoped read and never
+  waits on Strava. `POST /api/challenges/refresh` accepts no body, coalesces each
+  unique participant shared by the caller's challenges, waits at most 12
+  seconds for account sync, imports available cached/fresh activities into all
+  visible challenges, and returns `{challenges,refreshedAt,partial}`. Provider
+  failure or timeout produces `partial:true` with last-known data, not a failed
+  or empty dashboard.
 - `POST /api/challenge-devices` accepts an iOS token only, stores its encrypted
   value plus a fingerprint, and never returns or logs either raw token. The
   server-side APNs service records `pending`, `sent`, or `failed`; missing APNs

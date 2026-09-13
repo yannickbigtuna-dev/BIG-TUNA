@@ -119,7 +119,7 @@ test('invite routes keep tokens out of state, expose safe previews, and join onl
   assert.equal((await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token, userId: 'owner-id', role: 'owner' } })).status, 404);
   const joined = await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token } });
   assert.equal(joined.status, 200); assert.equal(joined.body.alreadyMember, false);
-  assert.deepEqual(joined.body.challenge.participants.find(p => p.userId === 'outsider-id'), { userId: 'outsider-id', username: 'other', role: 'member' });
+  assert.deepEqual(joined.body.challenge.participants.find(p => p.userId === 'outsider-id'), { userId: 'outsider-id', username: 'other', role: 'member', team: 'blue' });
   assert.equal((await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token } })).body.alreadyMember, true);
   assert.equal((await request('DELETE', `/api/challenges/${id}/invites`, { token: OWNER })).status, 200);
   assert.equal((await request('POST', '/api/challenge-invites/preview', { body: { token: minted.body.token } })).status, 404);
@@ -159,6 +159,127 @@ test('member leave is separate from owner deletion and cleans member-scoped stat
   const state = _test.getChallengeAccounts()._readState();
   assert.equal(state.challenges[id].reviews.member_review, undefined);
   assert.equal(state.notificationEvents.member_event, undefined);
+});
+
+test('team selection is self-scoped and two-person selection flips the peer without changing roles', async () => {
+  const created = await request('POST', '/api/challenges', { token: OWNER, body: { template: 'custom', name: 'Team workflow', participants: [{ userId: 'member-id', role: 'member' }], qualifyingActivities: ['Run'] } });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.participants.map(p => ({ role: p.role, team: p.team })), [
+    { role: 'owner', team: 'red' }, { role: 'member', team: 'blue' },
+  ]);
+  assert.equal((await request('PUT', `/api/challenges/${created.body.id}/team`, { token: OUTSIDER, body: { team: 'red' } })).status, 404);
+  assert.equal((await request('PUT', `/api/challenges/${created.body.id}/team`, { token: MEMBER, body: { team: 'green' } })).status, 400);
+  const changed = await request('PUT', `/api/challenges/${created.body.id}/team`, { token: MEMBER, body: { team: 'red' } });
+  assert.equal(changed.status, 200);
+  assert.deepEqual(changed.body.participants.map(p => ({ role: p.role, team: p.team })), [
+    { role: 'owner', team: 'blue' }, { role: 'member', team: 'red' },
+  ]);
+});
+
+test('detail reads are durable-only and refresh coalesces participants across visible challenges', async () => {
+  const original = _test.getStravaChallenge();
+  const syncCalls = [];
+  const cached = {
+    'owner-id': [{ id: 'owner-run', sportType: 'Run', name: 'Cached owner run', startDate: '2026-09-12T12:00:00.000Z', distanceMeters: 6000, movingTime: 1800 }],
+    'member-id': [{ id: 'member-run', sportType: 'Run', name: 'Cached member run', startDate: '2026-09-12T13:00:00.000Z', distanceMeters: 7000, movingTime: 1900 }],
+  };
+  const stub = {
+    getAccountStatus: async ({ id }) => ({ connected: id === 'owner-id' || id === 'member-id' }),
+    syncAccountActivities: async ({ id }) => { syncCalls.push(id); if (id === 'member-id') throw new Error('provider unavailable'); return { activities: cached[id] }; },
+    getAccountActivities: ({ id }) => cached[id] || [],
+    getPublicDashboard: async () => ({ currentWeek: { activities: [] } }),
+  };
+  _test.setStravaChallenge(stub);
+  try {
+    const first = await request('POST', '/api/challenges', { token: OWNER, body: { template: 'custom', name: 'Refresh one', participants: [{ userId: 'member-id', role: 'member' }], qualifyingActivities: ['Run'] } });
+    const second = await request('POST', '/api/challenges', { token: OWNER, body: { template: 'custom', name: 'Refresh two', participants: [{ userId: 'member-id', role: 'member' }], qualifyingActivities: ['Run'] } });
+    assert.equal((await request('GET', `/api/challenges/${first.body.id}`, { token: OWNER })).status, 200);
+    assert.deepEqual(syncCalls, []);
+    assert.equal((await request('POST', '/api/challenges/refresh', { token: OWNER, body: {} })).status, 400);
+    const refreshed = await request('POST', '/api/challenges/refresh', { token: OWNER });
+    assert.equal(refreshed.status, 200);
+    assert.equal(refreshed.headers['cache-control'], 'no-store');
+    assert.equal(refreshed.body.partial, true);
+    assert.match(refreshed.body.refreshedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.deepEqual(syncCalls.sort(), ['member-id', 'owner-id']);
+    for (const id of [first.body.id, second.body.id]) {
+      const detail = refreshed.body.challenges.find(challenge => challenge.id === id);
+      assert.ok(detail.activities.some(activity => activity.id === 'account_owner-id_owner-run'));
+      assert.ok(detail.activities.some(activity => activity.id === 'account_member-id_member-run'));
+    }
+  } finally {
+    _test.setStravaChallenge(original);
+  }
+});
+
+test('refresh wait is bounded and overlapping requests reuse the participant sync', async () => {
+  const detail = {
+    id: 'challenge_bound',
+    participants: [{ userId: 'bounded-user', role: 'owner', team: 'red' }],
+    currentScore: { 'bounded-user': 7 },
+    activities: [{ id: 'saved-activity' }],
+  };
+  const accounts = {
+    listChallenges: async () => [detail],
+    getChallenge: async () => detail,
+    ingestActivities: async () => [],
+  };
+  let syncCalls = 0;
+  const service = {
+    getAccountStatus: async () => ({ connected: true }),
+    syncAccountActivities: async () => { syncCalls++; return new Promise(() => {}); },
+    getAccountActivities: () => [],
+    getPublicDashboard: async () => ({ currentWeek: { activities: [] } }),
+  };
+  const startedAt = Date.now();
+  const results = await Promise.all([
+    _test.refreshChallengeAccountData({ id: 'bounded-user' }, { accounts, service, timeoutMs: 20 }),
+    _test.refreshChallengeAccountData({ id: 'bounded-user' }, { accounts, service, timeoutMs: 20 }),
+  ]);
+  assert.ok(Date.now() - startedAt < 500);
+  assert.equal(syncCalls, 1);
+  assert.equal(results.every(result => result.partial && result.challenges[0].id === detail.id), true);
+  assert.equal(results.every(result => result.challenges[0].currentScore['bounded-user'] === 7), true);
+  assert.equal(results.every(result => result.challenges[0].activities[0].id === 'saved-activity'), true);
+  const retry = await _test.refreshChallengeAccountData({ id: 'bounded-user' }, { accounts, service, timeoutMs: 20 });
+  assert.equal(retry.partial, true);
+  assert.equal(syncCalls, 2);
+});
+
+test('refresh deadline also bounds cache and legacy dashboard reads', async () => {
+  const detail = { id: 'challenge_bound_reads', participants: [{ userId: 'bounded-user', role: 'owner', team: 'red' }], activities: [] };
+  const accounts = {
+    listChallenges: async () => [detail],
+    getChallenge: async () => detail,
+    ingestActivities: async () => [],
+  };
+  const cases = [
+    {
+      name: 'account activity cache',
+      service: {
+        getAccountStatus: async () => ({ connected: false }),
+        syncAccountActivities: async () => [],
+        getAccountActivities: () => new Promise(() => {}),
+        getPublicDashboard: async () => ({ currentWeek: { activities: [] } }),
+      },
+    },
+    {
+      name: 'legacy public dashboard',
+      service: {
+        getAccountStatus: async () => ({ connected: false }),
+        syncAccountActivities: async () => [],
+        getAccountActivities: async () => [],
+        getPublicDashboard: () => new Promise(() => {}),
+      },
+    },
+  ];
+  for (const entry of cases) {
+    const startedAt = Date.now();
+    const result = await _test.refreshChallengeAccountData({ id: 'bounded-user' }, { accounts, service: entry.service, timeoutMs: 20 });
+    assert.ok(Date.now() - startedAt < 500, `${entry.name} exceeded the bounded test window`);
+    assert.equal(result.partial, true);
+    assert.equal(result.challenges[0].id, detail.id);
+  }
 });
 
 test('AASA is fail-closed until the exact application identifier is configured', async () => {
