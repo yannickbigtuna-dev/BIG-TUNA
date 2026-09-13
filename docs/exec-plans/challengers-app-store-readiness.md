@@ -36,4 +36,5 @@ Short codes have lower entropy: enforce per-client/account limits, no plaintext 
 - [x] Implemented app, backend and website corrections.
 - [x] Completed independent acceptance, root diff review and regression checks.
 - [x] Prepared final per-path review summary and release checklist.
-- [ ] Commit, push, controlled deployment and live verification (explicitly authorized).
+- [x] Committed and pushed server `7e2bdbf` and iOS `c95d07b`, then deployed the server through its auto-updater. The live `apps-server` restart and localhost/public CHALLENGERS checks passed on 2026-09-12.
+- [ ] Configure the real Apple Team/application identifier in the ignored production `server.env` as `CHALLENGE_AASA_APPLICATION_ID`, then verify a signed physical-device Universal Link. The source intentionally returns 404 for the association file until this real identifier is supplied rather than guessing it.
