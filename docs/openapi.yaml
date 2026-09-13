@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: BIG TUNA Native API
-  version: 1.1.0
+  version: 1.2.0
   description: Native Lights and Challenge contract. Challenge endpoints use the ordinary BIG TUNA website bearer session; no separate native account exists.
 servers:
   - url: https://yannickmorgans.ca
@@ -12,6 +12,15 @@ tags:
   - { name: Native Lights }
   - { name: Public score }
 paths:
+  /.well-known/apple-app-site-association:
+    get:
+      tags: [Native Challenge]
+      summary: Public Apple association for CHALLENGERS invitation links
+      description: Requires CHALLENGE_AASA_APPLICATION_ID with the real Apple application identifier for ca.yannickmorgans.YannickChallengeIOS. No authentication or redirect. Also served at /apple-app-site-association. Absent or invalid configuration returns 404.
+      security: []
+      responses:
+        '200': { description: Apple applinks association JSON, content: { application/json: { schema: { type: object, required: [applinks], properties: { applinks: { type: object } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/auth/register:
     post:
       tags: [Native Challenge]
@@ -39,8 +48,8 @@ paths:
   /api/challenges/{challengeId}/invites:
     post:
       tags: [Native Challenge]
-      summary: Generate a seven-day invite and invalidate any previous link
-      description: Owner/admin only. Fixed Yannick/Emma challenges cannot be invited into. Raw token returned only here; server stores its digest. QR contains the same fragment-based HTTPS URL.
+      summary: Generate a seven-day link, QR and six-letter code
+      description: Owner/admin only. Fixed Yannick/Emma challenges cannot be invited into. Token and code are returned only on generation; server persists digests. Regeneration invalidates both previous credentials. QR contains the same fragment-based HTTPS URL.
       security: [{ WebsiteBearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false } } } }
@@ -68,7 +77,7 @@ paths:
       tags: [Native Challenge]
       summary: Preview limited challenge information without joining
       security: []
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInviteToken' } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInviteCredential' } } } }
       responses:
         '200': { description: Safe preview, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInvitePreview' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -82,7 +91,7 @@ paths:
       summary: Explicitly join as the signed-in member
       description: Revalidates expiry and capacity in a serialized mutation. Repeated acceptance is idempotent. Never accepts a role or target user ID.
       security: [{ WebsiteBearerAuth: [] }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInviteToken' } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeInviteCredential' } } } }
       responses:
         '200': { description: Joined challenge, content: { application/json: { schema: { type: object, required: [challenge, alreadyMember], properties: { challenge: { $ref: '#/components/schemas/Challenge' }, alreadyMember: { type: boolean } } } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -176,6 +185,22 @@ paths:
       security: [{ WebsiteBearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
       responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeDeleted' } } } }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/challenges/{challengeId}/leave:
+    post:
+      tags: [Native Challenge]
+      summary: Leave a challenge as the authenticated non-owner participant
+      description: Removes caller membership, activities, reviews and related notification events. Owners must delete instead. The fixed Yannick/Emma challenge cannot be left. Missing or inaccessible challenges return 404.
+      security: [{ WebsiteBearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/ChallengeId' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false } } } }
+      responses:
+        '200': { description: Left, content: { application/json: { schema: { type: object, required: [left], properties: { left: { type: boolean, enum: [true] } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/NotAuthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/challenges/{challengeId}/settings:
     put:
       tags: [Native Challenge]
@@ -298,7 +323,7 @@ components:
         template: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
-        participants: { type: array, items: { type: object, required: [userId, role], properties: { userId: { type: string }, role: { type: string, enum: [owner, admin, member] } } } }
+        participants: { type: array, items: { $ref: '#/components/schemas/ChallengeParticipant' } }
         rules: { type: object }
         currentScore: { type: object, additionalProperties: { type: number } }
         seasonScore: { type: object, additionalProperties: { type: number } }
@@ -309,7 +334,14 @@ components:
     WebsiteCredentials: { type: object, required: [username, password], properties: { username: { type: string, description: Registration requires 2-32 letters/numbers/underscore/hyphen. }, password: { type: string, format: password, writeOnly: true, description: Registration retains the existing minimum of four characters. } } }
     WebsiteSession: { type: object, required: [token, id, username], properties: { token: { type: string }, id: { type: string }, username: { type: string }, email: { type: string, nullable: true } } }
     ChallengeInviteToken: { type: object, additionalProperties: false, required: [token], properties: { token: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' } } }
-    ChallengeInvite: { type: object, required: [url, token, expiresAt, qrDataURL], properties: { url: { type: string, format: uri }, token: { type: string }, expiresAt: { type: string, format: date-time }, qrDataURL: { type: string, description: PNG data URL generated by BIG TUNA without an external QR service. } } }
+    ChallengeInviteCode: { type: object, additionalProperties: false, required: [code], properties: { code: { type: string, description: Six ASCII letters. Case and surrounding whitespace are normalized by the server., pattern: '^\s*[A-Za-z]{6}\s*$' } } }
+    ChallengeInviteCredential:
+      description: Exactly one token or six-letter code. Do not include user IDs or roles.
+      oneOf:
+        - { $ref: '#/components/schemas/ChallengeInviteToken' }
+        - { $ref: '#/components/schemas/ChallengeInviteCode' }
+    ChallengeParticipant: { type: object, required: [userId, role], properties: { userId: { type: string }, role: { type: string, enum: [owner, admin, member] }, username: { type: string, nullable: true, description: Server-resolved display identity. Never render an opaque userId as a fallback. } } }
+    ChallengeInvite: { type: object, required: [url, token, code, expiresAt, qrDataURL], properties: { url: { type: string, format: uri }, token: { type: string }, code: { type: string, pattern: '^[A-Z]{6}$' }, expiresAt: { type: string, format: date-time }, qrDataURL: { type: string, description: PNG data URL generated by BIG TUNA without an external QR service. } } }
     ChallengeInvitePreview: { type: object, additionalProperties: false, required: [challengeId, name, participantCount, expiresAt], properties: { challengeId: { type: string }, name: { type: string }, participantCount: { type: integer }, expiresAt: { type: string, format: date-time } } }
     ChallengeProfile: { type: object, required: [id, username, strava], properties: { id: { type: string }, username: { type: string }, strava: { $ref: '#/components/schemas/StravaStatus' } } }
     StravaStartRequest: { type: object, additionalProperties: false, properties: { redirectMode: { type: string, enum: [native, web], default: native } } }
@@ -325,7 +357,7 @@ components:
     ChallengeDeleted: { type: object, required: [deleted], properties: { deleted: { type: boolean, enum: [true] } } }
     ReviewInboxResponse: { type: object, required: [reviews], properties: { reviews: { type: array, items: { $ref: '#/components/schemas/ReviewInboxItem' } } } }
     ReviewInboxItem: { type: object, properties: { challenge: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }, review: { type: object, required: [id, requesterDisplayName, activity, reason, createdAt], properties: { id: { type: string }, requesterDisplayName: { type: string }, activity: { $ref: '#/components/schemas/SafeActivity' }, reason: { type: string, nullable: true }, createdAt: { type: string, format: date-time } } } } }
-    SafeActivity: { type: object, properties: { id: { type: string }, sportType: { type: string, nullable: true }, name: { type: string }, startDate: { type: string, format: date-time }, distanceMeters: { type: number }, movingTime: { type: number }, qualifies: { type: boolean }, reviewState: { type: string, nullable: true } } }
+    SafeActivity: { type: object, properties: { id: { type: string }, participantID: { type: string, description: Account identifier of the activity owner. }, sportType: { type: string, nullable: true }, name: { type: string }, startDate: { type: string, format: date-time }, distanceMeters: { type: number }, movingTime: { type: number }, qualifies: { type: boolean }, reviewState: { type: string, nullable: true } } }
     ReviewDecision: { type: object, additionalProperties: false, required: [decision], properties: { decision: { type: string, enum: [approve, reject] }, reason: { type: string, maxLength: 500 } } }
     ReviewDecisionResult: { type: object, required: [review, challenge, idempotent], properties: { review: { type: object }, challenge: { type: object }, idempotent: { type: boolean } } }
     NotificationEvents: { type: object, required: [events], properties: { events: { type: array, items: { type: object, properties: { id: { type: string }, type: { type: string, enum: [review_requested, review_approved, review_rejected] }, reviewId: { type: string, nullable: true }, createdAt: { type: string, format: date-time }, delivery: { type: string, enum: [pending, sent, failed] }, acknowledgedAt: { type: string, format: date-time, nullable: true, description: Server-recorded app-processing receipt; not APNs delivery or display. } } } } } }

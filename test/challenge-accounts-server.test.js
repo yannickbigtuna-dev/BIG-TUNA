@@ -32,7 +32,7 @@ function request(method, pathname, { token, body } = {}) {
     }, res => {
       let text = ''; res.setEncoding('utf8');
       res.on('data', chunk => { text += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: text ? JSON.parse(text) : null }));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: text && String(res.headers['content-type'] || '').includes('application/json') ? JSON.parse(text) : text || null }));
     });
     req.on('error', reject); if (payload) req.write(payload); req.end();
   });
@@ -75,6 +75,23 @@ test('challenge routes enforce sessions, membership, and owner-only settings', a
   assert.equal((await request('GET', `/api/challenges/${id}`, { token: OWNER })).status, 404);
 });
 
+test('an admin route cannot promote itself or mutate ownership', async () => {
+  const created = await request('POST', '/api/challenges', { token: OWNER, body: {
+    template: 'custom', name: 'Route ownership', participants: [{ userId: 'member-id', role: 'admin' }], qualifyingActivities: ['Run'],
+  } });
+  assert.equal(created.status, 201);
+  const id = created.body.id;
+  const attempted = await request('PUT', `/api/challenges/${id}/settings`, { token: MEMBER, body: {
+    participants: [{ userId: 'owner-id', role: 'owner' }, { userId: 'member-id', role: 'owner' }],
+  } });
+  assert.equal(attempted.status, 403);
+  const detail = await request('GET', `/api/challenges/${id}`, { token: OWNER });
+  assert.deepEqual(detail.body.participants.map(p => ({ userId: p.userId, role: p.role })), [
+    { userId: 'owner-id', role: 'owner' }, { userId: 'member-id', role: 'admin' },
+  ]);
+  assert.equal((await request('DELETE', `/api/challenges/${id}`, { token: MEMBER })).status, 403);
+});
+
 test('ordinary website login bearer session accesses the challenge account profile', async () => {
   const login = await request('POST', '/api/auth/login', { body: { username: 'yannick', password: 'normal-password' } });
   assert.equal(login.status, 200);
@@ -92,19 +109,80 @@ test('invite routes keep tokens out of state, expose safe previews, and join onl
   const minted = await request('POST', `/api/challenges/${id}/invites`, { token: OWNER, body: {} });
   assert.equal(minted.status, 201);
   assert.match(minted.body.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(minted.body.code, /^[A-Z]{6}$/);
   assert.match(minted.body.url, new RegExp(`#token=${minted.body.token}$`));
   assert.match(minted.body.qrDataURL, /^data:image\/png;base64,/);
   assert.equal(JSON.stringify(_test.getChallengeAccounts()._readState()).includes(minted.body.token), false);
   const preview = await request('POST', '/api/challenge-invites/preview', { body: { token: minted.body.token } });
   assert.equal(preview.status, 200);
   assert.deepEqual(Object.keys(preview.body).sort(), ['challengeId', 'expiresAt', 'name', 'participantCount']);
-  assert.equal((await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token, userId: 'owner-id', role: 'owner' } })).status, 400);
+  assert.equal((await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token, userId: 'owner-id', role: 'owner' } })).status, 404);
   const joined = await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token } });
   assert.equal(joined.status, 200); assert.equal(joined.body.alreadyMember, false);
-  assert.deepEqual(joined.body.challenge.participants.find(p => p.userId === 'outsider-id'), { userId: 'outsider-id', role: 'member' });
+  assert.deepEqual(joined.body.challenge.participants.find(p => p.userId === 'outsider-id'), { userId: 'outsider-id', username: 'other', role: 'member' });
   assert.equal((await request('POST', '/api/challenge-invites/accept', { token: OUTSIDER, body: { token: minted.body.token } })).body.alreadyMember, true);
   assert.equal((await request('DELETE', `/api/challenges/${id}/invites`, { token: OWNER })).status, 200);
-  assert.equal((await request('POST', '/api/challenge-invites/preview', { body: { token: minted.body.token } })).status, 410);
+  assert.equal((await request('POST', '/api/challenge-invites/preview', { body: { token: minted.body.token } })).status, 404);
+});
+
+test('code invitations use the same real routes and expiry rules as token invitations', async () => {
+  const created = await request('POST', '/api/challenges', { token: OWNER, body: { template: 'custom', name: 'Code workflow', qualifyingActivities: ['Run'] } });
+  assert.equal(created.status, 201);
+  const minted = await request('POST', `/api/challenges/${created.body.id}/invites`, { token: OWNER, body: {} });
+  assert.equal(minted.status, 201);
+  const preview = await request('POST', '/api/challenge-invites/preview', { body: { code: ` ${minted.body.code.toLowerCase()} ` } });
+  assert.equal(preview.status, 200);
+  assert.equal((await request('POST', '/api/challenge-invites/preview', { body: { code: `${minted.body.code.slice(0, 3)} ${minted.body.code.slice(3)}` } })).status, 404);
+  const joined = await request('POST', '/api/challenge-invites/accept', { token: MEMBER, body: { code: minted.body.code.toLowerCase() } });
+  assert.equal(joined.status, 200);
+  assert.equal(joined.body.alreadyMember, false);
+  await _test.getChallengeAccounts()._mutate(state => { state.challenges[created.body.id].invite.expiresAt = '2000-01-01T00:00:00.000Z'; });
+  assert.equal((await request('POST', '/api/challenge-invites/preview', { body: { code: minted.body.code } })).status, 404);
+});
+
+test('member leave is separate from owner deletion and cleans member-scoped state', async () => {
+  const created = await request('POST', '/api/challenges', { token: OWNER, body: { template: 'custom', name: 'Leave workflow', participants: [{ userId: 'member-id', role: 'member' }], qualifyingActivities: ['Run'], manualReview: true } });
+  assert.equal(created.status, 201);
+  const id = created.body.id;
+  await _test.getChallengeAccounts()._mutate(state => {
+    const challenge = state.challenges[id];
+    challenge.activities.member_activity = { id: 'member_activity', userId: 'member-id', sportType: 'Run', startDate: '2026-09-09T12:00:00.000Z', distanceMeters: 1, movingTime: 1 };
+    challenge.reviews.member_review = { id: 'member_review', activityId: 'member_activity', requesterId: 'member-id', status: 'pending' };
+    state.notificationEvents.member_event = { id: 'member_event', challengeId: id, recipientId: 'owner-id', reviewId: 'member_review' };
+  });
+  assert.equal((await request('POST', `/api/challenges/${id}/leave`, { token: OWNER, body: {} })).status, 403);
+  assert.deepEqual((await request('POST', `/api/challenges/${id}/leave`, { token: MEMBER, body: {} })).body, { left: true });
+  const ownerDetail = await request('GET', `/api/challenges/${id}`, { token: OWNER });
+  assert.equal(ownerDetail.status, 200);
+  assert.equal(ownerDetail.body.participants.some(participant => participant.userId === 'member-id'), false);
+  assert.equal(ownerDetail.body.activities.some(activity => activity.participantID === 'member-id'), false);
+  const state = _test.getChallengeAccounts()._readState();
+  assert.equal(state.challenges[id].reviews.member_review, undefined);
+  assert.equal(state.notificationEvents.member_event, undefined);
+});
+
+test('AASA is fail-closed until the exact application identifier is configured', async () => {
+  const original = process.env.CHALLENGE_AASA_APPLICATION_ID;
+  try {
+    process.env.CHALLENGE_AASA_APPLICATION_ID = 'ABCDEFGHIJ.ca.yannickmorgans.OtherApp';
+    assert.equal((await request('GET', '/.well-known/apple-app-site-association')).status, 404);
+    process.env.CHALLENGE_AASA_APPLICATION_ID = 'ABCDEFGHIJ.ca.yannickmorgans.YannickChallengeIOS';
+    const response = await request('GET', '/.well-known/apple-app-site-association?token=should-not-appear');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers['content-type'], 'application/json; charset=utf-8');
+    assert.deepEqual(response.body, { applinks: { details: [{ appIDs: ['ABCDEFGHIJ.ca.yannickmorgans.YannickChallengeIOS'], components: [{ '/': '/challenge-invite' }, { '/': '/challenge-invite/*' }] }] } });
+    assert.equal(JSON.stringify(response.body).includes('should-not-appear'), false);
+    assert.equal((await request('HEAD', '/apple-app-site-association')).status, 200);
+  } finally {
+    if (original === undefined) delete process.env.CHALLENGE_AASA_APPLICATION_ID;
+    else process.env.CHALLENGE_AASA_APPLICATION_ID = original;
+  }
+});
+
+test('malformed deep-link path encoding returns a safe client error', async () => {
+  const response = await request('GET', '/challenge-invite/%ZZ');
+  assert.equal(response.status, 400);
+  assert.equal(response.headers['cache-control'], 'no-store');
 });
 
 test('review decisions prevent self-approval, are idempotent, and emit safe events', async () => {

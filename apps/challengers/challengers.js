@@ -3,24 +3,35 @@
   const list = document.getElementById('list'), detail = document.getElementById('detail'), status = document.getElementById('status');
   const newDialog = document.getElementById('new-dialog'), shareDialog = document.getElementById('share-dialog');
   const settingsDialog = document.getElementById('settings-dialog'), inboxDialog = document.getElementById('inbox-dialog');
-  const shareStatus = document.getElementById('share-status'), shareURL = document.getElementById('share-url');
-  const qr = document.getElementById('share-qr'), copy = document.getElementById('copy-link'), native = document.getElementById('native-open');
+  const shareStatus = document.getElementById('share-status'), shareURL = document.getElementById('share-url'), shareCode = document.getElementById('share-code');
+  const qr = document.getElementById('share-qr'), copy = document.getElementById('copy-link'), copyCode = document.getElementById('copy-code'), native = document.getElementById('native-open');
   const generate = document.getElementById('generate-link'), revoke = document.getElementById('revoke-link');
-  let challenges = [], detailVersion = 0, shareVersion = 0, shareChallenge, shareBusy = false, createBusy = false, createRequest;
+  let challenges = [], detailVersion = 0, shownDetailId = null, shareVersion = 0, shareChallenge, shareBusy = false, createBusy = false, createRequest, refreshTimer = null, loadVersion = 0;
   const message = (text, error = false) => { status.textContent = text; status.style.color = error ? 'var(--danger)' : ''; };
   function element(tag, text, className) { const node = document.createElement(tag); node.textContent = text; if (className) node.className = className; return node; }
   function button(label, action) { const node = element('button', label, 'btn btn-primary'); node.type = 'button'; node.onclick = action; return node; }
   const roleFor = challenge => challenge.participants.find(person => person.userId === Auth.user?.id)?.role;
   async function request(path, options = {}) {
     const session = Auth.token;
-    const response = await fetch(path, { ...options, headers: { Authorization: `Bearer ${session}`, 'Content-Type': 'application/json' } });
-    const data = await response.json().catch(() => ({}));
-    if (Auth.token !== session) throw new Error('Your account changed. Refresh to continue.');
-    if (!response.ok) {
-      if (response.status === 401) { newDialog.close(); shareDialog.close(); Auth.showLogin(); }
-      throw new Error(data.error || 'Please try again.');
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(path, { ...options, signal: controller.signal, headers: { Authorization: `Bearer ${session}`, 'Content-Type': 'application/json' } });
+      const data = await response.json().catch(() => ({}));
+      if (Auth.token !== session) throw new Error('Your account changed. Refresh to continue.');
+      if (!response.ok) {
+        if (response.status === 401) { newDialog.close(); shareDialog.close(); Auth.showLogin(); }
+        const error = new Error(data.error || 'Please try again.');
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('The request timed out. Please try again.');
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
     }
-    return data;
   }
   function showList() {
     list.replaceChildren();
@@ -29,42 +40,71 @@
       const card = button('', () => loadDetail(challenge.id)); card.className = 'card challenge';
       const role = roleFor(challenge);
       card.append(element('h2', challenge.name), element('p', `${challenge.participants.length} members · ${role || 'member'}`, 'muted'));
-      if (['owner', 'admin'].includes(role)) {
+      if (role === 'owner') {
         const delBtn = document.createElement('button'); delBtn.className = 'btn btn-ghost'; delBtn.type = 'button'; delBtn.style.marginTop = 'var(--space-3)'; delBtn.style.color = 'var(--danger)'; delBtn.textContent = 'Delete challenge';
-        delBtn.onclick = async (e) => { e.stopPropagation(); if(confirm(`Delete ${challenge.name}?`)) { try { await request(`/api/challenges/${encodeURIComponent(challenge.id)}`, { method: 'DELETE' }); await load(); } catch(err) { alert(err.message); } } };
+        delBtn.onclick = async (e) => { e.stopPropagation(); if(confirm(`Delete ${challenge.name}?`)) { try { await request(`/api/challenges/${encodeURIComponent(challenge.id)}`, { method: 'DELETE' }); await reconcileRemoved(challenge.id, 'Challenge deleted.'); } catch(err) { if (err.status === 404) await reconcileRemoved(challenge.id, 'This challenge is no longer available.'); else alert(err.message); } } };
         card.append(delBtn);
       }
       list.append(card);
     }
   }
-  async function load() {
-    try {
-      message('Loading challenges…');
-      const data = await request('/api/challenges');
-      challenges = (data.challenges || []).filter(challenge => challenge.template !== 'yannick-emma-default');
-      showList(); detail.hidden = true; message(challenges.length ? '' : 'No challenges yet.');
-      const target = location.hash.slice(1);
-      if (challenges.some(challenge => challenge.id === target)) await loadDetail(target);
-    } catch (error) { message(error.message, true); }
+  function clearDetail() {
+    shownDetailId = null; detailVersion++; detail.hidden = true; detail.replaceChildren();
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   }
-  async function loadDetail(id) {
+  async function reconcileRemoved(id, notice = '') {
+    challenges = challenges.filter(challenge => challenge.id !== id); showList();
+    if (shownDetailId === id) clearDetail();
+    if (notice) message(notice);
+    await load({ keepDetail: false, quiet: true });
+  }
+  async function load({ keepDetail = true, quiet = false } = {}) {
+    const version = ++loadVersion;
+    const session = Auth.token;
+    try {
+      if (!quiet) message('Loading challenges…');
+      const data = await request('/api/challenges');
+      if (version !== loadVersion || Auth.token !== session) return;
+      challenges = (data.challenges || []).filter(challenge => challenge.template !== 'yannick-emma-default');
+      showList();
+      const target = shownDetailId || decodeURIComponent(location.hash.slice(1));
+      if (keepDetail && target && challenges.some(challenge => challenge.id === target)) await loadDetail(target, true);
+      else if (shownDetailId && !challenges.some(challenge => challenge.id === shownDetailId)) clearDetail();
+      if (!quiet) message(challenges.length ? '' : 'No challenges yet.');
+    } catch (error) { if (version === loadVersion) message(error.message, true); }
+  }
+  async function loadDetail(id, quiet = false) {
     const version = ++detailVersion;
     try {
-      message('Loading challenge…');
+      if (!quiet) message('Loading challenge…');
       const challenge = await request(`/api/challenges/${encodeURIComponent(id)}`);
       if (version !== detailVersion) return;
-      detail.hidden = false; detail.replaceChildren();
+      shownDetailId = id; detail.hidden = false; detail.replaceChildren();
       const scores = element('ul', '', 'score-list');
       challenge.participants.forEach(person => {
         const row = document.createElement('li');
-        row.append(element('span', person.userId === Auth.user.id ? Auth.user.username : person.userId), element('strong', String(challenge.currentScore?.[person.userId] ?? 0)));
+        const participantName = person.userId === Auth.user?.id ? Auth.user.username : (person.username || person.displayName || 'Challenge member');
+        row.append(element('span', participantName), element('strong', String(challenge.currentScore?.[person.userId] ?? 0)));
         scores.append(row);
       });
       const actions = element('div', '', 'actions');
-      if (['owner', 'admin'].includes(roleFor(challenge)) && challenge.template !== 'yannick-emma-default') actions.append(button('Invite people', () => openShare(challenge)));
+      const role = roleFor(challenge);
+      if (['owner', 'admin'].includes(role) && challenge.template !== 'yannick-emma-default') actions.append(button('Invite people', () => openShare(challenge)));
+      if (role !== 'owner') actions.append(button('Leave challenge', async () => {
+        if (!confirm(`Leave ${challenge.name}?`)) return;
+        try { await request(`/api/challenges/${encodeURIComponent(challenge.id)}/leave`, { method: 'POST', body: '{}' }); await reconcileRemoved(challenge.id, 'You left the challenge.'); }
+        catch (error) {
+          if (error.status === 404) await reconcileRemoved(challenge.id, 'This challenge is no longer available.');
+          else message(error.message, true);
+        }
+      }));
       detail.append(element('h2', challenge.name), element('p', `${challenge.participants.length} members · ${challenge.rules.cadence.type} challenge`, 'muted'), scores, actions);
-      history.replaceState(null, '', `#${encodeURIComponent(id)}`); message('');
-    } catch (error) { if (version === detailVersion) message(error.message, true); }
+      history.replaceState(null, '', `#${encodeURIComponent(id)}`); if (!quiet) message('');
+    } catch (error) {
+      if (version !== detailVersion) return;
+      if (error.status === 404) return reconcileRemoved(id, 'This challenge is no longer available.');
+      message(error.message, true);
+    }
   }
   document.querySelectorAll('[data-close]').forEach(node => node.onclick = () => node.closest('dialog').close());
   
@@ -115,39 +155,45 @@
       return { sportType: type, minimum: { type: minType, value: val } };
     });
     
-    let participants = null;
-    const pUser = values.get('participantUsername').trim();
-    if(pUser) participants = [{ userId: pUser, role: 'member' }];
-
-    const payload = { 
-      name: String(values.get('name')).trim(), 
-      template: values.get('template'),
-      participants,
-      qualifyingActivities: sportRules.map(r => r.sportType),
-      sportRules,
-      thresholds: { distanceMeters: null, durationSeconds: null, elevationMeters: null, activityCount: null },
-      scoring: { mode: values.get('scoringMode'), pointsPerActivity: 1 },
-      cadence: { type: values.get('cadenceType') },
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      manualReview: document.getElementById('form-review').checked
-    };
-    if (!createRequest || createRequest.name !== payload.name || createRequest.template !== payload.template) createRequest = { ...payload, idempotencyKey: crypto.randomUUID().replaceAll('-', '') };
     createBusy = true; const submit = form.querySelector('[type=submit],button:not([type])'); submit.disabled = true;
     try {
-      const result = await request('/api/challenges', { method: 'POST', body: JSON.stringify(createRequest) });
+      const pUser = String(values.get('participantUsername') || '').trim();
+      let participants;
+      if (pUser) {
+        const participant = await request(`/api/users/lookup?username=${encodeURIComponent(pUser)}`);
+        if (!participant.id) throw new Error('That account could not be found.');
+        participants = [{ userId: participant.id, role: 'member' }];
+      }
+      const payload = {
+        name: String(values.get('name')).trim(),
+        template: values.get('template'),
+        ...(participants ? { participants } : {}),
+        qualifyingActivities: sportRules.map(r => r.sportType),
+        sportRules,
+        thresholds: { distanceMeters: null, durationSeconds: null, elevationMeters: null, activityCount: null },
+        scoring: { mode: values.get('scoringMode'), pointsPerActivity: 1 },
+        cadence: { type: values.get('cadenceType') },
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        manualReview: document.getElementById('form-review').checked
+      };
+      const signature = JSON.stringify(payload);
+      if (!createRequest || createRequest.signature !== signature) createRequest = { signature, body: { ...payload, idempotencyKey: crypto.randomUUID().replaceAll('-', '') } };
+      const result = await request('/api/challenges', { method: 'POST', body: JSON.stringify(createRequest.body) });
       createRequest = null; newDialog.close(); form.reset(); await load(); await loadDetail(result.id);
     } catch (error) { document.getElementById('create-status').textContent = error.message; }
     finally { createBusy = false; submit.disabled = false; }
   };
   function clearLink() {
     shareURL.textContent = ''; qr.hidden = true; qr.removeAttribute('src');
-    copy.hidden = true; copy.onclick = null; native.hidden = true; native.removeAttribute('href');
+    shareCode.textContent = ''; shareCode.hidden = true;
+    copy.hidden = true; copy.onclick = null; copyCode.hidden = true; copyCode.onclick = null;
+    native.hidden = true; native.removeAttribute('href');
   }
   function openShare(challenge) {
     if (shareBusy) return;
     shareChallenge = challenge; shareVersion++; clearLink();
     document.getElementById('share-title').textContent = `Invite people to ${challenge.name}`;
-    shareStatus.textContent = 'Generate a seven-day link. Generating another link replaces the previous one.';
+    shareStatus.textContent = 'Generate a seven-day link and six-letter code. Generating another invitation replaces the previous one.';
     shareDialog.showModal();
   }
   generate.onclick = async () => {
@@ -157,11 +203,15 @@
     try {
       const data = await request(`/api/challenges/${encodeURIComponent(challenge.id)}/invites`, { method: 'POST', body: '{}' });
       if (version !== shareVersion) return;
-      if (!/^[A-Za-z0-9_-]{43}$/.test(data.token) || data.url !== `https://yannickmorgans.ca/challenge-invite/#token=${data.token}`) throw new Error('The invitation response was invalid. Try again.');
-      shareURL.textContent = data.url; copy.hidden = false;
+      if (!/^[A-Za-z0-9_-]{43}$/.test(data.token) || !/^[A-Z]{6}$/.test(data.code) || data.url !== `https://yannickmorgans.ca/challenge-invite/#token=${data.token}`) throw new Error('The invitation response was invalid. Try again.');
+      shareURL.textContent = data.url; shareCode.textContent = `Invitation code: ${data.code}`; shareCode.hidden = false; copy.hidden = false; copyCode.hidden = false;
       copy.onclick = async () => {
         try { await navigator.clipboard.writeText(data.url); shareStatus.textContent = 'Invitation link copied.'; }
         catch { shareStatus.textContent = 'Select and copy the link above.'; }
+      };
+      copyCode.onclick = async () => {
+        try { await navigator.clipboard.writeText(data.code); shareStatus.textContent = 'Invitation code copied.'; }
+        catch { shareStatus.textContent = 'Select and copy the code above.'; }
       };
       native.href = `yannickchallenge://invite?token=${data.token}`; native.hidden = false;
       if (typeof data.qrDataURL === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(data.qrDataURL) && data.qrDataURL.length < 1000000) { qr.src = data.qrDataURL; qr.hidden = false; }
@@ -182,32 +232,42 @@
   // Settings Modal
   const sBtn = document.getElementById('settings-strava-btn');
   const sStat = document.getElementById('settings-status');
+  let stravaBusy = false;
+  function renderStrava(strava = {}) {
+    const connected = strava.connected === true;
+    const athlete = strava.athlete || {};
+    const athleteName = [athlete.firstname, athlete.lastname].filter(Boolean).join(' ') || strava.athleteName || '';
+    document.getElementById('settings-strava-status').textContent = connected ? `Strava: Connected${athleteName ? ` as ${athleteName}` : ''}` : 'Strava: Not connected';
+    sBtn.textContent = connected ? 'Disconnect Strava' : 'Connect Strava';
+    sBtn.className = connected ? 'btn btn-ghost' : 'btn btn-primary';
+    sBtn.style.color = connected ? 'var(--danger)' : '';
+    sBtn.disabled = stravaBusy;
+    sBtn.onclick = async () => {
+      if (stravaBusy) return;
+      stravaBusy = true; sBtn.disabled = true; sStat.textContent = connected ? 'Disconnecting Strava…' : 'Opening Strava…';
+      try {
+        if (connected) {
+          await request('/api/challenge-accounts/strava/connection', { method: 'DELETE' });
+          renderStrava({ connected: false }); sStat.textContent = 'Strava disconnected.';
+        } else {
+          const data = await request('/api/challenge-accounts/strava/connection/start', { method: 'POST', body: JSON.stringify({ redirectMode: 'web' }) });
+          if (!data.authorizationUrl) throw new Error('Strava connection could not be started.');
+          location.href = data.authorizationUrl;
+        }
+      } catch (error) { sStat.textContent = error.message; }
+      finally { stravaBusy = false; sBtn.disabled = false; }
+    };
+  }
   document.getElementById('open-settings').onclick = async () => {
     settingsDialog.showModal(); sStat.textContent = 'Loading account...';
     try {
       const me = await request('/api/challenge-accounts/me');
       document.getElementById('settings-account-name').textContent = `Signed in as ${me.username}`;
-      const conn = me.strava?.connected;
-      document.getElementById('settings-strava-status').textContent = conn ? 'Strava: Connected' : 'Strava: Not connected';
-      sBtn.textContent = conn ? 'Disconnect Strava' : 'Connect Strava';
-      sBtn.className = conn ? 'btn btn-ghost' : 'btn btn-primary';
-      if(conn) sBtn.style.color = 'var(--danger)'; else sBtn.style.color = '';
-      sBtn.onclick = async () => {
-        try {
-          if(conn) { await request('/api/challenge-accounts/strava/connection', { method: 'DELETE' }); settingsDialog.close(); }
-          else { 
-            const data = await request('/api/challenge-accounts/strava/connection/start', { method: 'POST', body: '{}' });
-            if (data.authorizationUrl) location.href = data.authorizationUrl;
-          }
-        } catch(e) { sStat.textContent = e.message; }
-      };
+      renderStrava(me.strava);
       sStat.textContent = '';
     } catch(err) { sStat.textContent = err.message; }
   };
-  document.getElementById('settings-signout-btn').onclick = async () => {
-    try { await request('/api/auth/logout', { method: 'POST', body: '{}' }); Auth.showLogin(); settingsDialog.close(); }
-    catch(err) { sStat.textContent = err.message; }
-  };
+  document.getElementById('settings-signout-btn').onclick = () => Auth.logout();
   document.getElementById('settings-inbox-btn').onclick = () => { settingsDialog.close(); document.getElementById('open-inbox').click(); };
 
   // Review Inbox Modal
@@ -230,6 +290,18 @@
     } catch(err) { document.getElementById('inbox-empty').hidden = false; document.getElementById('inbox-empty').textContent = err.message; }
   };
 
-  Auth.onReady(user => { if (user) load(); });
-  window.addEventListener('auth:user-changed', () => { if (Auth.user) load(); });
+  function startRefresh() {
+    if (refreshTimer) return;
+    refreshTimer = window.setInterval(() => {
+      if (Auth.user && document.visibilityState === 'visible') load({ quiet: true });
+    }, 30000);
+  }
+  Auth.onReady(user => { if (user) { load(); startRefresh(); } });
+  window.addEventListener('auth:user-changed', () => {
+    if (Auth.user) { load(); startRefresh(); }
+    else { challenges = []; clearDetail(); showList(); }
+  });
+  window.addEventListener('visibilitychange', () => {
+    if (Auth.user && document.visibilityState === 'visible') load({ quiet: true });
+  });
 })();

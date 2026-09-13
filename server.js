@@ -232,6 +232,7 @@ try {
     },
     deviceTokenCipher: challengeDeviceTokenCipher,
     getStravaStatus: getChallengeAccountStravaStatus,
+    usernameForUserId: getChallengeAccountUsername,
   });
 } catch (error) {
   stravaChallengeLogger.error('challenge accounts unavailable during startup:', error && error.message);
@@ -1141,13 +1142,21 @@ async function getChallengeAccountStravaStatus(user) {
   }
 }
 
+function getChallengeAccountUsername(userId) {
+  const account = readUsers().find(value => value && value.id === userId);
+  return account && typeof account.username === 'string' ? account.username : null;
+}
+
 const challengeApiRateLimits = new Map();
 const challengeInvitePreviewRateLimits = new Map();
+const challengeInviteAcceptRateLimits = new Map();
 const authRateLimits = new Map();
 const CHALLENGE_API_RATE_WINDOW_MS = 60_000;
 const CHALLENGE_API_READ_LIMIT = 90;
 const CHALLENGE_API_WRITE_LIMIT = 30;
 const CHALLENGE_INVITE_PREVIEW_LIMIT = 30;
+const CHALLENGE_INVITE_ACCEPT_CLIENT_LIMIT = 12;
+const CHALLENGE_INVITE_ACCEPT_ACCOUNT_LIMIT = 8;
 const AUTH_RATE_WINDOW_MS = 60_000;
 const AUTH_LOGIN_LIMIT = 20;
 const AUTH_REGISTER_LIMIT = 10;
@@ -1175,6 +1184,11 @@ function allowChallengeApiRequest(user, req) {
   return allowWindowedRequest(challengeApiRateLimits, key, isWrite ? CHALLENGE_API_WRITE_LIMIT : CHALLENGE_API_READ_LIMIT, Date.now(), CHALLENGE_API_RATE_WINDOW_MS);
 }
 function allowChallengeInvitePreview(req) { return allowWindowedRequest(challengeInvitePreviewRateLimits, requestAddress(req), CHALLENGE_INVITE_PREVIEW_LIMIT); }
+function allowChallengeInviteAccept(req, user) {
+  const at = Date.now();
+  return allowWindowedRequest(challengeInviteAcceptRateLimits, `client:${requestAddress(req)}`, CHALLENGE_INVITE_ACCEPT_CLIENT_LIMIT, at, CHALLENGE_API_RATE_WINDOW_MS)
+    && allowWindowedRequest(challengeInviteAcceptRateLimits, `account:${user.id}`, CHALLENGE_INVITE_ACCEPT_ACCOUNT_LIMIT, at, CHALLENGE_API_RATE_WINDOW_MS);
+}
 function allowAuthRequest(req, action) { return allowWindowedRequest(authRateLimits, `${requestAddress(req)}:${action}`, action === 'register' ? AUTH_REGISTER_LIMIT : AUTH_LOGIN_LIMIT, Date.now(), AUTH_RATE_WINDOW_MS); }
 function challengeAccountsUser(req, res) {
   const user = getSessionUser(getToken(req));
@@ -2194,6 +2208,7 @@ async function handleAPI(req, res, urlPath) {
     setSensitiveResponseHeaders(res);
     const user = challengeAccountsUser(req, res);
     if (!user) return;
+    if (!allowChallengeInviteAccept(req, user)) return jsonRes(res, 429, { error: 'Too many invitation attempts. Please retry shortly.' });
     if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
     const body = await challengeAccountsBody(req, res);
     if (body === null) return;
@@ -2338,8 +2353,12 @@ async function handleAPI(req, res, urlPath) {
     try {
       const invite = await challengeAccounts.createInvite(user, challengeInviteMatch[1]);
       const url = `https://yannickmorgans.ca/challenge-invite/#token=${invite.token}`;
-      const qrDataURL = await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 4, width: 512 });
-      return jsonRes(res, 201, { url, token: invite.token, expiresAt: invite.expiresAt, qrDataURL });
+      // URL fragments are not reliable Universal Link input. Keep the
+      // high-entropy token link for browser sharing, but put the invitation
+      // code in the QR's HTTPS query so an installed app can receive it.
+      const qrURL = `https://yannickmorgans.ca/challenge-invite/?code=${invite.code}`;
+      const qrDataURL = await QRCode.toDataURL(qrURL, { errorCorrectionLevel: 'M', margin: 4, width: 512 });
+      return jsonRes(res, 201, { url, token: invite.token, code: invite.code, expiresAt: invite.expiresAt, qrDataURL });
     } catch (error) { return challengeAccountsError(res, error); }
   }
 
@@ -4806,14 +4825,47 @@ ${!folders.length && !files.length ? '<p class="empty">No apps yet. Add folders 
 </html>`;
 }
 
+function challengeAssociationPayload(env = process.env) {
+  // Apple requires TeamID.BundleID. The Team ID is deployment configuration,
+  // never guessed from an APNs setting or embedded in the iOS project.
+  const applicationId = typeof env.CHALLENGE_AASA_APPLICATION_ID === 'string'
+    ? env.CHALLENGE_AASA_APPLICATION_ID.trim()
+    : '';
+  if (!/^[A-Z0-9]{10}\.ca\.yannickmorgans\.YannickChallengeIOS$/.test(applicationId)) return null;
+  return {
+    applinks: {
+      details: [{ appIDs: [applicationId], components: [{ '/': '/challenge-invite' }, { '/': '/challenge-invite/*' }] }],
+    },
+  };
+}
+
 // ── HTTP server ───────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
-  let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent(req.url.split('?')[0]);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end('Bad Request');
+    return;
+  }
   if (!urlPath.startsWith('/')) urlPath = '/' + urlPath;
 
   if (urlPath === '/favicon.ico') {
     res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' });
     res.end();
+    return;
+  }
+
+  if ((urlPath === '/.well-known/apple-app-site-association' || urlPath === '/apple-app-site-association') && ['GET', 'HEAD'].includes(req.method)) {
+    const association = challengeAssociationPayload();
+    if (!association) {
+      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(req.method === 'HEAD' ? undefined : JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
+    res.end(req.method === 'HEAD' ? undefined : JSON.stringify(association));
     return;
   }
 

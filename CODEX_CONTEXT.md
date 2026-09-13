@@ -193,6 +193,22 @@ Static serving:
 
 ### CHALLENGERS registration and invitations (2026-09-11)
 
+CHALLENGERS readiness follow-up (2026-09-12) is specified in
+`docs/exec-plans/challengers-app-store-readiness.md`. It is isolated to
+CHALLENGERS; Lights behavior and shared account lifecycle remain unchanged.
+Challenge participant DTOs resolve current usernames from the account store,
+and activity DTOs include `participantID`. Both clients reconcile memberships
+on foreground/visible refresh and use the non-owner
+`POST /api/challenges/{id}/leave` route alongside owner deletion. Invitations
+now return a six-letter code alongside the existing token link/QR. Preview and
+accept take exactly one `{token}` or `{code}` with bounded rate limits; both
+credentials share expiry/revocation and only digests are persisted. Codes are
+six ASCII letters with case/surrounding-whitespace normalization. Associated
+Domains support requires explicitly configured Apple application identity
+and physical signed-device verification; no team identifier is invented.
+The current live runtime was observed missing the leave route despite the
+source having it, so source changes alone do not establish live activation.
+
 The native CHALLENGERS app creates accounts directly through the existing
 `/api/auth/register` route, receiving the normal website bearer session. There
 is no separate native identity store or account-forwarding job. Registration
@@ -203,8 +219,9 @@ account/password compatibility.
 link/QR sharing. `/challenge-invite/#token=...` is the public invitation entry;
 it previews limited challenge metadata, preserves the token through shared
 sign-in/signup, and requires explicit authenticated Join confirmation. Native
-handoff is a user-tapped `yannickchallenge://invite?token=...` link using the
-existing scheme, not a new associated-domains entitlement.
+handoff retains the user-tapped `yannickchallenge://invite?token=...` fallback;
+the readiness update additionally prepares Associated Domains for direct
+HTTPS QR handoff to the installed app.
 
 Invitations are reusable for seven days, manager-created/revocable, with one
 current SHA-256 token digest per challenge in the existing serialized state.

@@ -68,6 +68,15 @@ for the same target is safe and reuse for a different target returns `409`.
 
 ## Authenticated challenge accounts
 
+CHALLENGERS Universal Links use public `GET`/`HEAD`
+`/.well-known/apple-app-site-association` (also `/apple-app-site-association`).
+Set `CHALLENGE_AASA_APPLICATION_ID` to the actual signed application's identifier,
+`<Apple App ID prefix>.ca.yannickmorgans.YannickChallengeIOS`; the prefix is normally
+the Developer Team ID. Unconfigured/invalid identity returns `404`, not a guessed
+association. Configured responses are JSON without a redirect and allow only
+CHALLENGERS invitation paths. Deploy before testing the signed app's Associated
+Domains entitlement. This has no effect on the Lights app.
+
 Except for the explicitly public invite preview, routes in this section require a normal website bearer session:
 `Authorization: Bearer <website-session>`. Responses set `Cache-Control:
 no-store` and never contain a Strava access/refresh token, OAuth material,
@@ -108,14 +117,20 @@ return `409`; malformed input returns `400`; bounded auth traffic can return
 
 | Method and path | Access | Request → response |
 | --- | --- | --- |
-| `POST /api/challenges/{id}/invites` | Owner/admin | `{}` → `201 {url,token,expiresAt,qrDataURL}`. Replaces the previous seven-day invite. |
+| `POST /api/challenges/{id}/invites` | Owner/admin | `{}` → `201 {url,token,code,expiresAt,qrDataURL}`. Replaces both credentials of the previous seven-day invite. |
 | `DELETE /api/challenges/{id}/invites` | Owner/admin | No body → `{revoked:true}`. |
-| `POST /api/challenge-invites/preview` | Public, rate limited | `{token}` → `{challengeId,name,participantCount,expiresAt}` only. |
-| `POST /api/challenge-invites/accept` | Website session | `{token}` → `{challenge,alreadyMember}`. Adds the caller as member exactly once, with a maximum of 50 participants. |
+| `POST /api/challenge-invites/preview` | Public, rate limited | Exactly one `{token}` or `{code}` → `{challengeId,name,participantCount,expiresAt}` only. |
+| `POST /api/challenge-invites/accept` | Website session, rate limited | Exactly one `{token}` or `{code}` → `{challenge,alreadyMember}`. Adds the caller as member exactly once, with a maximum of 50 participants. |
+| `POST /api/challenges/{id}/leave` | Non-owner participant | `{}` → `{left:true}`. Removes caller membership and related activities, reviews and notifications; owner/fixed challenge `403`, unavailable challenge `404`. |
 
 Invites are random 32-byte base64url tokens, stored only as digests inside
-existing challenge state. Invalid, revoked, expired or deleted-challenge links
-fail safely (`404`/`410`); full challenges return `409`. Fixed Yannick/Emma
+existing challenge state. Six-letter codes use the same expiry and revocation;
+they are random uppercase ASCII letters, stored as digests with collision checks.
+Input case and surrounding whitespace are normalized. Existing token-only invites
+remain usable until expiry/revocation. The manager's QR encodes the code as an
+HTTPS query credential so it can open the installed app through Universal Links.
+Invalid, revoked, expired or deleted-challenge links/codes fail safely with the
+same `404`; full challenges return `409`. Fixed Yannick/Emma
 challenges do not support invitations. Preview discloses no participant list,
 scores, activities, emails, password hashes or session/Strava credentials.
 
@@ -123,10 +138,19 @@ The shared URL is `/challenge-invite/#token=...`; raw tokens stay out of HTTP
 paths/queries. The browser retains one pending token in sessionStorage through
 login/signup and reload, while the app retains its pending invitation through
 authentication. Joining always requires an explicit confirmation. The browser's
-Open in app action uses `yannickchallenge://invite?token=...`; a missing app does
-not prevent browser acceptance. `/challengers/` provides account challenge
-access and manager link/QR sharing. Link regeneration/revocation affects future
+Open in app fallback uses `yannickchallenge://invite?token=...`; a missing app does
+not prevent browser acceptance. Configured Associated Domains and the server's
+Apple association allow installed iOS apps to handle the HTTPS invite directly.
+`/challengers/` provides account challenge access, six-letter joining and manager
+link/QR/code sharing. Invite regeneration/revocation affects future
 joins only; existing memberships stay intact.
+
+Challenge responses include `participants[].username`, resolved from the account
+store rather than trusting a caller-provided display name. Generic activity DTOs
+include `participantID`. Neither addition exposes emails or Strava credentials.
+Visible clients refresh membership and discard challenges that are authoritatively
+deleted or no longer accessible. A server response of `API route not found` means
+the runtime is missing the route and must not be treated as confirmed deletion.
 
 Creation example:
 

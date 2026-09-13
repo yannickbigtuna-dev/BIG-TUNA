@@ -40,10 +40,11 @@ second account, or second Strava connection store. All these responses are
 | POST | `/api/challenge-devices` | Any website session | Register encrypted iOS APNs token with `{token,platform:"ios"}`. |
 | GET/POST | `/api/challenges` | Website session | List memberships or create a challenge. Creation accepts `sportRules` for per-sport time/distance/no-minimum qualification and a retry-safe `idempotencyKey`. |
 | GET/DELETE | `/api/challenges/{id}` | Participant / owner | Read challenge detail, or permanently delete the owner’s challenge → `{deleted:true}`. |
+| POST | `/api/challenges/{id}/leave` | Non-owner participant | `{}` → `{left:true}`; remove caller membership and related activity/review/event data. |
 | PUT | `/api/challenges/{id}/settings` | Owner/admin | Update challenge name, scoring, cadence, and sport rules. |
-| POST/DELETE | `/api/challenges/{id}/invites` | Owner/admin | Generate a seven-day link and QR code, or revoke the current link. |
-| POST | `/api/challenge-invites/preview` | Public | `{token}` → challenge name, ID, member count and expiry only. |
-| POST | `/api/challenge-invites/accept` | Website session | `{token}` → `{challenge,alreadyMember}`; adds only the signed-in account as a member after explicit confirmation. |
+| POST/DELETE | `/api/challenges/{id}/invites` | Owner/admin | Generate a seven-day link, QR and six-letter code, or revoke both credentials. |
+| POST | `/api/challenge-invites/preview` | Public, rate limited | Exactly one `{token}` or `{code}` → challenge name, ID, member count and expiry only. |
+| POST | `/api/challenge-invites/accept` | Website session, rate limited | Exactly one `{token}` or `{code}` → `{challenge,alreadyMember}`; adds only the signed-in account as a member after explicit confirmation. |
 | GET | `/api/challenge-review-inbox` | Eligible participant | Pending reviews the caller may decide. |
 | POST | `/api/challenges/{id}/review-requests/{reviewId}/decision` | Eligible participant | Approve/reject another participant's request idempotently. |
 | GET | `/api/challenges/{id}/notification-events` | Participant | Redacted in-app fallback events and safe delivery state. |
@@ -66,13 +67,30 @@ TUNA's authoritative account store. Native sessions remain in Keychain.
 
 Invite URLs use `https://yannickmorgans.ca/challenge-invite/#token=<token>`.
 The browser removes the fragment and retains the pending invite in session
-storage through sign-in or registration. The explicit Open in app action uses
-`yannickchallenge://invite?token=<token>`; associated domains are not required.
+storage through sign-in or registration. The explicit Open in app fallback uses
+`yannickchallenge://invite?token=<token>`. Automatic installed-app opening uses
+Associated Domains plus the public Apple app association on the website; it
+requires matching Apple application identity and signed provisioning.
+The generated QR instead carries
+`https://yannickmorgans.ca/challenge-invite/?code=<six-letter-code>`, so an
+installed app receives the credential through the Universal Link while a browser
+uses the identical explicit-confirmation flow.
 Both clients require Join confirmation after authentication and permit dismissal.
-Only SHA-256 invite digests and expiry are persisted by the server. Generating
-a new link invalidates the previous one; revocation and challenge deletion also
+Only SHA-256 token/code digests and expiry are persisted by the server. Codes
+contain six random uppercase ASCII letters; input case and surrounding whitespace
+are normalized. Creating a new invite returns `{url,token,code,expiresAt,qrDataURL}`.
+Generating a new invite invalidates both previous credentials; revocation and challenge deletion also
 invalidate it. Repeated acceptance does not duplicate membership. Invites cannot
 modify the fixed Yannick/Emma scoreboard or grant owner/admin access.
+
+Membership-scoped challenge responses resolve `participants[].username` from
+the account store. Clients use this for display, keeping `userId` for identity.
+Generic activity responses include `participantID` so the app can attribute
+workouts and offer review requests only for the caller's own activity. Deleted
+or inaccessible challenges return `404`; clients reconcile the list and clear
+stale detail/widget state. A missing HTTP route is a deployment failure, not
+proof that a specific challenge was deleted. See the CHALLENGERS App Store
+readiness plan for validation and deployment prerequisites.
 
 ## Yannick Lights native integration
 

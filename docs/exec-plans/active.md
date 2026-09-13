@@ -1,5 +1,9 @@
 # Previous Completed Execution Plan — Trivia
 
+## CHALLENGERS App Store readiness (2026-09-12)
+
+Independent current work is specified in `docs/exec-plans/challengers-app-store-readiness.md`. All earlier plans are preserved. Server changes are prepared in an isolated worktree; the user explicitly authorized commit, push and deployment on 2026-09-12.
+
 ## Goal
 
 Make fixed-length Trivia topic runs deliver the selected 10, 25, or 50
