@@ -107,6 +107,8 @@ authenticated account; excess requests receive `429`.
 | `GET /api/challenge-review-inbox` | Eligible reviewer | Pending requests in challenges containing the caller that were requested by someone else and that caller can decide. Response `{reviews:[{challenge:{id,name},review:{id,requesterDisplayName,activity,reason,createdAt}}]}`. |
 | `POST /api/challenges/{id}/review-requests/{reviewId}/decision` | Eligible reviewer other than requester | `{decision:"approve"|"reject",reason?}`; approval recomputes scores exactly once. Same decision repeat returns `200` with `idempotent:true`; self-decision is `403`; conflicting repeat is `409`. |
 | `POST /api/challenge-devices` | Website/native website session | Exactly `{token,platform:"ios"}`. Stores the raw APNs token encrypted; response is only `{id,platform:"ios",registered:true}`; `201`, `400`, or `503` if encryption is unavailable. |
+| `POST /api/challenge-notifications/test` | Website session | Dispatches an immediate test push notification via APNs to the caller's registered iOS devices → `{sent,count,devicesCount,apnsConfigured,reason?,message}`; `200` or `503`. |
+| `GET /api/challenge-notifications/status` | Website session | Returns notification configuration state for caller → `{registeredDevicesCount,hasRegisteredDevice,apnsConfigured,encryptionConfigured}`; `200` or `503`. |
 | `GET /api/challenges/{id}/notification-events` | Participant | Returns only the caller's redacted review-requested/approved/rejected events `{id,type,reviewId,createdAt,delivery}`; delivery is `pending`, `sent`, or `failed`; `401`/`404`. |
 
 ### CHALLENGERS account creation and invitations

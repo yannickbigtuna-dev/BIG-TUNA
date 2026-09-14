@@ -314,7 +314,7 @@ test('review decisions prevent self-approval, are idempotent, and emit safe even
   const id = created.body.id;
   const accounts = _test.getChallengeAccounts();
   await accounts._mutate(state => {
-    state.challenges[id].activities.activity_1 = { id: 'activity_1', userId: 'member-id', sportType: 'Run', name: 'Short run', startDate: '2026-09-09T12:00:00.000Z', distanceMeters: 1000, movingTime: 300 };
+    state.challenges[id].activities.activity_1 = { id: 'activity_1', userId: 'member-id', sportType: 'Run', name: 'Short run', startDate: new Date().toISOString(), distanceMeters: 1000, movingTime: 300 };
   });
   const review = await request('POST', `/api/challenges/${id}/review-requests`, { token: MEMBER, body: { activityId: 'activity_1', reason: 'GPS correction' } });
   assert.equal(review.status, 201);
@@ -373,3 +373,17 @@ test('concurrent password resets are single-use and retain unrelated registratio
   assert.equal((await request('POST','/api/auth/login',{body:{username:'new_runner',password:'a secure test password'}})).status,401);
   assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir,'users.json'))).length,users.length);
 });
+
+test('challenge-notifications routes require authentication and send test notifications', async () => {
+  assert.equal((await request('POST', '/api/challenge-notifications/test')).status, 401);
+  assert.equal((await request('GET', '/api/challenge-notifications/status')).status, 401);
+
+  const statusResponse = await request('GET', '/api/challenge-notifications/status', { token: OWNER });
+  assert.equal(statusResponse.status, 200);
+  assert.equal(typeof statusResponse.body.hasRegisteredDevice, 'boolean');
+
+  const testResponse = await request('POST', '/api/challenge-notifications/test', { token: OWNER });
+  assert.equal(testResponse.status, 200);
+  assert.equal(typeof testResponse.body.sent, 'boolean');
+});
+

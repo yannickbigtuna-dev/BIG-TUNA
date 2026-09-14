@@ -345,3 +345,37 @@ test('invite generation retries a colliding code before persisting hashes', asyn
     crypto.randomInt = originalRandomInt;
   }
 });
+
+test('sendTestNotification handles no devices, unconfigured APNs, and successful delivery', async () => {
+  const sentPayloads = [];
+  const s = service({
+    notificationConfigured: true,
+    notificationSender: async input => { sentPayloads.push(input); return { sent: true }; }
+  });
+
+  // 1. No devices registered yet
+  const emptyResult = await s.sendTestNotification(user('owner'));
+  assert.equal(emptyResult.sent, false);
+  assert.equal(emptyResult.reason, 'no_registered_devices');
+
+  // 2. Register a device
+  const token = 'c'.repeat(64);
+  await s.registerDevice(user('owner'), { token, platform: 'ios' });
+
+  // 3. Status check
+  const status = await s.getNotificationStatus(user('owner'));
+  assert.equal(status.hasRegisteredDevice, true);
+  assert.equal(status.registeredDevicesCount, 1);
+  assert.equal(status.apnsConfigured, true);
+  assert.equal(status.encryptionConfigured, true);
+
+  // 4. Send test notification
+  const successResult = await s.sendTestNotification(user('owner'));
+  assert.equal(successResult.sent, true);
+  assert.equal(successResult.count, 1);
+  assert.equal(sentPayloads.length, 1);
+  assert.equal(sentPayloads[0].token, token);
+  assert.equal(sentPayloads[0].event.type, 'test_notification');
+  assert.equal(sentPayloads[0].event.title, 'BIG TUNA Test Notification');
+});
+

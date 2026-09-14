@@ -38,6 +38,8 @@ second account, or second Strava connection store. All these responses are
 | POST | `/api/challenge-accounts/strava/connection/start` | Any website session | `{redirectMode:"native"|"web"}` → short-lived `{authorizationUrl,transactionId,expiresAt}`. |
 | GET/DELETE | `/api/challenge-accounts/strava/connection` | Any website session | Read or disconnect the same account-level Strava record. |
 | POST | `/api/challenge-devices` | Any website session | Register encrypted iOS APNs token with `{token,platform:"ios"}`. |
+| POST | `/api/challenge-notifications/test` | Any website session | Dispatch immediate test APNs push notification to registered devices. |
+| GET | `/api/challenge-notifications/status` | Any website session | Check registered device count and APNs configuration state. |
 | GET/POST | `/api/challenges` | Website session | List memberships or create a challenge. Creation accepts `sportRules` for per-sport time/distance/no-minimum qualification and a retry-safe `idempotencyKey`. |
 | POST | `/api/challenges/refresh` | Website session | No body. Bounded refresh of each unique connected participant, then `{challenges,refreshedAt,partial}` from durable state. |
 | GET/DELETE | `/api/challenges/{id}` | Participant / owner | Read durable challenge detail without waiting on Strava, or permanently delete the owner’s challenge → `{deleted:true}`. |
