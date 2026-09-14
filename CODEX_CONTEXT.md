@@ -893,8 +893,9 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   authoritative Strava Challenge store, not generic `/api/challenges` records.
   Challenge administration is Yannick-only under `/api/admin/strava-challenge/*` (aliased at `/api/admin/email/challenge-emails*`).
   Weekly win/loss result emails are drawn at random from a configurable `emailPool` in `data/strava-challenge/state.json`,
-  supporting placeholders (`{{score}}`, `{{winner}}`, `{{loser}}`, `{{margin}}`, `{{winner_time}}`, `{{loser_time}}`, `{{season_score}}`, `{{week_start}}`)
-  and managed via the admin panel's Emails section (`#view-templates` -> Yannick vs Emma subtab).
+  supporting conditional rules (`margin_gt`, `overtake_season`, `overtaken_season`, `season_lead_gt`, `season_trail_gt`, `tiebreaker`),
+  placeholders (`{{score}}`, `{{winner}}`, `{{loser}}`, `{{margin}}`, `{{winner_time}}`, `{{loser_time}}`, `{{season_score}}`, `{{week_start}}`),
+  and managed via the admin panel's Emails section (`#view-templates` -> Yannick vs Emma subtab, direct sidebar link).
   Invitation tokens are fragment-only, hashed server-side, and separate from OAuth state.
 
 ## Authenticated Challenge Accounts

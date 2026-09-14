@@ -1490,11 +1490,13 @@ function renderChallengeEmailFilter() {
   const list = allChallengeEmails || [];
   const wins = list.filter(t => t.type === 'win');
   const losses = list.filter(t => t.type === 'loss');
+  const rules = list.filter(t => t.rule && t.rule.condition && t.rule.condition !== 'none');
   const ties = list.filter(t => t.type === 'tiebreaker_win' || t.type === 'tiebreaker_loss' || String(t.type || '').includes('tiebreaker'));
   wrap.innerHTML = `
     <button type="button" class="chip${activeChallengeEmailFilter === 'all' ? ' active' : ''}" data-filter="all">All (${list.length})</button>
     <button type="button" class="chip${activeChallengeEmailFilter === 'win' ? ' active' : ''}" data-filter="win">Win Emails (${wins.length})</button>
     <button type="button" class="chip${activeChallengeEmailFilter === 'loss' ? ' active' : ''}" data-filter="loss">Loss Emails (${losses.length})</button>
+    <button type="button" class="chip${activeChallengeEmailFilter === 'rule' ? ' active' : ''}" data-filter="rule">Rule-Based (${rules.length})</button>
     <button type="button" class="chip${activeChallengeEmailFilter === 'tiebreaker' ? ' active' : ''}" data-filter="tiebreaker">Tiebreakers (${ties.length})</button>
   `;
   wrap.querySelectorAll('.chip').forEach(btn => {
@@ -1506,12 +1508,36 @@ function renderChallengeEmailFilter() {
   });
 }
 
+function challengeRuleLabel(rule, type = 'win') {
+  if (!rule || !rule.condition || rule.condition === 'none') return 'Standard Pot';
+  const param = Number(rule.param) || 2;
+  const isLoss = type === 'loss' || type === 'tiebreaker_loss';
+  switch (rule.condition) {
+    case 'margin_gt':
+      return isLoss ? `Lose by > ${param} activities` : `Win by > ${param} activities`;
+    case 'overtake_season':
+      return 'Overtook in season';
+    case 'overtaken_season':
+      return 'Got overtaken in season';
+    case 'season_lead_gt':
+      return `Leading season by > ${param} pts`;
+    case 'season_trail_gt':
+      return `Trailing season by > ${param} pts`;
+    case 'tiebreaker':
+      return 'Tiebreaker finish';
+    default:
+      return 'Rule-based';
+  }
+}
+
 function filteredChallengeEmails() {
   let list = allChallengeEmails || [];
   if (activeChallengeEmailFilter === 'win') {
     list = list.filter(t => t.type === 'win');
   } else if (activeChallengeEmailFilter === 'loss') {
     list = list.filter(t => t.type === 'loss');
+  } else if (activeChallengeEmailFilter === 'rule') {
+    list = list.filter(t => t.rule && t.rule.condition && t.rule.condition !== 'none');
   } else if (activeChallengeEmailFilter === 'tiebreaker') {
     list = list.filter(t => t.type === 'tiebreaker_win' || t.type === 'tiebreaker_loss' || String(t.type || '').includes('tiebreaker'));
   }
@@ -1520,7 +1546,8 @@ function filteredChallengeEmails() {
     list = list.filter(t =>
       (t.name || '').toLowerCase().includes(q) ||
       (t.subject || '').toLowerCase().includes(q) ||
-      (t.body || '').toLowerCase().includes(q)
+      (t.body || '').toLowerCase().includes(q) ||
+      challengeRuleLabel(t.rule, t.type).toLowerCase().includes(q)
     );
   }
   return list;
@@ -1535,8 +1562,10 @@ function renderChallengeEmailGrid() {
   const allList = allChallengeEmails || [];
   const activeWins = allList.filter(t => t.active && t.type === 'win');
   const activeLosses = allList.filter(t => t.active && t.type === 'loss');
-  const winPct = activeWins.length ? (100 / activeWins.length).toFixed(1) : '0';
-  const lossPct = activeLosses.length ? (100 / activeLosses.length).toFixed(1) : '0';
+  const standardWins = activeWins.filter(t => !t.rule || !t.rule.condition || t.rule.condition === 'none');
+  const standardLosses = activeLosses.filter(t => !t.rule || !t.rule.condition || t.rule.condition === 'none');
+  const winPct = standardWins.length ? (100 / standardWins.length).toFixed(1) : '0';
+  const lossPct = standardLosses.length ? (100 / standardLosses.length).toFixed(1) : '0';
 
   if (summaryEl) {
     summaryEl.innerHTML = `
@@ -1549,7 +1578,7 @@ function renderChallengeEmailGrid() {
           </div>
         </div>
         <p style="margin:0;color:var(--text-muted);font-size:0.86rem;line-height:1.5">
-          Each week when Strava Challenge results are finalized, <strong>one email is chosen at random with equal probability</strong> from the active win emails for the winner, and one from the active loss emails for the loser. Each active win email has a <strong>${winPct}% equal chance (1 in ${activeWins.length})</strong>, and each active loss email has a <strong>${lossPct}% equal chance (1 in ${activeLosses.length})</strong>. You can edit the current default emails below or add new ones to the pot.
+          Each week when Strava Challenge results are finalized, active templates are evaluated. <strong>If any conditional rule matches the result</strong> (e.g. winning by &gt; 2 activities or overtaking in season standings), matching rule templates take priority with equal random chance. Otherwise, an email is selected at random with equal probability from the standard pot (<strong>${winPct}% chance</strong> per standard win email, <strong>${lossPct}% chance</strong> per standard loss email).
         </p>
       </div>
     `;
@@ -1563,12 +1592,20 @@ function renderChallengeEmailGrid() {
   wrap.innerHTML = list.map(t => {
     const isDefault = t.id === 'win-default' || t.id === 'loss-default' || t.id === 'tiebreaker-win-default' || t.id === 'tiebreaker-loss-default';
     const defaultBadge = isDefault ? '<span class="status-pill" style="color:#3987e5;background:rgba(57,135,229,0.16);font-weight:800">Current Default</span>' : '';
+    const isRule = t.rule && t.rule.condition && t.rule.condition !== 'none';
+    const ruleLabel = challengeRuleLabel(t.rule, t.type);
+    const ruleBadge = isRule
+      ? `<span class="status-pill" style="color:#d97706;background:rgba(245,158,11,0.14);font-weight:700" title="Condition: ${esc(ruleLabel)}">⚡ ${esc(ruleLabel)}</span>`
+      : `<span class="status-pill" style="color:var(--text-dim);background:var(--surface-3)">Standard Pot</span>`;
+
     let probBadge = '';
     if (t.active) {
-      if (t.type === 'win') {
-        probBadge = `<span class="status-pill" style="color:var(--accent);background:var(--accent-soft);font-weight:700" title="Equal random chance among active win emails">🎲 ${winPct}% chance (1 in ${activeWins.length})</span>`;
+      if (isRule) {
+        probBadge = `<span class="status-pill" style="color:#d97706;background:rgba(245,158,11,0.14);font-weight:700" title="Fires when condition is met, equal chance if multiple rule templates match">⚡ Rule-triggered</span>`;
+      } else if (t.type === 'win') {
+        probBadge = `<span class="status-pill" style="color:var(--accent);background:var(--accent-soft);font-weight:700" title="Equal random chance among active standard win emails">🎲 ${winPct}% chance (1 in ${standardWins.length || 1})</span>`;
       } else if (t.type === 'loss') {
-        probBadge = `<span class="status-pill" style="color:var(--accent);background:var(--accent-soft);font-weight:700" title="Equal random chance among active loss emails">🎲 ${lossPct}% chance (1 in ${activeLosses.length})</span>`;
+        probBadge = `<span class="status-pill" style="color:var(--accent);background:var(--accent-soft);font-weight:700" title="Equal random chance among active standard loss emails">🎲 ${lossPct}% chance (1 in ${standardLosses.length || 1})</span>`;
       } else {
         probBadge = `<span class="status-pill" style="color:var(--series-3);background:rgba(144,133,233,0.14)">🎲 Tiebreaker specific</span>`;
       }
@@ -1586,6 +1623,7 @@ function renderChallengeEmailGrid() {
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
               ${challengeTypeBadge(t.type)}
               ${defaultBadge}
+              ${ruleBadge}
               ${t.active ? '<span class="status-pill" style="color:var(--success);background:rgba(34,197,94,0.14)">Active</span>' : '<span class="status-pill" style="color:var(--text-dim);background:var(--surface-3)">Inactive</span>'}
               ${probBadge}
             </div>
@@ -1714,12 +1752,17 @@ async function toggleChallengeEmailActive(t) {
 /* ── Challenge Email Slide-Over Editor ───────────────────────────── */
 function openChallengeEmailEditor(template) {
   editorState = null;
+  const ruleObj = (template && template.rule) || {};
   challengeEditorState = {
     id: template ? template.id : null,
     type: template ? (template.type || 'win') : 'win',
     name: template ? (template.name || '') : '',
     subject: template ? (template.subject || '') : '',
     active: template ? Boolean(template.active) : true,
+    rule: {
+      condition: ruleObj.condition || 'none',
+      param: (ruleObj.param !== undefined && ruleObj.param !== null) ? Number(ruleObj.param) : 2,
+    },
     body: template ? (template.body || '') : '',
     previewAthlete: 'yannick',
   };
@@ -1727,6 +1770,44 @@ function openChallengeEmailEditor(template) {
   document.getElementById('editor-title').textContent = (template ? 'Edit ' : 'New ') + 'Challenge Email';
   renderChallengeEditorBody();
   document.getElementById('editor-overlay').classList.add('show');
+}
+
+function updateChallengeRuleExplanation() {
+  const helpEl = document.getElementById('challenge-editor-rule-help');
+  const paramWrap = document.getElementById('challenge-editor-param-group');
+  if (!helpEl || !challengeEditorState) return;
+
+  const cond = challengeEditorState.rule.condition;
+  const p = challengeEditorState.rule.param ?? 2;
+  const isLoss = challengeEditorState.type === 'loss' || challengeEditorState.type === 'tiebreaker_loss';
+  const showParam = ['margin_gt', 'season_lead_gt', 'season_trail_gt'].includes(cond);
+  if (paramWrap) paramWrap.style.display = showParam ? 'block' : 'none';
+
+  switch (cond) {
+    case 'margin_gt':
+      helpEl.textContent = isLoss
+        ? `⚡ Only fires when you lose by more than ${p} qualifying activities (deficit of at least ${p + 1}).`
+        : `⚡ Only fires when you win by more than ${p} qualifying activities (margin of at least ${p + 1}).`;
+      break;
+    case 'overtake_season':
+      helpEl.textContent = '⚡ Only fires when the winner was previously tied or behind in season points, and takes the sole lead with this win.';
+      break;
+    case 'overtaken_season':
+      helpEl.textContent = '⚡ Only fires when the loser was previously tied or ahead in season points, and falls behind the opponent with this loss.';
+      break;
+    case 'season_lead_gt':
+      helpEl.textContent = `⚡ Only fires when the winner leads the overall season score by more than ${p} points after this week (lead of at least ${p + 1}).`;
+      break;
+    case 'season_trail_gt':
+      helpEl.textContent = `⚡ Only fires when the loser trails the overall season score by more than ${p} points after this week (deficit of at least ${p + 1}).`;
+      break;
+    case 'tiebreaker':
+      helpEl.textContent = '⚡ Only fires when the week is decided by activity duration tiebreaker.';
+      break;
+    default:
+      helpEl.textContent = 'Always eligible in the random selection pot when this result (win/loss) occurs.';
+      break;
+  }
 }
 
 function renderChallengeEditorBody() {
@@ -1755,9 +1836,35 @@ function renderChallengeEditorBody() {
         </div>
 
         <div>
+          <label class="label" for="challenge-editor-rule-condition">Condition / Trigger Rule</label>
+          <select class="input" id="challenge-editor-rule-condition" style="max-width:none">
+            <option value="none"${s.rule.condition === 'none' ? ' selected' : ''}>Always eligible (Standard pot - no condition)</option>
+            <optgroup label="Activity Margin">
+              <option value="margin_gt"${s.rule.condition === 'margin_gt' ? ' selected' : ''}>Win / Lose by more than N activities</option>
+            </optgroup>
+            <optgroup label="Season Standings">
+              <option value="overtake_season"${s.rule.condition === 'overtake_season' ? ' selected' : ''}>Overtook opponent in season standings this week</option>
+              <option value="overtaken_season"${s.rule.condition === 'overtaken_season' ? ' selected' : ''}>Got overtaken by opponent in season standings this week</option>
+              <option value="season_lead_gt"${s.rule.condition === 'season_lead_gt' ? ' selected' : ''}>Leading season standings by more than N points</option>
+              <option value="season_trail_gt"${s.rule.condition === 'season_trail_gt' ? ' selected' : ''}>Trailing season standings by more than N points</option>
+            </optgroup>
+            <optgroup label="Tiebreaker">
+              <option value="tiebreaker"${s.rule.condition === 'tiebreaker' ? ' selected' : ''}>Decided on activity time tiebreaker</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div id="challenge-editor-param-group" style="display:${['margin_gt', 'season_lead_gt', 'season_trail_gt'].includes(s.rule.condition) ? 'block' : 'none'};margin-top:-4px">
+          <label class="label" for="challenge-editor-rule-param" style="font-size:0.75rem">Threshold Number (N)</label>
+          <input type="number" min="1" max="99" class="input" id="challenge-editor-rule-param" value="${s.rule.param ?? 2}" style="max-width:120px">
+        </div>
+
+        <div id="challenge-editor-rule-help" class="caption" style="margin:-4px 0 2px;color:var(--text-muted);font-size:0.8rem;line-height:1.4"></div>
+
+        <div>
           <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;color:var(--text);margin:4px 0">
             <input type="checkbox" id="challenge-editor-active" ${s.active ? 'checked' : ''}>
-            <span>Include in random weekly selection pool</span>
+            <span>Include in active selection pool</span>
           </label>
         </div>
 
@@ -1803,9 +1910,21 @@ function renderChallengeEditorBody() {
     </div>
   `;
 
+  updateChallengeRuleExplanation();
+
   document.getElementById('challenge-editor-type').addEventListener('change', e => {
     challengeEditorState.type = e.target.value;
+    updateChallengeRuleExplanation();
     updateChallengeEditorPreview();
+  });
+  document.getElementById('challenge-editor-rule-condition').addEventListener('change', e => {
+    challengeEditorState.rule.condition = e.target.value;
+    updateChallengeRuleExplanation();
+  });
+  document.getElementById('challenge-editor-rule-param').addEventListener('input', e => {
+    const val = parseInt(e.target.value, 10);
+    challengeEditorState.rule.param = isNaN(val) ? 2 : Math.max(1, val);
+    updateChallengeRuleExplanation();
   });
   document.getElementById('challenge-editor-name').addEventListener('input', e => {
     challengeEditorState.name = e.target.value;
@@ -1889,6 +2008,10 @@ async function saveChallengeEditor() {
     name,
     subject,
     active: Boolean(challengeEditorState.active),
+    rule: {
+      condition: challengeEditorState.rule?.condition || 'none',
+      param: challengeEditorState.rule?.param ?? 2,
+    },
     body: challengeEditorState.body || '',
   };
 

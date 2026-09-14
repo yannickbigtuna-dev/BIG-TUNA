@@ -27,11 +27,19 @@ week depending on whether a user won or lost.
   - `DELETE /api/admin/strava-challenge/emails/:id` (protects the last remaining active win/loss template)
 - In the Admin Panel (`apps/admin/index.html`):
   - In the Emails section (`#view-templates`), introduce sub-navigation tabs:
-    `Campaign Templates` and `Yannick vs Emma Challenge`.
-  - Display the Challenge Email Pot as a card grid with type badges, subject, excerpt with
+    `Campaign Templates` and `Yannick vs Emma Challenge (Win / Loss Emails)`.
+  - Add dedicated `Challenge Emails` item to the sidebar navigation.
+  - Display the Challenge Email Pot as a card grid with type badges, rule badges, subject, excerpt with
     variable chips, real rendered preview, and actions: Edit, Duplicate, Toggle Active, Delete.
-  - Interactive slide-over editor with live preview (switchable between Yannick red and Emma blue),
-    field editing, and quick placeholder insert chips.
+  - Support conditional rules for win/loss emails:
+    - Margin of victory / defeat (`margin_gt` by > N activities)
+    - Overtaking opponent in season standings (`overtake_season`)
+    - Getting overtaken in season standings (`overtaken_season`)
+    - Leading season standings by > N points (`season_lead_gt`)
+    - Trailing season standings by > N points (`season_trail_gt`)
+    - Activity time tiebreaker (`tiebreaker`)
+  - Interactive slide-over editor with rule condition selector, threshold input, live explanation,
+    live preview (switchable between Yannick red and Emma blue), field editing, and quick placeholder insert chips.
   - In Strava Challenge operational controls, add quick link to the email pot and support
     previewing specific templates from the pot.
 - Retain all untracked files (`artifacts/`, `backups/`) and existing live data untouched.
@@ -42,7 +50,9 @@ week depending on whether a user won or lost.
 - [x] Implement backend domain, store, and service email pool logic
 - [x] Implement admin API routes in server.js
 - [x] Implement frontend admin panel UI in apps/admin/index.html
-- [x] Write unit and integration tests
+- [x] Implement conditional rules engine in lib/strava-challenge/emails.js and service.js
+- [x] Write unit and integration tests (67/67 tests passing)
+- [x] Fix save bug on live server by restarting apps-server in PM2
 - [x] Validate implementation and run test suite
 - [x] Update CODEX_CONTEXT.md and docs
 

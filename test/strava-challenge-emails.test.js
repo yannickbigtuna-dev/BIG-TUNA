@@ -8,7 +8,7 @@ const path = require('node:path');
 const http = require('node:http');
 
 const { defaultEmailPool, createStore } = require('../lib/strava-challenge/store');
-const { interpolateTemplate, formatEmailBody, renderWeeklyEmails } = require('../lib/strava-challenge/emails');
+const { interpolateTemplate, formatEmailBody, renderWeeklyEmails, evaluateEmailRule, selectCandidateFromPool } = require('../lib/strava-challenge/emails');
 const { createStravaChallenge } = require('../lib/strava-challenge');
 
 function makeTempDir() {
@@ -364,6 +364,162 @@ test('win and loss emails have equal random chance of selection among active tem
   assert.ok(counts['loss-2'] > 2700 && counts['loss-2'] < 3300, `loss-2 count (${counts['loss-2']}) should be near 3000`);
 });
 
+test('evaluateEmailRule correctly evaluates all supported conditions', () => {
+  const baseResult = {
+    winner: 'yannick',
+    winningMethod: 'activity_count',
+    yannick: { qualifyingActivities: 6, qualifyingActivityTime: 7200 },
+    emma: { qualifyingActivities: 3, qualifyingActivityTime: 4000 },
+    seasonScoreBefore: { yannick: 2, emma: 2 },
+    seasonScoreAfter: { yannick: 3, emma: 2 }
+  };
+
+  // 1. none / empty rule
+  assert.equal(evaluateEmailRule({ rule: { condition: 'none' } }, baseResult, 'winner'), true);
+  assert.equal(evaluateEmailRule({}, baseResult, 'winner'), true);
+
+  // 2. margin_gt for winner: 6 - 3 = 3
+  assert.equal(evaluateEmailRule({ rule: { condition: 'margin_gt', param: 2 } }, baseResult, 'winner'), true); // 3 > 2 -> true
+  assert.equal(evaluateEmailRule({ rule: { condition: 'margin_gt', param: 3 } }, baseResult, 'winner'), false); // 3 > 3 -> false
+  assert.equal(evaluateEmailRule({ rule: { condition: 'margin_gt', param: 4 } }, baseResult, 'winner'), false); // 3 > 4 -> false
+
+  // 3. margin_gt for loser
+  assert.equal(evaluateEmailRule({ rule: { condition: 'margin_gt', param: 2 } }, baseResult, 'loser'), true);
+  assert.equal(evaluateEmailRule({ rule: { condition: 'margin_gt', param: 3 } }, baseResult, 'loser'), false);
+
+  // 4. overtake_season (winner): went from tied (2==2) to ahead (3>2) -> true
+  assert.equal(evaluateEmailRule({ rule: { condition: 'overtake_season' } }, baseResult, 'winner'), true);
+
+  // If winner was already ahead before (e.g. 3-2 to 4-2) -> false (did not overtake)
+  const alreadyAhead = {
+    ...baseResult,
+    seasonScoreBefore: { yannick: 3, emma: 2 },
+    seasonScoreAfter: { yannick: 4, emma: 2 }
+  };
+  assert.equal(evaluateEmailRule({ rule: { condition: 'overtake_season' } }, alreadyAhead, 'winner'), false);
+
+  // 5. overtaken_season (loser)
+  assert.equal(evaluateEmailRule({ rule: { condition: 'overtaken_season' } }, baseResult, 'loser'), true);
+  assert.equal(evaluateEmailRule({ rule: { condition: 'overtaken_season' } }, alreadyAhead, 'loser'), false);
+
+  // 6. season_lead_gt (winner): 3 - 2 = 1 point lead
+  assert.equal(evaluateEmailRule({ rule: { condition: 'season_lead_gt', param: 0 } }, baseResult, 'winner'), true); // 1 > 0 -> true
+  assert.equal(evaluateEmailRule({ rule: { condition: 'season_lead_gt', param: 1 } }, baseResult, 'winner'), false); // 1 > 1 -> false
+
+  const bigLead = {
+    ...baseResult,
+    seasonScoreAfter: { yannick: 5, emma: 2 } // 3 point lead
+  };
+  assert.equal(evaluateEmailRule({ rule: { condition: 'season_lead_gt', param: 2 } }, bigLead, 'winner'), true); // 3 > 2 -> true
+  assert.equal(evaluateEmailRule({ rule: { condition: 'season_lead_gt', param: 3 } }, bigLead, 'winner'), false); // 3 > 3 -> false
+
+  // 7. season_trail_gt (loser)
+  assert.equal(evaluateEmailRule({ rule: { condition: 'season_trail_gt', param: 2 } }, bigLead, 'loser'), true);
+  assert.equal(evaluateEmailRule({ rule: { condition: 'season_trail_gt', param: 3 } }, bigLead, 'loser'), false);
+
+  // 8. tiebreaker
+  assert.equal(evaluateEmailRule({ rule: { condition: 'tiebreaker' } }, baseResult, 'winner'), false);
+  const tiebreakerResult = { ...baseResult, winningMethod: 'activity_time_tiebreaker' };
+  assert.equal(evaluateEmailRule({ rule: { condition: 'tiebreaker' } }, tiebreakerResult, 'winner'), true);
+  assert.equal(evaluateEmailRule({ rule: { condition: 'tiebreaker' } }, tiebreakerResult, 'loser'), true);
+});
+
+test('renderWeeklyEmails prioritizes matching rule-based templates and falls back to standard pool', () => {
+  const pool = {
+    'win-default': {
+      id: 'win-default',
+      type: 'win',
+      name: 'Default Win',
+      subject: 'Standard Win',
+      body: 'Standard Body',
+      active: true,
+      rule: { condition: 'none' }
+    },
+    'win-crush': {
+      id: 'win-crush',
+      type: 'win',
+      name: 'Crush Victory',
+      subject: 'Crushed It {{winner}}!',
+      body: 'You won by more than 2!',
+      active: true,
+      rule: { condition: 'margin_gt', param: 2 }
+    },
+    'win-overtake': {
+      id: 'win-overtake',
+      type: 'win',
+      name: 'Overtake Victory',
+      subject: 'You took the lead in the season!',
+      body: 'Overtook {{loser}}!',
+      active: true,
+      rule: { condition: 'overtake_season' }
+    },
+    'loss-default': {
+      id: 'loss-default',
+      type: 'loss',
+      name: 'Default Loss',
+      subject: 'Standard Loss',
+      body: 'Standard Body',
+      active: true,
+      rule: { condition: 'none' }
+    },
+    'loss-crush': {
+      id: 'loss-crush',
+      type: 'loss',
+      name: 'Crushed Defeat',
+      subject: 'Rough beating {{loser}}',
+      body: 'Lost by more than 2',
+      active: true,
+      rule: { condition: 'margin_gt', param: 2 }
+    }
+  };
+
+  // Case A: Margin is 3 (> 2) -> win-crush and loss-crush match and are prioritized!
+  const crushResult = {
+    winner: 'yannick',
+    winningMethod: 'activity_count',
+    yannick: { qualifyingActivities: 6, qualifyingActivityTime: 7200 },
+    emma: { qualifyingActivities: 3, qualifyingActivityTime: 4000 },
+    seasonScoreBefore: { yannick: 3, emma: 2 },
+    seasonScoreAfter: { yannick: 4, emma: 2 }
+  };
+
+  const crushEmails = renderWeeklyEmails(crushResult, { emailPool: pool });
+  assert.equal(crushEmails.yannick.templateId, 'win-crush');
+  assert.match(crushEmails.yannick.subject, /Crushed It Yannick!/);
+  assert.equal(crushEmails.emma.templateId, 'loss-crush');
+  assert.match(crushEmails.emma.subject, /Rough beating Emma/);
+
+  // Case B: Margin is 1 (<= 2) and did not overtake -> rules don't match -> falls back to default templates
+  const closeResult = {
+    winner: 'yannick',
+    winningMethod: 'activity_count',
+    yannick: { qualifyingActivities: 5, qualifyingActivityTime: 6000 },
+    emma: { qualifyingActivities: 4, qualifyingActivityTime: 5000 },
+    seasonScoreBefore: { yannick: 3, emma: 2 },
+    seasonScoreAfter: { yannick: 4, emma: 2 }
+  };
+
+  const closeEmails = renderWeeklyEmails(closeResult, { emailPool: pool });
+  assert.equal(closeEmails.yannick.templateId, 'win-default');
+  assert.equal(closeEmails.emma.templateId, 'loss-default');
+
+  // Case C: Margin is 1 (<= 2) but Yannick overtook Emma (was tied 2-2, now 3-2) -> win-overtake matches!
+  const overtakeResult = {
+    winner: 'yannick',
+    winningMethod: 'activity_count',
+    yannick: { qualifyingActivities: 5, qualifyingActivityTime: 6000 },
+    emma: { qualifyingActivities: 4, qualifyingActivityTime: 5000 },
+    seasonScoreBefore: { yannick: 2, emma: 2 },
+    seasonScoreAfter: { yannick: 3, emma: 2 }
+  };
+
+  const overtakeEmails = renderWeeklyEmails(overtakeResult, { emailPool: pool });
+  assert.equal(overtakeEmails.yannick.templateId, 'win-overtake');
+  assert.match(overtakeEmails.yannick.subject, /You took the lead in the season!/);
+  // Emma has no overtake-loss rule template configured, so she cleanly falls back to loss-default
+  assert.equal(overtakeEmails.emma.templateId, 'loss-default');
+});
+
 test('service finalizeWeek chooses email template and saves provisional.emailTemplates', async () => {
   const activities = [
     { id: 'act-1', name: 'Morning Run', sport_type: 'Run', start_date: '2026-09-08T10:00:00Z', distance: 5000, moving_time: 1800, elapsed_time: 1800 }
@@ -469,13 +625,16 @@ test('admin API routes for challenge emails and aliases', async () => {
         type: 'win',
         name: 'New Custom Win',
         subject: 'Incredible job {{winner}}',
-        body: 'You scored {{score}} to take the point.'
+        body: 'You scored {{score}} to take the point.',
+        rule: { condition: 'margin_gt', param: 2 }
       }
     });
     assert.equal(createRes.status, 201);
     assert.equal(createRes.body.ok, true);
     assert.ok(createRes.body.email.id);
     assert.equal(createRes.body.email.name, 'New Custom Win');
+    assert.equal(createRes.body.email.rule.condition, 'margin_gt');
+    assert.equal(createRes.body.email.rule.param, 2);
     const createdId = createRes.body.email.id;
 
     // 4. GET /api/admin/strava-challenge/emails/:id
@@ -483,6 +642,8 @@ test('admin API routes for challenge emails and aliases', async () => {
     assert.equal(getRes.status, 200);
     assert.equal(getRes.body.ok, true);
     assert.equal(getRes.body.email.id, createdId);
+    assert.equal(getRes.body.email.rule.condition, 'margin_gt');
+    assert.equal(getRes.body.email.rule.param, 2);
 
     const notFoundRes = await apiReq('GET', '/api/admin/strava-challenge/emails/non-existent-id');
     assert.equal(notFoundRes.status, 404);
@@ -494,12 +655,14 @@ test('admin API routes for challenge emails and aliases', async () => {
         name: 'Updated Win Name',
         subject: 'Updated Subject',
         body: 'Updated Body',
-        active: true
+        active: true,
+        rule: { condition: 'overtake_season', param: null }
       }
     });
     assert.equal(putRes.status, 200);
     assert.equal(putRes.body.ok, true);
     assert.equal(putRes.body.email.name, 'Updated Win Name');
+    assert.equal(putRes.body.email.rule.condition, 'overtake_season');
 
     // 6. DELETE /api/admin/strava-challenge/emails/:id
     const delRes = await apiReq('DELETE', `/api/admin/strava-challenge/emails/${createdId}`);
