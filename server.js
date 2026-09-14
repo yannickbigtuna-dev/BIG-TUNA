@@ -2437,6 +2437,24 @@ async function handleAPI(req, res, urlPath) {
     catch (error) { return challengeAccountsError(res, error); }
   }
 
+  if (urlPath === '/api/challenge-notifications/test' && req.method === 'POST') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    try { return jsonRes(res, 200, await challengeAccounts.sendTestNotification(user)); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
+  if (urlPath === '/api/challenge-notifications/status' && req.method === 'GET') {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    try { return jsonRes(res, 200, await challengeAccounts.getNotificationStatus(user)); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
   if (urlPath === '/api/challenge-review-inbox' && req.method === 'GET') {
     setSensitiveResponseHeaders(res);
     const user = challengeAccountsUser(req, res);
