@@ -1,4 +1,54 @@
-# Active Extension — CHALLENGERS refresh, teams, and configurable widgets (2026-09-13)
+# Active Plan — Yannick vs Emma Challenge Win / Loss Email Pool & Admin Editor (2026-09-14)
+
+## Goal and mode
+
+STANDARD feature. Add an email management feature to the admin panel in the emails
+section to edit the current win and loss emails for the Yannick vs Emma Strava
+challenge and create new ones that get added to a pot of emails randomly sent each
+week depending on whether a user won or lost.
+
+## Scope and constraints
+
+- Add a persisted `emailPool` in the Strava challenge store (`data/strava-challenge/state.json`)
+  seeded with the current default win and loss templates, as well as tiebreaker defaults.
+- Email templates in the pot have `id`, `type` (`win`, `loss`, `tiebreaker_win`, `tiebreaker_loss`),
+  `name`, `subject`, `body`, `active` (boolean), `createdAt`, `updatedAt`.
+- Support rich placeholder substitution for `{{score}}`, `{{winner}}`, `{{loser}}`,
+  `{{margin}}`, `{{winner_time}}`, `{{loser_time}}`, `{{season_score}}` in both subject and body.
+- When weekly results are finalized (`finalizeWeek`), an active email template is randomly
+  selected from the pool for the winner and loser, and the chosen template IDs are recorded
+  on the finalized week snapshot.
+- Add owner-authenticated API endpoints under `/api/admin/strava-challenge/emails` and
+  aliased under `/api/admin/email/challenge-emails`:
+  - `GET /api/admin/strava-challenge/emails`
+  - `POST /api/admin/strava-challenge/emails`
+  - `GET /api/admin/strava-challenge/emails/:id`
+  - `PUT /api/admin/strava-challenge/emails/:id`
+  - `DELETE /api/admin/strava-challenge/emails/:id` (protects the last remaining active win/loss template)
+- In the Admin Panel (`apps/admin/index.html`):
+  - In the Emails section (`#view-templates`), introduce sub-navigation tabs:
+    `Campaign Templates` and `Yannick vs Emma Challenge`.
+  - Display the Challenge Email Pot as a card grid with type badges, subject, excerpt with
+    variable chips, real rendered preview, and actions: Edit, Duplicate, Toggle Active, Delete.
+  - Interactive slide-over editor with live preview (switchable between Yannick red and Emma blue),
+    field editing, and quick placeholder insert chips.
+  - In Strava Challenge operational controls, add quick link to the email pot and support
+    previewing specific templates from the pot.
+- Retain all untracked files (`artifacts/`, `backups/`) and existing live data untouched.
+
+## Progress
+
+- [x] Write pre-code implementation spec and prepare disjoint work packages
+- [x] Implement backend domain, store, and service email pool logic
+- [x] Implement admin API routes in server.js
+- [x] Implement frontend admin panel UI in apps/admin/index.html
+- [x] Write unit and integration tests
+- [x] Validate implementation and run test suite
+- [x] Update CODEX_CONTEXT.md and docs
+
+---
+
+# Previous Completed Plan — CHALLENGERS refresh, teams, and configurable widgets (2026-09-13)
 
 ## Goal and mode
 

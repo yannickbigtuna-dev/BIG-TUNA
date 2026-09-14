@@ -1104,12 +1104,13 @@ function challengeError(res, error, fallback = 'Challenge request could not be c
     self_approval_forbidden: 403, review_decided: 409, invalid_decision: 400,
     forbidden: 403,
     missing_scope: 422, oauth_denied: 422, unconfigured: 503,
+    invalid_template: 400, minimum_templates_required: 400, cannot_delete_last_template: 400,
   }[code];
   const safeStatus = [400, 401, 403, 404, 409, 422, 429, 503].includes(status)
     ? status
     : (codeStatus || 500);
   if (safeStatus >= 500) stravaChallengeLogger.error(fallback, error && error.message);
-  return jsonRes(res, safeStatus, { error: safeStatus >= 500 ? fallback : 'Challenge request was rejected' });
+  return jsonRes(res, safeStatus, { error: safeStatus >= 500 ? fallback : (error && error.message || 'Challenge request was rejected') });
 }
 
 // The existing Strava service owns encrypted credentials. This adapter exposes
@@ -2708,17 +2709,21 @@ async function handleAPI(req, res, urlPath) {
   }
 
   // ── Yannick-only Strava Challenge setup and operations ──────────────────
-  if (urlPath.startsWith('/api/admin/strava-challenge/')) {
+  if (urlPath.startsWith('/api/admin/strava-challenge/') || urlPath === '/api/admin/email/challenge-emails' || urlPath.startsWith('/api/admin/email/challenge-emails/')) {
     if (!challengeAdminUser(req, res)) return;
     const service = challengeServiceOrUnavailable(res);
     if (!service) return;
 
-    if (req.method === 'GET' && urlPath === '/api/admin/strava-challenge/status') {
+    const effectivePath = urlPath.startsWith('/api/admin/email/challenge-emails')
+      ? urlPath.replace(/^\/api\/admin\/email\/challenge-emails/, '/api/admin/strava-challenge/emails')
+      : urlPath;
+
+    if (req.method === 'GET' && effectivePath === '/api/admin/strava-challenge/status') {
       try { return jsonRes(res, 200, await service.getAdminStatus()); }
       catch (error) { return challengeError(res, error, 'Challenge status is temporarily unavailable'); }
     }
 
-    if (req.method === 'PUT' && urlPath === '/api/admin/strava-challenge/config') {
+    if (req.method === 'PUT' && effectivePath === '/api/admin/strava-challenge/config') {
       const body = await parseBody(req);
       const config = {};
       if (body && typeof body === 'object' && !Array.isArray(body)) {
@@ -2732,7 +2737,7 @@ async function handleAPI(req, res, urlPath) {
       catch (error) { return challengeError(res, error, 'Challenge configuration was not saved'); }
     }
 
-    const inviteMatch = urlPath.match(/^\/api\/admin\/strava-challenge\/invites\/(yannick|emma)\/(send|generate)$/);
+    const inviteMatch = effectivePath.match(/^\/api\/admin\/strava-challenge\/invites\/(yannick|emma)\/(send|generate)$/);
     if (req.method === 'POST' && inviteMatch) {
       setSensitiveResponseHeaders(res);
       try {
@@ -2746,7 +2751,7 @@ async function handleAPI(req, res, urlPath) {
       } catch (error) { return challengeError(res, error, 'Challenge invitation could not be issued'); }
     }
 
-    const testInviteMatch = urlPath.match(/^\/api\/admin\/strava-challenge\/invites\/(yannick|emma)\/test-link$/);
+    const testInviteMatch = effectivePath.match(/^\/api\/admin\/strava-challenge\/invites\/(yannick|emma)\/test-link$/);
     if (req.method === 'POST' && testInviteMatch) {
       setSensitiveResponseHeaders(res);
       try {
@@ -2756,7 +2761,7 @@ async function handleAPI(req, res, urlPath) {
       } catch (error) { return challengeError(res, error, 'Challenge test invitation could not be issued'); }
     }
 
-    const syncMatch = urlPath.match(/^\/api\/admin\/strava-challenge\/sync\/(yannick|emma|all)$/);
+    const syncMatch = effectivePath.match(/^\/api\/admin\/strava-challenge\/sync\/(yannick|emma|all)$/);
     if (req.method === 'POST' && syncMatch) {
       try {
         const result = syncMatch[1] === 'all' ? await service.syncAll() : await service.syncParticipant(syncMatch[1]);
@@ -2764,13 +2769,13 @@ async function handleAPI(req, res, urlPath) {
       } catch (error) { return challengeError(res, error, 'Challenge synchronization could not be completed'); }
     }
 
-    if (req.method === 'GET' && urlPath === '/api/admin/strava-challenge/finalization-preview') {
+    if (req.method === 'GET' && effectivePath === '/api/admin/strava-challenge/finalization-preview') {
       const week = boundedString(new URL(req.url, 'http://localhost').searchParams.get('week'), 10);
       try { return jsonRes(res, 200, await service.previewFinalization(week || undefined)); }
       catch (error) { return challengeError(res, error, 'Challenge finalization preview is unavailable'); }
     }
 
-    if (req.method === 'POST' && urlPath === '/api/admin/strava-challenge/finalize') {
+    if (req.method === 'POST' && effectivePath === '/api/admin/strava-challenge/finalize') {
       const body = await parseBody(req);
       const weekStart = boundedString(body && body.weekStart, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !body || body.confirm !== `FINALIZE ${weekStart}`) return jsonRes(res, 400, { error: 'Confirmation must match the selected week' });
@@ -2778,19 +2783,67 @@ async function handleAPI(req, res, urlPath) {
       catch (error) { return challengeError(res, error, 'Challenge week could not be finalized'); }
     }
 
-    if (req.method === 'POST' && urlPath === '/api/admin/strava-challenge/reset-for-season-start') {
+    if (req.method === 'POST' && effectivePath === '/api/admin/strava-challenge/reset-for-season-start') {
       const body = await parseBody(req);
       if (!body || body.confirm !== 'RESET STRAVA CHALLENGE') return jsonRes(res, 400, { error: 'Confirmation must match RESET STRAVA CHALLENGE' });
       try { return jsonRes(res, 200, await service.resetForSeasonStart({ confirm: body.confirm })); }
       catch (error) { return challengeError(res, error, 'Challenge reset could not be completed'); }
     }
 
-    if (req.method === 'GET' && urlPath === '/api/admin/strava-challenge/email-preview') {
+    if (req.method === 'GET' && (effectivePath === '/api/admin/strava-challenge/emails' || effectivePath === '/api/admin/strava-challenge/emails/')) {
+      try { return jsonRes(res, 200, { ok: true, emails: await service.listChallengeEmails() }); }
+      catch (error) { return challengeError(res, error, 'Challenge email templates are unavailable'); }
+    }
+
+    if (req.method === 'POST' && (effectivePath === '/api/admin/strava-challenge/emails' || effectivePath === '/api/admin/strava-challenge/emails/')) {
+      const body = await parseBody(req);
+      try {
+        const email = await service.saveChallengeEmail(body);
+        return jsonRes(res, 201, { ok: true, email });
+      } catch (error) {
+        return challengeError(res, error, 'Challenge email template could not be saved');
+      }
+    }
+
+    const challengeEmailItemMatch = effectivePath.match(/^\/api\/admin\/strava-challenge\/emails\/([A-Za-z0-9_-]{1,64})$/);
+    if (challengeEmailItemMatch) {
+      const id = challengeEmailItemMatch[1];
+      if (req.method === 'GET') {
+        try {
+          const email = await service.getChallengeEmail(id);
+          if (!email) return jsonRes(res, 404, { error: 'Email template not found' });
+          return jsonRes(res, 200, { ok: true, email });
+        } catch (error) {
+          return challengeError(res, error, 'Challenge email template is unavailable');
+        }
+      }
+      if (req.method === 'PUT') {
+        const body = await parseBody(req);
+        try {
+          const email = await service.saveChallengeEmail({ ...(body || {}), id });
+          return jsonRes(res, 200, { ok: true, email });
+        } catch (error) {
+          return challengeError(res, error, 'Challenge email template could not be saved');
+        }
+      }
+      if (req.method === 'DELETE') {
+        try {
+          await service.deleteChallengeEmail(id);
+          return jsonRes(res, 200, { ok: true });
+        } catch (error) {
+          return challengeError(res, error, 'Challenge email template could not be deleted');
+        }
+      }
+    }
+
+    if (req.method === 'GET' && effectivePath === '/api/admin/strava-challenge/email-preview') {
       const params = new URL(req.url, 'http://localhost').searchParams;
       const type = boundedString(params.get('type'), 64);
       const participant = boundedString(params.get('participant'), 16);
-      if (!type || !['yannick', 'emma'].includes(participant)) return jsonRes(res, 400, { error: 'A valid email type and participant are required' });
-      try { return jsonRes(res, 200, await service.previewEmail({ type, participantId: participant })); }
+      const templateId = boundedString(params.get('templateId'), 64);
+      if (!type && !templateId) return jsonRes(res, 400, { error: 'A valid email type or template ID is required' });
+      if (!['yannick', 'emma'].includes(participant)) return jsonRes(res, 400, { error: 'A valid participant is required' });
+      try { return jsonRes(res, 200, await service.previewEmail({ type, participantId: participant, templateId })); }
       catch (error) { return challengeError(res, error, 'Challenge email preview is unavailable'); }
     }
 

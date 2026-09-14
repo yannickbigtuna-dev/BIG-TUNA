@@ -231,6 +231,8 @@
   .chip:hover { color: var(--text); }
   .chip.active { background: var(--accent); color: var(--on-accent); border-color: transparent; }
   .chip.small { cursor: default; padding: 3px 9px; font-size: 0.68rem; background: var(--surface-3); color: var(--text-muted); }
+  #challenge-var-chips .chip { cursor: pointer; }
+  #challenge-var-chips .chip:hover { background: var(--surface-3); color: var(--text); border-color: var(--accent); }
 
   .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
   .template-card {
@@ -456,15 +458,46 @@
       <!-- ── EMAIL TEMPLATES ──────────────────────────────────────── -->
       <section id="view-templates" class="view-section hidden">
         <h1 class="page-title">Email Templates</h1>
-        <div class="page-sub">Reusable block layouts for campaigns — every preview below is the real rendered HTML, not a mockup.</div>
+        <div class="page-sub">Reusable block layouts for campaigns and automated weekly Strava Challenge win/loss emails.</div>
 
-        <div class="templates-toolbar">
-          <div class="chip-row" id="template-category-filter"></div>
-          <button type="button" class="btn btn-primary" id="new-template-btn">+ New Template</button>
+        <div class="subnav-tabs" style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:12px">
+          <button type="button" class="chip active" id="subtab-campaign-templates" data-subtab="campaigns">Campaign Templates</button>
+          <button type="button" class="chip" id="subtab-challenge-emails" data-subtab="challenge">Yannick vs Emma Challenge</button>
         </div>
 
-        <div class="template-grid" id="template-grid">
-          <div class="chart-empty">Loading…</div>
+        <div id="campaign-templates-panel">
+          <div class="templates-toolbar">
+            <div class="chip-row" id="template-category-filter"></div>
+            <button type="button" class="btn btn-primary" id="new-template-btn">+ New Template</button>
+          </div>
+
+          <div class="template-grid" id="template-grid">
+            <div class="chart-empty">Loading…</div>
+          </div>
+        </div>
+
+        <div id="challenge-emails-panel" class="hidden">
+          <div style="margin-bottom:16px">
+            <h3 style="margin:0 0 4px;font-size:1.05rem">Weekly Win / Loss Email Pool</h3>
+            <p class="caption" style="margin:0">Random weekly win/loss email pot for the Yannick vs Emma Strava Challenge. When weekly results are finalized, an active template is selected at random for the winner and loser.</p>
+          </div>
+
+          <div class="templates-toolbar">
+            <div class="chip-row" id="challenge-email-filter">
+              <button type="button" class="chip active" data-filter="all">All</button>
+              <button type="button" class="chip" data-filter="win">Win Emails</button>
+              <button type="button" class="chip" data-filter="loss">Loss Emails</button>
+              <button type="button" class="chip" data-filter="tiebreaker">Tiebreakers</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" class="input" id="challenge-email-search" placeholder="Search challenge emails…" style="min-height:36px;padding:6px 12px;font-size:0.85rem">
+              <button type="button" class="btn btn-primary" id="new-challenge-email-btn">+ New Challenge Email</button>
+            </div>
+          </div>
+
+          <div class="template-grid" id="challenge-emails-grid">
+            <div class="chart-empty">Loading…</div>
+          </div>
         </div>
       </section>
 
@@ -540,9 +573,24 @@
         </section>
 
         <section class="card">
-          <div class="card-head"><h3>Safe email previews</h3></div>
+          <div class="card-head">
+            <h3>Safe email previews</h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="challenge-goto-email-pool">Manage Win/Loss Email Pool in Emails &rarr;</button>
+          </div>
           <div class="challenge-form-row">
-            <label>Email type<select id="challenge-email-type" class="input" aria-label="Email preview type"><option value="connection">Connection invitation</option><option value="winner">Winner</option><option value="loser">Loser</option><option value="tiebreaker">Tiebreaker</option><option value="true_tie">True tie</option></select></label>
+            <label>Email type
+              <select id="challenge-email-type" class="input" aria-label="Email preview type">
+                <optgroup label="Standard System Emails">
+                  <option value="connection">Connection invitation</option>
+                  <option value="winner">Winner</option>
+                  <option value="loser">Loser</option>
+                  <option value="tiebreaker">Tiebreaker</option>
+                  <option value="true_tie">True tie</option>
+                </optgroup>
+                <optgroup id="challenge-email-pot-options" label="Win/Loss Email Pool">
+                </optgroup>
+              </select>
+            </label>
             <label>Participant<select id="challenge-email-participant" class="input" aria-label="Email preview participant"><option value="yannick">Yannick</option><option value="emma">Emma</option></select></label>
             <button type="button" class="btn btn-ghost" id="challenge-preview-email">Preview email</button>
           </div>
@@ -853,6 +901,7 @@ async function loadChallengeStatus() {
     document.getElementById('challenge-participants').innerHTML = challengePersonCard(byId.yannick, 'yannick') + challengePersonCard(byId.emma, 'emma');
     bindChallengePersonActions();
     challengeLoaded = true;
+    if (!challengeEmailsLoaded) loadChallengeEmails();
   } catch (err) { challengeMessage('Challenge status is unavailable. Refresh to retry.', 'error'); handleApiError(err); }
 }
 document.getElementById('challenge-save-config').addEventListener('click', async () => {
@@ -883,10 +932,38 @@ document.getElementById('challenge-finalize').addEventListener('click', async ()
   try { await api(`${challengeApiBase}/finalize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart, confirm: confirmValue }) }); challengeMessage('Week finalized. This official result will not be duplicated.', 'success'); await loadChallengeStatus(); }
   catch (err) { challengeMessage('The week was not finalized. Review the preview and readiness.', 'error'); handleApiError(err); }
 });
+document.getElementById('challenge-goto-email-pool').addEventListener('click', () => {
+  showView('templates');
+  switchTemplatesSubtab('challenge');
+});
 document.getElementById('challenge-preview-email').addEventListener('click', async () => {
   const type = document.getElementById('challenge-email-type').value;
   const participant = document.getElementById('challenge-email-participant').value;
-  try { const result = await api(`${challengeApiBase}/email-preview?type=${encodeURIComponent(type)}&participant=${encodeURIComponent(participant)}`); document.getElementById('challenge-email-preview').textContent = result.text || result.html || JSON.stringify(result, null, 2); challengeMessage('Email preview loaded. Nothing was sent.', 'success'); }
+  try {
+    if (type && type.startsWith('template:')) {
+      const templateId = type.slice('template:'.length);
+      try {
+        const result = await api(`${challengeApiBase}/email-preview?templateId=${encodeURIComponent(templateId)}&type=${encodeURIComponent(type)}&participant=${encodeURIComponent(participant)}`);
+        document.getElementById('challenge-email-preview').textContent = result.text || result.html || JSON.stringify(result, null, 2);
+        challengeMessage('Email preview loaded from pool. Nothing was sent.', 'success');
+        return;
+      } catch (_) {
+        const tmpl = allChallengeEmails.find(x => x.id === templateId);
+        if (tmpl) {
+          const subject = resolveChallengePlaceholders(tmpl.subject, tmpl.type, participant);
+          const body = resolveChallengePlaceholders(tmpl.body, tmpl.type, participant);
+          const vars = getSampleChallengeVars(tmpl.type, participant);
+          const previewText = `Subject: ${subject}\n\n${body}\n\nSeason score: ${vars['{{season_score}}']}.\n\nView the week’s result`;
+          document.getElementById('challenge-email-preview').textContent = previewText;
+          challengeMessage('Email preview loaded from pool. Nothing was sent.', 'success');
+          return;
+        }
+      }
+    }
+    const result = await api(`${challengeApiBase}/email-preview?type=${encodeURIComponent(type)}&participant=${encodeURIComponent(participant)}`);
+    document.getElementById('challenge-email-preview').textContent = result.text || result.html || JSON.stringify(result, null, 2);
+    challengeMessage('Email preview loaded. Nothing was sent.', 'success');
+  }
   catch (err) { challengeMessage('The email preview could not be loaded.', 'error'); handleApiError(err); }
 });
 document.getElementById('challenge-reset').addEventListener('click', async () => {
@@ -1243,6 +1320,511 @@ async function duplicateTemplate(t) {
   }
 }
 
+/* ── Yannick vs Emma Challenge Email Pool & Editor ──────────────── */
+let allChallengeEmails = [];
+let challengeEmailsLoaded = false;
+let activeChallengeEmailFilter = 'all';
+let challengeEmailSearchQuery = '';
+let challengeEditorState = null;
+
+function switchTemplatesSubtab(subtab) {
+  const isChallenge = subtab === 'challenge';
+  const campTab = document.getElementById('subtab-campaign-templates');
+  const chalTab = document.getElementById('subtab-challenge-emails');
+  const campPanel = document.getElementById('campaign-templates-panel');
+  const chalPanel = document.getElementById('challenge-emails-panel');
+  if (campTab) campTab.classList.toggle('active', !isChallenge);
+  if (chalTab) chalTab.classList.toggle('active', isChallenge);
+  if (campPanel) campPanel.classList.toggle('hidden', isChallenge);
+  if (chalPanel) chalPanel.classList.toggle('hidden', !isChallenge);
+  if (isChallenge && !challengeEmailsLoaded) {
+    loadChallengeEmails();
+  }
+}
+
+document.getElementById('subtab-campaign-templates').addEventListener('click', () => switchTemplatesSubtab('campaigns'));
+document.getElementById('subtab-challenge-emails').addEventListener('click', () => switchTemplatesSubtab('challenge'));
+
+function challengeTypeBadge(type) {
+  const t = String(type || '').toLowerCase();
+  if (t === 'win') {
+    return '<span class="status-pill" style="color:var(--success);background:rgba(34,197,94,0.14)">WIN</span>';
+  } else if (t === 'loss') {
+    return '<span class="status-pill" style="color:var(--danger);background:rgba(239,68,68,0.14)">LOSS</span>';
+  } else if (t === 'tiebreaker_win') {
+    return '<span class="status-pill" style="color:var(--series-3);background:rgba(144,133,233,0.14)">TIEBREAKER (WIN)</span>';
+  } else if (t === 'tiebreaker_loss') {
+    return '<span class="status-pill" style="color:var(--series-3);background:rgba(144,133,233,0.14)">TIEBREAKER (LOSS)</span>';
+  } else if (t.includes('tiebreaker')) {
+    return '<span class="status-pill" style="color:var(--series-3);background:rgba(144,133,233,0.14)">TIEBREAKER</span>';
+  }
+  return `<span class="status-pill">${esc((type || '').toUpperCase())}</span>`;
+}
+
+function getSampleChallengeVars(type, athlete = 'yannick') {
+  const isYannick = athlete === 'yannick';
+  const t = String(type || '').toLowerCase();
+  const isLoss = t === 'loss' || t === 'tiebreaker_loss';
+
+  let winnerName, loserName, yScore, eScore;
+  if (!isLoss) {
+    winnerName = isYannick ? 'Yannick' : 'Emma';
+    loserName = isYannick ? 'Emma' : 'Yannick';
+    yScore = isYannick ? 6 : 4;
+    eScore = isYannick ? 4 : 6;
+  } else {
+    winnerName = isYannick ? 'Emma' : 'Yannick';
+    loserName = isYannick ? 'Yannick' : 'Emma';
+    yScore = isYannick ? 4 : 6;
+    eScore = isYannick ? 6 : 4;
+  }
+
+  const ySeason = isYannick ? (!isLoss ? 4 : 3) : (!isLoss ? 3 : 4);
+  const eSeason = isYannick ? (!isLoss ? 2 : 3) : (!isLoss ? 3 : 2);
+
+  return {
+    '{{score}}': `${yScore}–${eScore}`,
+    '{{winner}}': winnerName,
+    '{{loser}}': loserName,
+    '{{margin}}': '42m',
+    '{{winner_time}}': '3h 48m',
+    '{{loser_time}}': '3h 06m',
+    '{{season_score}}': `Yannick ${ySeason} — ${eSeason} Emma`,
+  };
+}
+
+function resolveChallengePlaceholders(text, type, athlete = 'yannick') {
+  if (!text) return '';
+  const vars = getSampleChallengeVars(type, athlete);
+  let resolved = String(text);
+  for (const [key, val] of Object.entries(vars)) {
+    resolved = resolved.replaceAll(key, val);
+  }
+  return resolved;
+}
+
+function formatBodyExcerpt(text) {
+  if (!text) return '<span style="color:var(--text-dim);font-style:italic">No body text</span>';
+  const plain = String(text);
+  const snippet = plain.length > 140 ? plain.slice(0, 140) + '…' : plain;
+  return esc(snippet).replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, '<span style="font-family:var(--font-mono);font-size:0.72rem;background:var(--surface-2);color:var(--accent);border:1px solid var(--border);border-radius:4px;padding:1px 5px;display:inline-block;margin:0 1px"><code>{{$1}}</code></span>');
+}
+
+function renderChallengeEmailHtml(template, athlete = 'yannick') {
+  if (!template) return '';
+  const isYannick = athlete === 'yannick';
+  const color = isYannick ? '#e53935' : '#3182ce';
+  const rawSubject = template.subject || template.name || 'Weekly Strava Challenge';
+  const safeSubject = esc(resolveChallengePlaceholders(rawSubject, template.type, athlete));
+
+  const resolvedBody = resolveChallengePlaceholders(template.body || '', template.type, athlete);
+  const paragraphs = resolvedBody.trim()
+    ? resolvedBody.split(/\n\n+/).map(p => `<p style="margin:0 0 14px;line-height:1.5">${esc(p).replace(/\n/g, '<br>')}</p>`).join('')
+    : '<p style="margin:0 0 14px;line-height:1.5;color:#64748b;font-style:italic">No body content</p>';
+
+  const vars = getSampleChallengeVars(template.type, athlete);
+  const seasonText = `Season score: ${vars['{{season_score}}']}.`;
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; padding: 16px 12px; background: #101319; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .email-card { max-width: 520px; margin: 0 auto; padding: 24px; background: #1b2230; border-top: 6px solid ${color}; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+  h1 { margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #fff; line-height: 1.3; }
+  .email-body { font-size: 14px; color: #e2e8f0; }
+  .season-score { margin: 18px 0 10px; font-size: 13px; color: #94a3b8; font-weight: 600; }
+  .result-link { margin: 0; }
+  .result-link a { color: #93c5fd; font-size: 13px; text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="email-card">
+    <h1>${safeSubject}</h1>
+    <div class="email-body">${paragraphs}</div>
+    <div class="season-score">${esc(seasonText)}</div>
+    <div class="result-link"><a href="#" onclick="return false">View the week’s result &rarr;</a></div>
+  </div>
+</body>
+</html>`;
+}
+
+async function loadChallengeEmails() {
+  challengeEmailsLoaded = true;
+  try {
+    allChallengeEmails = await api('/api/admin/strava-challenge/emails');
+    renderChallengeEmailGrid();
+    populateChallengeEmailTypeOptions();
+  } catch (err) {
+    handleApiError(err);
+    const wrap = document.getElementById('challenge-emails-grid');
+    if (wrap) wrap.innerHTML = '<div class="chart-empty">Could not load challenge emails.</div>';
+  }
+}
+
+function filteredChallengeEmails() {
+  let list = allChallengeEmails || [];
+  if (activeChallengeEmailFilter === 'win') {
+    list = list.filter(t => t.type === 'win');
+  } else if (activeChallengeEmailFilter === 'loss') {
+    list = list.filter(t => t.type === 'loss');
+  } else if (activeChallengeEmailFilter === 'tiebreaker') {
+    list = list.filter(t => t.type === 'tiebreaker_win' || t.type === 'tiebreaker_loss' || String(t.type || '').includes('tiebreaker'));
+  }
+  if (challengeEmailSearchQuery) {
+    const q = challengeEmailSearchQuery.toLowerCase();
+    list = list.filter(t =>
+      (t.name || '').toLowerCase().includes(q) ||
+      (t.subject || '').toLowerCase().includes(q) ||
+      (t.body || '').toLowerCase().includes(q)
+    );
+  }
+  return list;
+}
+
+function renderChallengeEmailGrid() {
+  const wrap = document.getElementById('challenge-emails-grid');
+  if (!wrap) return;
+  const list = filteredChallengeEmails();
+  if (!list.length) {
+    wrap.innerHTML = '<div class="chart-empty">No challenge emails found.</div>';
+    return;
+  }
+  wrap.innerHTML = list.map(t => `
+    <div class="template-card" data-id="${esc(t.id)}">
+      <div class="template-preview-frame" style="background:#101319;height:180px">
+        <iframe srcdoc="${esc(renderChallengeEmailHtml(t, 'yannick'))}" tabindex="-1"></iframe>
+      </div>
+      <div class="template-card-body">
+        <div class="template-card-head" style="margin-bottom:2px">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            ${challengeTypeBadge(t.type)}
+            ${t.active ? '<span class="status-pill" style="color:var(--success);background:rgba(34,197,94,0.14)">Active</span>' : '<span class="status-pill" style="color:var(--text-dim);background:var(--surface-3)">Inactive</span>'}
+          </div>
+        </div>
+        <strong style="font-size:0.98rem;color:var(--text);margin-top:2px">${esc(t.name)}</strong>
+        <div style="font-size:0.8rem;color:var(--text-muted);display:flex;gap:4px;align-items:baseline">
+          <span class="label" style="font-size:0.65rem;flex:none">Subject:</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.subject)}</span>
+        </div>
+        <div class="challenge-body-excerpt" style="font-size:0.8rem;color:var(--text-muted);line-height:1.45;margin:4px 0 8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
+          ${formatBodyExcerpt(t.body)}
+        </div>
+        <div class="template-card-actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-act="edit">Edit</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-act="duplicate">Duplicate</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-act="toggle">${t.active ? 'Disable' : 'Enable'}</button>
+          <button type="button" class="btn btn-ghost btn-sm danger" data-act="delete">Delete</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('.template-card').forEach(card => {
+    const t = allChallengeEmails.find(x => x.id === card.dataset.id);
+    if (!t) return;
+    card.querySelector('[data-act="edit"]').addEventListener('click', () => openChallengeEmailEditor(t));
+    card.querySelector('[data-act="duplicate"]').addEventListener('click', () => duplicateChallengeEmail(t));
+    card.querySelector('[data-act="toggle"]').addEventListener('click', () => toggleChallengeEmailActive(t));
+    card.querySelector('[data-act="delete"]').addEventListener('click', () => deleteChallengeEmail(t));
+  });
+}
+
+function populateChallengeEmailTypeOptions() {
+  const optgroup = document.getElementById('challenge-email-pot-options');
+  if (!optgroup) return;
+  if (!allChallengeEmails || !allChallengeEmails.length) {
+    optgroup.innerHTML = '<option disabled>(No templates in pool)</option>';
+    return;
+  }
+  optgroup.innerHTML = allChallengeEmails.map(t =>
+    `<option value="template:${esc(t.id)}">${esc(t.name)} (${String(t.type).toUpperCase()}${t.active ? '' : ' - inactive'})</option>`
+  ).join('');
+}
+
+document.querySelectorAll('#challenge-email-filter .chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeChallengeEmailFilter = btn.dataset.filter;
+    document.querySelectorAll('#challenge-email-filter .chip').forEach(b => {
+      b.classList.toggle('active', b.dataset.filter === activeChallengeEmailFilter);
+    });
+    renderChallengeEmailGrid();
+  });
+});
+
+document.getElementById('challenge-email-search').addEventListener('input', e => {
+  challengeEmailSearchQuery = e.target.value.trim();
+  renderChallengeEmailGrid();
+});
+
+document.getElementById('new-challenge-email-btn').addEventListener('click', () => openChallengeEmailEditor(null));
+
+async function deleteChallengeEmail(t) {
+  if (!confirm(`Delete challenge email template "${t.name}"? This cannot be undone.`)) return;
+  try {
+    await api(`/api/admin/strava-challenge/emails/${encodeURIComponent(t.id)}`, { method: 'DELETE' });
+    allChallengeEmails = allChallengeEmails.filter(x => x.id !== t.id);
+    renderChallengeEmailGrid();
+    populateChallengeEmailTypeOptions();
+  } catch (err) {
+    handleApiError(err);
+    alert(err.message || 'Could not delete template.');
+  }
+}
+
+async function duplicateChallengeEmail(t) {
+  try {
+    const copy = await api('/api/admin/strava-challenge/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: t.type,
+        name: `${t.name} (copy)`,
+        subject: t.subject,
+        active: t.active,
+        body: t.body,
+      }),
+    });
+    allChallengeEmails.push(copy);
+    renderChallengeEmailGrid();
+    populateChallengeEmailTypeOptions();
+  } catch (err) {
+    handleApiError(err);
+    alert(err.message || 'Could not duplicate template.');
+  }
+}
+
+async function toggleChallengeEmailActive(t) {
+  try {
+    const updated = await api(`/api/admin/strava-challenge/emails/${encodeURIComponent(t.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: t.type,
+        name: t.name,
+        subject: t.subject,
+        active: !t.active,
+        body: t.body,
+      }),
+    });
+    const idx = allChallengeEmails.findIndex(x => x.id === t.id);
+    if (idx >= 0) allChallengeEmails[idx] = updated;
+    renderChallengeEmailGrid();
+    populateChallengeEmailTypeOptions();
+  } catch (err) {
+    handleApiError(err);
+    alert(err.message || 'Could not update template status.');
+  }
+}
+
+/* ── Challenge Email Slide-Over Editor ───────────────────────────── */
+function openChallengeEmailEditor(template) {
+  editorState = null;
+  challengeEditorState = {
+    id: template ? template.id : null,
+    type: template ? (template.type || 'win') : 'win',
+    name: template ? (template.name || '') : '',
+    subject: template ? (template.subject || '') : '',
+    active: template ? Boolean(template.active) : true,
+    body: template ? (template.body || '') : '',
+    previewAthlete: 'yannick',
+  };
+
+  document.getElementById('editor-title').textContent = (template ? 'Edit ' : 'New ') + 'Challenge Email';
+  renderChallengeEditorBody();
+  document.getElementById('editor-overlay').classList.add('show');
+}
+
+function renderChallengeEditorBody() {
+  const s = challengeEditorState;
+  document.getElementById('editor-body').innerHTML = `
+    <div class="editor-columns" style="align-items:start">
+      <div class="editor-blocks-col" style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label class="label" for="challenge-editor-type">Type</label>
+          <select class="input" id="challenge-editor-type" style="max-width:none">
+            <option value="win"${s.type === 'win' ? ' selected' : ''}>Win Email</option>
+            <option value="loss"${s.type === 'loss' ? ' selected' : ''}>Loss Email</option>
+            <option value="tiebreaker_win"${s.type === 'tiebreaker_win' ? ' selected' : ''}>Tiebreaker Win</option>
+            <option value="tiebreaker_loss"${s.type === 'tiebreaker_loss' ? ' selected' : ''}>Tiebreaker Loss</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="label" for="challenge-editor-name">Template Name</label>
+          <input type="text" class="input" id="challenge-editor-name" value="${esc(s.name)}" placeholder="e.g. Standard Victory" style="max-width:none">
+        </div>
+
+        <div>
+          <label class="label" for="challenge-editor-subject">Subject Line</label>
+          <input type="text" class="input" id="challenge-editor-subject" value="${esc(s.subject)}" placeholder="e.g. You won this week’s Strava battle" style="max-width:none">
+        </div>
+
+        <div>
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;color:var(--text);margin:4px 0">
+            <input type="checkbox" id="challenge-editor-active" ${s.active ? 'checked' : ''}>
+            <span>Include in random weekly selection pool</span>
+          </label>
+        </div>
+
+        <div>
+          <label class="label" for="challenge-editor-body">Email Body</label>
+          <textarea class="input" id="challenge-editor-body" style="max-width:none;min-height:160px;resize:vertical;font-family:inherit;line-height:1.5" placeholder="Enter email copy. Use variables below…">${esc(s.body)}</textarea>
+        </div>
+
+        <div>
+          <div class="label" style="margin-bottom:6px">Insert variable:</div>
+          <div class="chip-row" id="challenge-var-chips">
+            <button type="button" class="chip small" data-var="{{score}}">{{score}}</button>
+            <button type="button" class="chip small" data-var="{{winner}}">{{winner}}</button>
+            <button type="button" class="chip small" data-var="{{loser}}">{{loser}}</button>
+            <button type="button" class="chip small" data-var="{{margin}}">{{margin}}</button>
+            <button type="button" class="chip small" data-var="{{winner_time}}">{{winner_time}}</button>
+            <button type="button" class="chip small" data-var="{{loser_time}}">{{loser_time}}</button>
+            <button type="button" class="chip small" data-var="{{season_score}}">{{season_score}}</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="editor-preview-col">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="label">Live Preview</div>
+          <div class="range-toggle" id="challenge-editor-athlete-toggle">
+            <button type="button" class="range-btn${s.previewAthlete === 'yannick' ? ' active' : ''}" data-athlete="yannick">Yannick (Red)</button>
+            <button type="button" class="range-btn${s.previewAthlete === 'emma' ? ' active' : ''}" data-athlete="emma">Emma (Blue)</button>
+          </div>
+        </div>
+        <div class="editor-preview-frame" style="background:#101319;height:520px">
+          <iframe id="challenge-editor-preview-iframe" tabindex="-1" style="width:100%;height:100%;border:0"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <div class="editor-footer">
+      <span id="challenge-editor-msg" class="caption" style="margin:0"></span>
+      <div class="editor-footer-actions">
+        <button type="button" class="btn btn-ghost" id="challenge-editor-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="challenge-editor-save-btn">Save</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('challenge-editor-type').addEventListener('change', e => {
+    challengeEditorState.type = e.target.value;
+    updateChallengeEditorPreview();
+  });
+  document.getElementById('challenge-editor-name').addEventListener('input', e => {
+    challengeEditorState.name = e.target.value;
+    updateChallengeEditorPreview();
+  });
+  document.getElementById('challenge-editor-subject').addEventListener('input', e => {
+    challengeEditorState.subject = e.target.value;
+    updateChallengeEditorPreview();
+  });
+  document.getElementById('challenge-editor-active').addEventListener('change', e => {
+    challengeEditorState.active = e.target.checked;
+  });
+  document.getElementById('challenge-editor-body').addEventListener('input', e => {
+    challengeEditorState.body = e.target.value;
+    updateChallengeEditorPreview();
+  });
+
+  document.querySelectorAll('#challenge-var-chips [data-var]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = btn.dataset.var;
+      const textarea = document.getElementById('challenge-editor-body');
+      if (!textarea) return;
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? textarea.value.length;
+      const text = textarea.value;
+      textarea.value = text.substring(0, start) + v + text.substring(end);
+      const nextPos = start + v.length;
+      textarea.setSelectionRange(nextPos, nextPos);
+      textarea.focus();
+      challengeEditorState.body = textarea.value;
+      updateChallengeEditorPreview();
+    });
+  });
+
+  document.querySelectorAll('#challenge-editor-athlete-toggle .range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      challengeEditorState.previewAthlete = btn.dataset.athlete;
+      document.querySelectorAll('#challenge-editor-athlete-toggle .range-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.athlete === challengeEditorState.previewAthlete);
+      });
+      updateChallengeEditorPreview();
+    });
+  });
+
+  document.getElementById('challenge-editor-cancel-btn').addEventListener('click', closeEditor);
+  document.getElementById('challenge-editor-save-btn').addEventListener('click', saveChallengeEditor);
+
+  updateChallengeEditorPreview();
+}
+
+function updateChallengeEditorPreview() {
+  const iframe = document.getElementById('challenge-editor-preview-iframe');
+  if (!iframe || !challengeEditorState) return;
+  iframe.srcdoc = renderChallengeEmailHtml(challengeEditorState, challengeEditorState.previewAthlete);
+}
+
+async function saveChallengeEditor() {
+  const msgEl = document.getElementById('challenge-editor-msg');
+  const saveBtn = document.getElementById('challenge-editor-save-btn');
+  msgEl.style.color = '';
+  msgEl.textContent = 'Saving…';
+  saveBtn.disabled = true;
+
+  const name = (challengeEditorState.name || '').trim();
+  const subject = (challengeEditorState.subject || '').trim();
+  if (!name) {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Template name is required.';
+    saveBtn.disabled = false;
+    return;
+  }
+  if (!subject) {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Subject line is required.';
+    saveBtn.disabled = false;
+    return;
+  }
+
+  const payload = {
+    type: challengeEditorState.type,
+    name,
+    subject,
+    active: Boolean(challengeEditorState.active),
+    body: challengeEditorState.body || '',
+  };
+
+  try {
+    const isNew = !challengeEditorState.id;
+    const path = isNew
+      ? '/api/admin/strava-challenge/emails'
+      : `/api/admin/strava-challenge/emails/${encodeURIComponent(challengeEditorState.id)}`;
+    const method = isNew ? 'POST' : 'PUT';
+    await api(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    msgEl.style.color = 'var(--success)';
+    msgEl.textContent = 'Saved.';
+    await loadChallengeEmails();
+    closeEditor();
+  } catch (err) {
+    handleApiError(err);
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = err.message || 'Save failed.';
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
 /* ── Campaign Manager ────────────────────────────────────────────── */
 let allCampaigns = [];
 
@@ -1402,6 +1984,7 @@ function openEditor(kind, entity) {
     status: entity && kind === 'campaign' ? (entity.status || 'draft') : 'draft',
     blocks: entity ? JSON.parse(JSON.stringify(entity.blocks || [])) : [],
   };
+  challengeEditorState = null;
   document.getElementById('editor-title').textContent = (entity ? 'Edit ' : 'New ') + (kind === 'template' ? 'Template' : 'Campaign');
   renderEditorBody();
   document.getElementById('editor-overlay').classList.add('show');
@@ -1410,6 +1993,7 @@ function openEditor(kind, entity) {
 function closeEditor() {
   document.getElementById('editor-overlay').classList.remove('show');
   editorState = null;
+  challengeEditorState = null;
 }
 document.getElementById('close-editor').addEventListener('click', closeEditor);
 document.getElementById('editor-overlay').addEventListener('click', e => { if (e.target.id === 'editor-overlay') closeEditor(); });

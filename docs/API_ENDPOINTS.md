@@ -302,7 +302,12 @@ refresh tokens, or invitation credentials in an app.
 | `GET /api/admin/strava-challenge/finalization-preview?week=` | Owner | Optional `YYYY-MM-DD` → finalization preview. |
 | `POST /api/admin/strava-challenge/finalize` | Owner | `{weekStart,confirm:"FINALIZE YYYY-MM-DD"}` → finalized result. |
 | `POST /api/admin/strava-challenge/reset-for-season-start` | Owner | `{confirm:"RESET STRAVA CHALLENGE"}` → reset result. |
-| `GET /api/admin/strava-challenge/email-preview?type=&participant=` | Owner | Valid email type and `yannick`/`emma` → sanitized message preview. |
+| `GET /api/admin/strava-challenge/email-preview?type=&participant=&templateId=` | Owner | Valid email type or templateId and `yannick`/`emma` → sanitized message preview. |
+| `GET /api/admin/strava-challenge/emails` | Owner | Returns `{ok:true,emails:[...]}` for the Yannick vs Emma challenge win/loss email pot. (Aliased at `/api/admin/email/challenge-emails`). |
+| `POST /api/admin/strava-challenge/emails` | Owner | Validated email template fields → `{ok:true,email}` created template. (Aliased at `/api/admin/email/challenge-emails`). |
+| `GET /api/admin/strava-challenge/emails/{id}` | Owner | Single email template by ID. (Aliased at `/api/admin/email/challenge-emails/{id}`). |
+| `PUT /api/admin/strava-challenge/emails/{id}` | Owner | Updated template fields → `{ok:true,email}`. (Aliased at `/api/admin/email/challenge-emails/{id}`). |
+| `DELETE /api/admin/strava-challenge/emails/{id}` | Owner | Deletes template from pot → `{ok:true}` (protects last active win/loss). (Aliased at `/api/admin/email/challenge-emails/{id}`). |
 
 ## Apple app release catalogue
 
