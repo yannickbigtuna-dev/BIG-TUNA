@@ -319,6 +319,51 @@ test('renderWeeklyEmails selects active templates from pool, handles tiebreaker,
   assert.match(defaultEmails.emma.text, /Yannick took this one 6–4/);
 });
 
+test('win and loss emails have equal random chance of selection among active templates', () => {
+  const pool = {
+    'win-1': { id: 'win-1', type: 'win', name: 'Win 1', subject: 'W1', body: 'B1', active: true },
+    'win-2': { id: 'win-2', type: 'win', name: 'Win 2', subject: 'W2', body: 'B2', active: true },
+    'win-3': { id: 'win-3', type: 'win', name: 'Win 3', subject: 'W3', body: 'B3', active: true },
+    'win-inactive': { id: 'win-inactive', type: 'win', name: 'Win Inactive', subject: 'WInact', body: 'BInact', active: false },
+    'loss-1': { id: 'loss-1', type: 'loss', name: 'Loss 1', subject: 'L1', body: 'B1', active: true },
+    'loss-2': { id: 'loss-2', type: 'loss', name: 'Loss 2', subject: 'L2', body: 'B2', active: true },
+    'loss-inactive': { id: 'loss-inactive', type: 'loss', name: 'Loss Inactive', subject: 'LInact', body: 'BInact', active: false }
+  };
+
+  const resultWin = {
+    winner: 'yannick',
+    winningMethod: 'activity_count',
+    yannick: { qualifyingActivities: 5, qualifyingActivityTime: 3600 },
+    emma: { qualifyingActivities: 3, qualifyingActivityTime: 2400 },
+    seasonScoreAfter: { yannick: 4, emma: 1 }
+  };
+
+  const counts = {
+    'win-1': 0, 'win-2': 0, 'win-3': 0, 'win-inactive': 0,
+    'loss-1': 0, 'loss-2': 0, 'loss-inactive': 0
+  };
+
+  const iterations = 6000;
+  for (let i = 0; i < iterations; i++) {
+    const emails = renderWeeklyEmails(resultWin, { emailPool: pool });
+    if (counts[emails.yannick.templateId] !== undefined) counts[emails.yannick.templateId]++;
+    if (counts[emails.emma.templateId] !== undefined) counts[emails.emma.templateId]++;
+  }
+
+  // Inactive templates must never be selected
+  assert.equal(counts['win-inactive'], 0, 'Inactive win template should receive 0 selections');
+  assert.equal(counts['loss-inactive'], 0, 'Inactive loss template should receive 0 selections');
+
+  // Win templates: 3 candidates, expected ~2,000 each (33.3%). Allow ±15% tolerance.
+  assert.ok(counts['win-1'] > 1700 && counts['win-1'] < 2300, `win-1 count (${counts['win-1']}) should be near 2000`);
+  assert.ok(counts['win-2'] > 1700 && counts['win-2'] < 2300, `win-2 count (${counts['win-2']}) should be near 2000`);
+  assert.ok(counts['win-3'] > 1700 && counts['win-3'] < 2300, `win-3 count (${counts['win-3']}) should be near 2000`);
+
+  // Loss templates: 2 candidates, expected ~3,000 each (50.0%). Allow ±10% tolerance.
+  assert.ok(counts['loss-1'] > 2700 && counts['loss-1'] < 3300, `loss-1 count (${counts['loss-1']}) should be near 3000`);
+  assert.ok(counts['loss-2'] > 2700 && counts['loss-2'] < 3300, `loss-2 count (${counts['loss-2']}) should be near 3000`);
+});
+
 test('service finalizeWeek chooses email template and saves provisional.emailTemplates', async () => {
   const activities = [
     { id: 'act-1', name: 'Morning Run', sport_type: 'Run', start_date: '2026-09-08T10:00:00Z', distance: 5000, moving_time: 1800, elapsed_time: 1800 }

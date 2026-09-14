@@ -355,6 +355,7 @@
         <button class="nav-item" data-view="users">Users</button>
         <button class="nav-item" data-view="templates">Email Templates</button>
         <button class="nav-item" data-view="campaigns">Campaigns</button>
+        <button class="nav-item" data-view="challenge-emails">Challenge Emails</button>
         <button class="nav-item" data-view="challenge">Strava Challenge</button>
       </nav>
     </aside>
@@ -460,9 +461,9 @@
         <h1 class="page-title">Email Templates</h1>
         <div class="page-sub">Reusable block layouts for campaigns and automated weekly Strava Challenge win/loss emails.</div>
 
-        <div class="subnav-tabs" style="display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:12px">
-          <button type="button" class="chip active" id="subtab-campaign-templates" data-subtab="campaigns">Campaign Templates</button>
-          <button type="button" class="chip" id="subtab-challenge-emails" data-subtab="challenge">Yannick vs Emma Challenge</button>
+        <div class="subnav-tabs" style="display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:12px">
+          <button type="button" class="chip active" id="subtab-campaign-templates" data-subtab="campaigns" style="font-size:0.84rem;padding:7px 16px">Campaign Templates</button>
+          <button type="button" class="chip" id="subtab-challenge-emails" data-subtab="challenge" style="font-size:0.84rem;padding:7px 16px">Yannick vs Emma Challenge (Win / Loss Emails)</button>
         </div>
 
         <div id="campaign-templates-panel">
@@ -477,10 +478,7 @@
         </div>
 
         <div id="challenge-emails-panel" class="hidden">
-          <div style="margin-bottom:16px">
-            <h3 style="margin:0 0 4px;font-size:1.05rem">Weekly Win / Loss Email Pool</h3>
-            <p class="caption" style="margin:0">Random weekly win/loss email pot for the Yannick vs Emma Strava Challenge. When weekly results are finalized, an active template is selected at random for the winner and loser.</p>
-          </div>
+          <div id="challenge-emails-summary"></div>
 
           <div class="templates-toolbar">
             <div class="chip-row" id="challenge-email-filter">
@@ -763,11 +761,22 @@ let usersLoaded = false;
 let templatesLoaded = false;
 let campaignsLoaded = false;
 let challengeLoaded = false;
-function showView(name) {
+function showView(name, subtab) {
+  if (name === 'challenge-emails') {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === 'challenge-emails'));
+    document.querySelectorAll('.view-section').forEach(s => s.classList.toggle('hidden', s.id !== 'view-templates'));
+    switchTemplatesSubtab('challenge');
+    loadChallengeEmails();
+    return;
+  }
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   document.querySelectorAll('.view-section').forEach(s => s.classList.toggle('hidden', s.id !== `view-${name}`));
   if (name === 'users' && !usersLoaded) loadUsers();
-  if (name === 'templates' && !templatesLoaded) loadTemplates();
+  if (name === 'templates') {
+    if (!templatesLoaded) loadTemplates();
+    if (!challengeEmailsLoaded) loadChallengeEmails();
+    if (subtab) switchTemplatesSubtab(subtab);
+  }
   if (name === 'campaigns' && !campaignsLoaded) loadCampaigns();
   if (name === 'challenge' && !challengeLoaded) loadChallengeStatus();
 }
@@ -1337,8 +1346,17 @@ function switchTemplatesSubtab(subtab) {
   if (chalTab) chalTab.classList.toggle('active', isChallenge);
   if (campPanel) campPanel.classList.toggle('hidden', isChallenge);
   if (chalPanel) chalPanel.classList.toggle('hidden', !isChallenge);
-  if (isChallenge && !challengeEmailsLoaded) {
+  if (isChallenge) {
+    document.querySelectorAll('.nav-item').forEach(b => {
+      if (b.dataset.view === 'challenge-emails') b.classList.add('active');
+      else if (b.dataset.view === 'templates') b.classList.remove('active');
+    });
     loadChallengeEmails();
+  } else {
+    document.querySelectorAll('.nav-item').forEach(b => {
+      if (b.dataset.view === 'templates') b.classList.add('active');
+      else if (b.dataset.view === 'challenge-emails') b.classList.remove('active');
+    });
   }
 }
 
@@ -1454,14 +1472,38 @@ function renderChallengeEmailHtml(template, athlete = 'yannick') {
 async function loadChallengeEmails() {
   challengeEmailsLoaded = true;
   try {
-    allChallengeEmails = await api('/api/admin/strava-challenge/emails');
+    const res = await api('/api/admin/strava-challenge/emails');
+    allChallengeEmails = Array.isArray(res) ? res : (res && Array.isArray(res.emails) ? res.emails : []);
+    renderChallengeEmailFilter();
     renderChallengeEmailGrid();
     populateChallengeEmailTypeOptions();
   } catch (err) {
     handleApiError(err);
     const wrap = document.getElementById('challenge-emails-grid');
-    if (wrap) wrap.innerHTML = '<div class="chart-empty">Could not load challenge emails.</div>';
+    if (wrap) wrap.innerHTML = '<div class="chart-empty">Could not load challenge emails. Refresh to retry.</div>';
   }
+}
+
+function renderChallengeEmailFilter() {
+  const wrap = document.getElementById('challenge-email-filter');
+  if (!wrap) return;
+  const list = allChallengeEmails || [];
+  const wins = list.filter(t => t.type === 'win');
+  const losses = list.filter(t => t.type === 'loss');
+  const ties = list.filter(t => t.type === 'tiebreaker_win' || t.type === 'tiebreaker_loss' || String(t.type || '').includes('tiebreaker'));
+  wrap.innerHTML = `
+    <button type="button" class="chip${activeChallengeEmailFilter === 'all' ? ' active' : ''}" data-filter="all">All (${list.length})</button>
+    <button type="button" class="chip${activeChallengeEmailFilter === 'win' ? ' active' : ''}" data-filter="win">Win Emails (${wins.length})</button>
+    <button type="button" class="chip${activeChallengeEmailFilter === 'loss' ? ' active' : ''}" data-filter="loss">Loss Emails (${losses.length})</button>
+    <button type="button" class="chip${activeChallengeEmailFilter === 'tiebreaker' ? ' active' : ''}" data-filter="tiebreaker">Tiebreakers (${ties.length})</button>
+  `;
+  wrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeChallengeEmailFilter = btn.dataset.filter;
+      renderChallengeEmailFilter();
+      renderChallengeEmailGrid();
+    });
+  });
 }
 
 function filteredChallengeEmails() {
@@ -1488,39 +1530,84 @@ function renderChallengeEmailGrid() {
   const wrap = document.getElementById('challenge-emails-grid');
   if (!wrap) return;
   const list = filteredChallengeEmails();
-  if (!list.length) {
-    wrap.innerHTML = '<div class="chart-empty">No challenge emails found.</div>';
-    return;
-  }
-  wrap.innerHTML = list.map(t => `
-    <div class="template-card" data-id="${esc(t.id)}">
-      <div class="template-preview-frame" style="background:#101319;height:180px">
-        <iframe srcdoc="${esc(renderChallengeEmailHtml(t, 'yannick'))}" tabindex="-1"></iframe>
-      </div>
-      <div class="template-card-body">
-        <div class="template-card-head" style="margin-bottom:2px">
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            ${challengeTypeBadge(t.type)}
-            ${t.active ? '<span class="status-pill" style="color:var(--success);background:rgba(34,197,94,0.14)">Active</span>' : '<span class="status-pill" style="color:var(--text-dim);background:var(--surface-3)">Inactive</span>'}
+  const summaryEl = document.getElementById('challenge-emails-summary');
+
+  const allList = allChallengeEmails || [];
+  const activeWins = allList.filter(t => t.active && t.type === 'win');
+  const activeLosses = allList.filter(t => t.active && t.type === 'loss');
+  const winPct = activeWins.length ? (100 / activeWins.length).toFixed(1) : '0';
+  const lossPct = activeLosses.length ? (100 / activeLosses.length).toFixed(1) : '0';
+
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="card" style="background:var(--surface-2);border-left:4px solid var(--accent);margin-bottom:16px;padding:16px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+          <h4 style="margin:0;font-size:1rem;font-weight:800;color:var(--text)">Weekly Win & Loss Email Pot</h4>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="status-pill" style="color:var(--success);background:rgba(34,197,94,0.14);font-weight:800">${activeWins.length} Active Win Email${activeWins.length === 1 ? '' : 's'}</span>
+            <span class="status-pill" style="color:var(--danger);background:rgba(239,68,68,0.14);font-weight:800">${activeLosses.length} Active Loss Email${activeLosses.length === 1 ? '' : 's'}</span>
           </div>
         </div>
-        <strong style="font-size:0.98rem;color:var(--text);margin-top:2px">${esc(t.name)}</strong>
-        <div style="font-size:0.8rem;color:var(--text-muted);display:flex;gap:4px;align-items:baseline">
-          <span class="label" style="font-size:0.65rem;flex:none">Subject:</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.subject)}</span>
+        <p style="margin:0;color:var(--text-muted);font-size:0.86rem;line-height:1.5">
+          Each week when Strava Challenge results are finalized, <strong>one email is chosen at random with equal probability</strong> from the active win emails for the winner, and one from the active loss emails for the loser. Each active win email has a <strong>${winPct}% equal chance (1 in ${activeWins.length})</strong>, and each active loss email has a <strong>${lossPct}% equal chance (1 in ${activeLosses.length})</strong>. You can edit the current default emails below or add new ones to the pot.
+        </p>
+      </div>
+    `;
+  }
+
+  if (!list.length) {
+    wrap.innerHTML = '<div class="chart-empty">No challenge emails match this filter.</div>';
+    return;
+  }
+
+  wrap.innerHTML = list.map(t => {
+    const isDefault = t.id === 'win-default' || t.id === 'loss-default' || t.id === 'tiebreaker-win-default' || t.id === 'tiebreaker-loss-default';
+    const defaultBadge = isDefault ? '<span class="status-pill" style="color:#3987e5;background:rgba(57,135,229,0.16);font-weight:800">Current Default</span>' : '';
+    let probBadge = '';
+    if (t.active) {
+      if (t.type === 'win') {
+        probBadge = `<span class="status-pill" style="color:var(--accent);background:var(--accent-soft);font-weight:700" title="Equal random chance among active win emails">🎲 ${winPct}% chance (1 in ${activeWins.length})</span>`;
+      } else if (t.type === 'loss') {
+        probBadge = `<span class="status-pill" style="color:var(--accent);background:var(--accent-soft);font-weight:700" title="Equal random chance among active loss emails">🎲 ${lossPct}% chance (1 in ${activeLosses.length})</span>`;
+      } else {
+        probBadge = `<span class="status-pill" style="color:var(--series-3);background:rgba(144,133,233,0.14)">🎲 Tiebreaker specific</span>`;
+      }
+    } else {
+      probBadge = '<span class="status-pill" style="color:var(--text-dim);background:var(--surface-3)">Paused (0% chance)</span>';
+    }
+
+    return `
+      <div class="template-card" data-id="${esc(t.id)}">
+        <div class="template-preview-frame" style="background:#101319;height:180px">
+          <iframe srcdoc="${esc(renderChallengeEmailHtml(t, 'yannick'))}" tabindex="-1"></iframe>
         </div>
-        <div class="challenge-body-excerpt" style="font-size:0.8rem;color:var(--text-muted);line-height:1.45;margin:4px 0 8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
-          ${formatBodyExcerpt(t.body)}
-        </div>
-        <div class="template-card-actions">
-          <button type="button" class="btn btn-ghost btn-sm" data-act="edit">Edit</button>
-          <button type="button" class="btn btn-ghost btn-sm" data-act="duplicate">Duplicate</button>
-          <button type="button" class="btn btn-ghost btn-sm" data-act="toggle">${t.active ? 'Disable' : 'Enable'}</button>
-          <button type="button" class="btn btn-ghost btn-sm danger" data-act="delete">Delete</button>
+        <div class="template-card-body">
+          <div class="template-card-head" style="margin-bottom:4px">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              ${challengeTypeBadge(t.type)}
+              ${defaultBadge}
+              ${t.active ? '<span class="status-pill" style="color:var(--success);background:rgba(34,197,94,0.14)">Active</span>' : '<span class="status-pill" style="color:var(--text-dim);background:var(--surface-3)">Inactive</span>'}
+              ${probBadge}
+            </div>
+          </div>
+          <strong style="font-size:1.02rem;color:var(--text);margin-top:2px">${esc(t.name)}</strong>
+          <div style="font-size:0.84rem;color:var(--text-muted);display:flex;gap:4px;align-items:baseline;margin-top:3px">
+            <span class="label" style="font-size:0.65rem;flex:none">Subject:</span>
+            <span style="font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.subject)}</span>
+          </div>
+          <div class="challenge-body-excerpt" style="font-size:0.86rem;color:var(--text);line-height:1.55;margin:8px 0 12px;background:var(--surface-2);padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);white-space:pre-wrap;word-break:break-word">
+            ${formatBodyExcerpt(t.body)}
+          </div>
+          <div class="template-card-actions">
+            <button type="button" class="btn btn-ghost btn-sm" data-act="edit">Edit</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-act="duplicate">Duplicate</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-act="toggle">${t.active ? 'Disable' : 'Enable'}</button>
+            <button type="button" class="btn btn-ghost btn-sm danger" data-act="delete">Delete</button>
+          </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   wrap.querySelectorAll('.template-card').forEach(card => {
     const t = allChallengeEmails.find(x => x.id === card.dataset.id);
@@ -1566,6 +1653,7 @@ async function deleteChallengeEmail(t) {
   try {
     await api(`/api/admin/strava-challenge/emails/${encodeURIComponent(t.id)}`, { method: 'DELETE' });
     allChallengeEmails = allChallengeEmails.filter(x => x.id !== t.id);
+    renderChallengeEmailFilter();
     renderChallengeEmailGrid();
     populateChallengeEmailTypeOptions();
   } catch (err) {
@@ -1576,7 +1664,7 @@ async function deleteChallengeEmail(t) {
 
 async function duplicateChallengeEmail(t) {
   try {
-    const copy = await api('/api/admin/strava-challenge/emails', {
+    const res = await api('/api/admin/strava-challenge/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1587,7 +1675,9 @@ async function duplicateChallengeEmail(t) {
         body: t.body,
       }),
     });
-    allChallengeEmails.push(copy);
+    const copy = res && res.email ? res.email : res;
+    if (copy && copy.id) allChallengeEmails.unshift(copy);
+    renderChallengeEmailFilter();
     renderChallengeEmailGrid();
     populateChallengeEmailTypeOptions();
   } catch (err) {
@@ -1598,7 +1688,7 @@ async function duplicateChallengeEmail(t) {
 
 async function toggleChallengeEmailActive(t) {
   try {
-    const updated = await api(`/api/admin/strava-challenge/emails/${encodeURIComponent(t.id)}`, {
+    const res = await api(`/api/admin/strava-challenge/emails/${encodeURIComponent(t.id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1609,8 +1699,10 @@ async function toggleChallengeEmailActive(t) {
         body: t.body,
       }),
     });
+    const updated = res && res.email ? res.email : res;
     const idx = allChallengeEmails.findIndex(x => x.id === t.id);
-    if (idx >= 0) allChallengeEmails[idx] = updated;
+    if (idx >= 0 && updated && updated.id) allChallengeEmails[idx] = updated;
+    renderChallengeEmailFilter();
     renderChallengeEmailGrid();
     populateChallengeEmailTypeOptions();
   } catch (err) {
