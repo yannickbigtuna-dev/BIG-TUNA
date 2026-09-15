@@ -34,6 +34,7 @@ const EMAIL_CAMPAIGNS_DIR    = path.join(EMAIL_DIR, 'campaigns');
 const USERS_FILE    = path.join(DATA, 'users.json');
 const SESSIONS_FILE = path.join(DATA, 'sessions.json');
 const PASSWORD_RESETS_FILE = path.join(DATA, 'password-resets.json');
+const CUSTOM_NOTIFICATIONS_FILE = path.join(DATA, 'custom-notifications.json');
 // Apple App Factory release payloads deliberately live outside the static apps
 // tree.  The optional override is for a separately mounted, gitignored volume;
 // do not point it at the repository or a web-root.
@@ -237,6 +238,152 @@ try {
 } catch (error) {
   stravaChallengeLogger.error('challenge accounts unavailable during startup:', error && error.message);
 }
+
+// ── Custom Push Notifications & Scheduler ──────────────────────────────────────
+function readCustomNotifications() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(CUSTOM_NOTIFICATIONS_FILE, 'utf8'));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCustomNotifications(notifications) {
+  atomicWrite(CUSTOM_NOTIFICATIONS_FILE, notifications);
+}
+
+async function deliverCustomNotification(notification) {
+  const users = readUsers();
+  const targetUsername = String(notification.recipientUsername || '').trim().toLowerCase();
+  const targetUser = users.find(u =>
+    (notification.recipientId && u.id === notification.recipientId) ||
+    (targetUsername && String(u.username || '').trim().toLowerCase() === targetUsername)
+  );
+
+  const targetUserId = targetUser ? targetUser.id : notification.recipientId;
+  const resolvedUsername = targetUser ? targetUser.username : (notification.recipientUsername || targetUserId || 'unknown');
+
+  let devices = [];
+  if (challengeAccounts && typeof challengeAccounts._readState === 'function') {
+    try {
+      const state = challengeAccounts._readState();
+      devices = Object.values(state.devices || {}).filter(d =>
+        d && !d.disabledAt && (
+          (targetUserId && d.userId === targetUserId) ||
+          (d.userId === 'fishyemma' && targetUsername === 'fishyemma') ||
+          (d.userId === 'emma' && (targetUsername === 'fishyemma' || targetUsername === 'emma'))
+        )
+      );
+    } catch {}
+  }
+
+  notification.deviceCount = devices.length;
+
+  // Record in-app notification event so user can see it in their Challengers app
+  if (challengeAccounts && typeof challengeAccounts._mutate === 'function' && targetUserId) {
+    try {
+      await challengeAccounts._mutate(s => {
+        s.notificationEvents ||= {};
+        const event = {
+          id: 'event_' + crypto.randomBytes(8).toString('hex'),
+          challengeId: 'website_yannick_emma',
+          type: 'custom_notification',
+          recipientId: targetUserId,
+          title: notification.title,
+          body: notification.body,
+          createdAt: new Date().toISOString(),
+          delivery: 'pending'
+        };
+        s.notificationEvents[event.id] = event;
+      });
+    } catch {}
+  }
+
+  if (devices.length === 0) {
+    notification.status = 'sent';
+    notification.sentAt = new Date().toISOString();
+    notification.sentCount = 0;
+    notification.resultMessage = `Recorded in-app for @${resolvedUsername} (no active iOS push device registered yet)`;
+    return notification;
+  }
+
+  let sentCount = 0;
+  const invalidTokens = [];
+  for (const device of devices) {
+    try {
+      const token = challengeDeviceTokenCipher && typeof challengeDeviceTokenCipher.decrypt === 'function'
+        ? challengeDeviceTokenCipher.decrypt(device.tokenEncrypted)
+        : null;
+      if (!token) continue;
+      const res = await challengeApns.send({
+        token,
+        platform: 'ios',
+        eventType: 'custom_notification',
+        challengeId: 'website_yannick_emma',
+        reviewId: null,
+        title: notification.title,
+        body: notification.body
+      });
+      if (res && res.delivery === 'sent') {
+        sentCount++;
+      } else if (res && res.reason === 'invalid_token') {
+        invalidTokens.push(device);
+      }
+    } catch (err) {
+      stravaChallengeLogger.warn('custom notification push error:', err && err.message);
+    }
+  }
+
+  if (invalidTokens.length > 0 && challengeAccounts && typeof challengeAccounts._mutate === 'function') {
+    try {
+      await challengeAccounts._mutate(s => {
+        for (const device of invalidTokens) {
+          const key = `${device.userId}:${device.fingerprint}`;
+          if (s.devices && s.devices[key]) {
+            s.devices[key].disabledAt = new Date().toISOString();
+          }
+        }
+      });
+    } catch {}
+  }
+
+  notification.sentCount = sentCount;
+  notification.sentAt = new Date().toISOString();
+  if (sentCount > 0) {
+    notification.status = 'sent';
+    notification.resultMessage = `Delivered to ${sentCount} device${sentCount === 1 ? '' : 's'} via APNs`;
+  } else if (!challengeApns || !challengeApns.configured) {
+    notification.status = 'sent';
+    notification.resultMessage = 'APNs credentials not configured; saved in-app';
+  } else {
+    notification.status = 'failed';
+    notification.failureReason = 'APNs rejected token or delivery failed';
+    notification.resultMessage = 'APNs delivery failed';
+  }
+
+  return notification;
+}
+
+const customNotificationsScheduler = setInterval(async () => {
+  try {
+    const list = readCustomNotifications();
+    const now = Date.now();
+    let changed = false;
+    for (const item of list) {
+      if (item && item.status === 'scheduled' && item.scheduledFor && Date.parse(item.scheduledFor) <= now) {
+        await deliverCustomNotification(item);
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeCustomNotifications(list);
+    }
+  } catch (err) {
+    stravaChallengeLogger.error('custom notifications scheduler error:', err && err.message);
+  }
+}, 15_000);
+if (typeof customNotificationsScheduler.unref === 'function') customNotificationsScheduler.unref();
 
 const {
   TRIVIA_MODEL,
@@ -3908,6 +4055,184 @@ async function handleAPI(req, res, urlPath) {
     try { fs.unlinkSync(path.join(EMAIL_CAMPAIGNS_DIR, id + '.json')); }
     catch { return jsonRes(res, 404, { error: 'Campaign not found' }); }
     return jsonRes(res, 200, { ok: true });
+  }
+
+  // ── Custom Push Notifications: Admin endpoints (yannick only) ──────────────
+
+  // GET /api/admin/custom-notifications/recipients
+  if (req.method === 'GET' && urlPath === '/api/admin/custom-notifications/recipients') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const users = readUsers();
+    let devicesMap = {};
+    if (challengeAccounts && typeof challengeAccounts._readState === 'function') {
+      try {
+        const state = challengeAccounts._readState();
+        for (const d of Object.values(state.devices || {})) {
+          if (d && !d.disabledAt && d.userId) {
+            devicesMap[d.userId] = (devicesMap[d.userId] || 0) + 1;
+          }
+        }
+      } catch {}
+    }
+
+    const recipientMap = new Map();
+    for (const u of users) {
+      recipientMap.set(u.username.toLowerCase(), {
+        id: u.id,
+        username: u.username,
+        email: u.email || null,
+        deviceCount: devicesMap[u.id] || 0,
+        hasDevice: Boolean((devicesMap[u.id] || 0) > 0),
+      });
+    }
+
+    if (!recipientMap.has('fishyemma')) {
+      recipientMap.set('fishyemma', {
+        id: 'fishyemma',
+        username: 'fishyemma',
+        email: null,
+        deviceCount: (devicesMap['fishyemma'] || 0) + (devicesMap['emma'] || 0),
+        hasDevice: Boolean(((devicesMap['fishyemma'] || 0) + (devicesMap['emma'] || 0)) > 0),
+      });
+    }
+
+    const recipients = Array.from(recipientMap.values()).sort((a, b) => {
+      if (a.username.toLowerCase() === 'fishyemma') return -1;
+      if (b.username.toLowerCase() === 'fishyemma') return 1;
+      if (a.username.toLowerCase() === 'yannick') return -1;
+      if (b.username.toLowerCase() === 'yannick') return 1;
+      return a.username.localeCompare(b.username);
+    });
+
+    return jsonRes(res, 200, {
+      recipients,
+      apnsConfigured: Boolean(challengeApns && challengeApns.configured)
+    });
+  }
+
+  // GET /api/admin/custom-notifications
+  if (req.method === 'GET' && urlPath === '/api/admin/custom-notifications') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const notifications = readCustomNotifications();
+    notifications.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    return jsonRes(res, 200, { notifications });
+  }
+
+  // POST /api/admin/custom-notifications
+  if (req.method === 'POST' && urlPath === '/api/admin/custom-notifications') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const body = await parseBody(req);
+    if (!body || typeof body !== 'object') {
+      return jsonRes(res, 400, { error: 'Request body must be a JSON object' });
+    }
+
+    const title = String(body.title || '').trim();
+    const content = String(body.body || body.content || '').trim();
+    const recipientUsername = String(body.recipientUsername || body.username || '').trim();
+    const recipientId = body.recipientId ? String(body.recipientId).trim() : null;
+
+    if (!recipientUsername) {
+      return jsonRes(res, 400, { error: 'Recipient username is required' });
+    }
+    if (!title) {
+      return jsonRes(res, 400, { error: 'Notification title is required' });
+    }
+    if (title.length > 100) {
+      return jsonRes(res, 400, { error: 'Notification title cannot exceed 100 characters' });
+    }
+    if (!content) {
+      return jsonRes(res, 400, { error: 'Notification content is required' });
+    }
+    if (content.length > 256) {
+      return jsonRes(res, 400, { error: 'Notification content cannot exceed 256 characters' });
+    }
+
+    const id = 'cnotif_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    const notification = {
+      id,
+      recipientUsername,
+      recipientId,
+      title,
+      body: content,
+      createdAt: new Date().toISOString(),
+      scheduledFor: null,
+      sentAt: null,
+      status: 'pending',
+      deviceCount: 0,
+      sentCount: 0,
+      resultMessage: null,
+      failureReason: null,
+      createdBy: user.username,
+    };
+
+    let isScheduled = false;
+    if (body.scheduledFor) {
+      const scheduledTime = Date.parse(body.scheduledFor);
+      if (!Number.isFinite(scheduledTime)) {
+        return jsonRes(res, 400, { error: 'Invalid scheduled date/time' });
+      }
+      if (scheduledTime > Date.now() + 10_000) {
+        isScheduled = true;
+        notification.scheduledFor = new Date(scheduledTime).toISOString();
+        notification.status = 'scheduled';
+        notification.resultMessage = `Scheduled for ${notification.scheduledFor}`;
+      }
+    }
+
+    const list = readCustomNotifications();
+
+    if (isScheduled) {
+      list.push(notification);
+      writeCustomNotifications(list);
+      return jsonRes(res, 201, { ok: true, scheduled: true, notification });
+    } else {
+      await deliverCustomNotification(notification);
+      list.push(notification);
+      writeCustomNotifications(list);
+      return jsonRes(res, 201, { ok: true, scheduled: false, notification });
+    }
+  }
+
+  // POST /api/admin/custom-notifications/:id/resend
+  if (req.method === 'POST' && urlPath.startsWith('/api/admin/custom-notifications/') && urlPath.endsWith('/resend')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/custom-notifications/'.length, -'/resend'.length);
+    const list = readCustomNotifications();
+    const item = list.find(n => n.id === id);
+    if (!item) return jsonRes(res, 404, { error: 'Notification not found' });
+
+    item.scheduledFor = null;
+    await deliverCustomNotification(item);
+    writeCustomNotifications(list);
+    return jsonRes(res, 200, { ok: true, notification: item });
+  }
+
+  // DELETE /api/admin/custom-notifications/:id
+  if (req.method === 'DELETE' && urlPath.startsWith('/api/admin/custom-notifications/')) {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+
+    const id = urlPath.slice('/api/admin/custom-notifications/'.length);
+    const list = readCustomNotifications();
+    const index = list.findIndex(n => n.id === id);
+    if (index === -1) return jsonRes(res, 404, { error: 'Notification not found' });
+
+    list.splice(index, 1);
+    writeCustomNotifications(list);
+    return jsonRes(res, 200, { ok: true, deleted: true });
   }
 
   // GET /api/eco-ai/status - authenticated Ollama availability and model list

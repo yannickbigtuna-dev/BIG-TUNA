@@ -331,6 +331,226 @@
     .side-nav { flex-direction: row; }
     .nav-item { white-space: nowrap; }
   }
+
+  /* ── Custom Push Notifications View ─────────────────────────────── */
+  .notif-layout-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .notif-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .notif-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .notif-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .notif-label {
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .char-count {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .notif-device-hint {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .notif-recipient-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .notif-recipient-input-row select.input {
+    flex: 1;
+  }
+  .notif-custom-username {
+    flex: 1;
+  }
+  .notif-textarea {
+    min-height: 80px;
+    resize: vertical;
+    font-family: inherit;
+    line-height: 1.4;
+  }
+  .notif-timing-options {
+    display: flex;
+    gap: 18px;
+    padding: 2px 0;
+  }
+  .notif-radio-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .notif-radio-label input[type="radio"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .notif-schedule-picker {
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .notif-action-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .notif-message-banner {
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+  .notif-message-banner.success {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+  .notif-message-banner.error {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .notif-side-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .ios-preview-wrapper {
+    background: linear-gradient(145deg, #1b2434 0%, #0c111a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    padding: 22px 18px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+  }
+  .ios-lock-clock {
+    text-align: center;
+    font-size: 2.6rem;
+    font-weight: 300;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    color: #ffffff;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .ios-lock-date {
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 18px;
+  }
+  .ios-banner {
+    background: rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 16px;
+    padding: 12px 14px;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  .ios-banner-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.75);
+    margin-bottom: 5px;
+  }
+  .ios-banner-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+  }
+  .ios-banner-time {
+    margin-left: auto;
+    font-weight: 500;
+    font-size: 0.68rem;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .ios-banner-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 2px;
+    word-break: break-word;
+  }
+  .ios-banner-body {
+    font-size: 0.81rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.88);
+    word-break: break-word;
+  }
+  .notif-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .notif-history-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .status-pill.sent {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+  .status-pill.scheduled {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+  .status-pill.failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .status-pill.cancelled {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+  }
+  @media (max-width: 900px) {
+    .notif-layout-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -357,6 +577,7 @@
         <button class="nav-item" data-view="campaigns">Campaigns</button>
         <button class="nav-item" data-view="challenge-emails">Challenge Emails</button>
         <button class="nav-item" data-view="challenge">Strava Challenge</button>
+        <button class="nav-item" data-view="notifications">Custom Notifications</button>
       </nav>
     </aside>
 
@@ -602,6 +823,194 @@
         </section>
       </section>
 
+      <!-- ── CUSTOM NOTIFICATIONS ──────────────────────────────────── -->
+      <section id="view-notifications" class="view-section hidden">
+        <h1 class="page-title">Custom Push Notifications</h1>
+        <div class="page-sub">Send immediate or scheduled custom notifications to Challengers app users (default: fishyemma).</div>
+
+        <div class="notif-layout-grid">
+          <!-- Compose Card -->
+          <section class="card compose-card">
+            <div class="card-head">
+              <h3>Compose Notification</h3>
+              <div class="notif-apns-badge" id="notif-apns-indicator">
+                <span class="status-pill scheduled">Checking APNs…</span>
+              </div>
+            </div>
+
+            <div class="notif-form">
+              <!-- Recipient -->
+              <div class="notif-field-group">
+                <div class="notif-label-row">
+                  <label class="notif-label" for="notif-recipient-select">Target User</label>
+                  <span class="notif-device-hint" id="notif-selected-device-hint">Device status loading…</span>
+                </div>
+                <div class="chip-row notif-quick-recipients" id="notif-quick-recipients">
+                  <button type="button" class="chip active" data-username="fishyemma">🎯 fishyemma (Emma)</button>
+                  <button type="button" class="chip" data-username="yannick">👤 yannick (Yannick)</button>
+                </div>
+                <div class="notif-recipient-input-row">
+                  <select class="input" id="notif-recipient-select" aria-label="Select target user">
+                    <option value="fishyemma">fishyemma (Emma)</option>
+                  </select>
+                  <input type="text" class="input notif-custom-username hidden" id="notif-custom-username" placeholder="Or enter username…" aria-label="Custom username">
+                  <button type="button" class="btn btn-ghost btn-sm" id="notif-toggle-custom-user">Custom</button>
+                </div>
+              </div>
+
+              <!-- Quick Template Presets -->
+              <div class="notif-field-group">
+                <label class="notif-label">Challenger Quick Presets</label>
+                <div class="chip-row notif-templates" id="notif-templates">
+                  <button type="button" class="chip" data-title="🚨 Lead Slipping!" data-body="Yannick just logged some miles! Put down the snacks and deploy shoes! 👟🔥">🏃 Workout Nudge</button>
+                  <button type="button" class="chip" data-title="🔥 Streak on Fire!" data-body="You're on an active streak! Keep the pressure on this week! ⚡">🔥 Hot Streak</button>
+                  <button type="button" class="chip" data-title="👀 Check the Scoreboard" data-body="The scores are tight this week. Every workout counts right now! 🏆">👀 Scoreboard Check</button>
+                  <button type="button" class="chip" data-title="⚡ Weekend Push!" data-body="Sunday final push! Who takes this week's crown? 👑">⚡ Weekend Push</button>
+                </div>
+              </div>
+
+              <!-- Title -->
+              <div class="notif-field-group">
+                <div class="notif-label-row">
+                  <label class="notif-label" for="notif-title-input">Notification Title</label>
+                  <span class="char-count" id="notif-title-count">0 / 80</span>
+                </div>
+                <input type="text" class="input" id="notif-title-input" maxlength="80" placeholder="e.g. 🚨 Unauthorized Passing!" value="🚨 Lead Slipping!">
+              </div>
+
+              <!-- Body / Content -->
+              <div class="notif-field-group">
+                <div class="notif-label-row">
+                  <label class="notif-label" for="notif-body-input">Notification Content</label>
+                  <span class="char-count" id="notif-body-count">0 / 200</span>
+                </div>
+                <textarea class="input notif-textarea" id="notif-body-input" maxlength="200" rows="3" placeholder="e.g. Yannick just moved ahead of you. Put down the snacks and deploy shoes! 👟🔥">Yannick just logged some miles! Put down the snacks and deploy shoes! 👟🔥</textarea>
+              </div>
+
+              <!-- Delivery Timing -->
+              <div class="notif-field-group">
+                <label class="notif-label">Delivery Schedule</label>
+                <div class="notif-timing-options">
+                  <label class="notif-radio-label">
+                    <input type="radio" name="notif-timing" value="now" checked id="notif-radio-now">
+                    <span>Send Immediately</span>
+                  </label>
+                  <label class="notif-radio-label">
+                    <input type="radio" name="notif-timing" value="scheduled" id="notif-radio-scheduled">
+                    <span>Schedule for Later</span>
+                  </label>
+                </div>
+
+                <div class="notif-schedule-picker hidden" id="notif-schedule-picker">
+                  <div class="notif-label-row">
+                    <span class="caption">Delivery Time (Local):</span>
+                    <span class="caption" id="notif-local-tz">Local Time</span>
+                  </div>
+                  <input type="datetime-local" class="input" id="notif-schedule-datetime">
+                  <div class="chip-row notif-quick-times" id="notif-quick-times">
+                    <button type="button" class="chip small" data-mins="30">+30 mins</button>
+                    <button type="button" class="chip small" data-mins="60">+1 hour</button>
+                    <button type="button" class="chip small" data-special="tonight-8pm">Tonight 8 PM</button>
+                    <button type="button" class="chip small" data-special="tomorrow-9am">Tomorrow 9 AM</button>
+                    <button type="button" class="chip small" data-special="sunday-8pm">Sunday 8 PM</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Submit & Status -->
+              <div class="notif-action-row">
+                <button type="button" class="btn" id="notif-send-btn">
+                  <span>🚀 Send Notification Now</span>
+                </button>
+                <div class="notif-message-banner hidden" id="notif-message-banner"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Live Preview & Device Info -->
+          <div class="notif-side-column">
+            <section class="card preview-card">
+              <div class="card-head">
+                <h3>Live iPhone Preview</h3>
+                <span class="caption">Real-time lockscreen banner</span>
+              </div>
+              <div class="ios-preview-wrapper">
+                <div class="ios-device-mock">
+                  <div class="ios-lock-clock" id="ios-preview-clock">09:41</div>
+                  <div class="ios-lock-date" id="ios-preview-date">Today</div>
+                  <div class="ios-banner">
+                    <div class="ios-banner-head">
+                      <div class="ios-banner-icon">🏃</div>
+                      <span class="ios-banner-app">CHALLENGERS</span>
+                      <span class="ios-banner-time" id="ios-banner-time-label">now</span>
+                    </div>
+                    <div class="ios-banner-title" id="ios-preview-title">🚨 Lead Slipping!</div>
+                    <div class="ios-banner-body" id="ios-preview-body">Yannick just logged some miles! Put down the snacks and deploy shoes! 👟🔥</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="card info-card">
+              <div class="card-head">
+                <h3>Device & Push Status</h3>
+              </div>
+              <div class="notif-info-grid">
+                <div class="challenge-fact">
+                  <span>Target Account</span>
+                  <b id="notif-info-user">fishyemma</b>
+                </div>
+                <div class="challenge-fact">
+                  <span>Registered App Devices</span>
+                  <b id="notif-info-devices">Loading…</b>
+                </div>
+                <div class="challenge-fact">
+                  <span>APNs Gateway</span>
+                  <b id="notif-info-apns">Checking…</b>
+                </div>
+                <div class="challenge-fact">
+                  <span>Token Encryption</span>
+                  <b>AES-256-GCM Active</b>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- History & Scheduled List -->
+        <section class="card history-card" style="margin-top: 16px;">
+          <div class="card-head">
+            <h3>Notification History & Queue</h3>
+            <div class="notif-history-actions">
+              <div class="chip-row" id="notif-filter-chips">
+                <button type="button" class="chip active" data-filter="all">All</button>
+                <button type="button" class="chip" data-filter="scheduled">Scheduled</button>
+                <button type="button" class="chip" data-filter="sent">Sent</button>
+                <button type="button" class="chip" data-filter="failed">Failed</button>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" id="notif-refresh-history-btn">Refresh</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="users-table" id="notif-history-table">
+              <thead>
+                <tr>
+                  <th>Recipient</th>
+                  <th>Title & Content</th>
+                  <th>Status</th>
+                  <th>Scheduled / Sent</th>
+                  <th>Delivery Details</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="notif-history-tbody">
+                <tr><td colspan="6" class="chart-empty">Loading notification history…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
     </div>
   </div>
 </main>
@@ -779,6 +1188,7 @@ function showView(name, subtab) {
   }
   if (name === 'campaigns' && !campaignsLoaded) loadCampaigns();
   if (name === 'challenge' && !challengeLoaded) loadChallengeStatus();
+  if (name === 'notifications') loadCustomNotificationsView();
 }
 document.querySelectorAll('.nav-item').forEach(btn => {
   btn.addEventListener('click', () => showView(btn.dataset.view));
@@ -2573,6 +2983,438 @@ async function sendEditorCampaign() {
   }
 }
 
+/* ── Custom Push Notifications ────────────────────────────────────── */
+let notificationsLoaded = false;
+let allNotificationRecipients = [];
+let allCustomNotifications = [];
+let currentNotificationFilter = 'all';
+
+async function loadCustomNotificationsView() {
+  notificationsLoaded = true;
+  initNotificationClock();
+  updateLivePreview();
+  await Promise.all([
+    loadNotificationRecipients(),
+    loadNotificationHistory()
+  ]);
+}
+
+function initNotificationClock() {
+  const clockEl = document.getElementById('ios-preview-clock');
+  const dateEl = document.getElementById('ios-preview-date');
+  const tzEl = document.getElementById('notif-local-tz');
+  const now = new Date();
+  if (clockEl) {
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    clockEl.textContent = `${hours}:${mins}`;
+  }
+  if (dateEl) {
+    dateEl.textContent = now.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  }
+  if (tzEl) {
+    try {
+      tzEl.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time';
+    } catch {}
+  }
+}
+
+async function loadNotificationRecipients() {
+  try {
+    const data = await api('/api/admin/custom-notifications/recipients');
+    allNotificationRecipients = Array.isArray(data.recipients) ? data.recipients : [];
+
+    const apnsIndicator = document.getElementById('notif-apns-indicator');
+    const infoApns = document.getElementById('notif-info-apns');
+    if (data.apnsConfigured) {
+      if (apnsIndicator) apnsIndicator.innerHTML = '<span class="status-pill sent">APNs Configured</span>';
+      if (infoApns) infoApns.innerHTML = '<span style="color:var(--success)">🟢 Active (Apple APNs)</span>';
+    } else {
+      if (apnsIndicator) apnsIndicator.innerHTML = '<span class="status-pill scheduled">APNs Sandbox/Fallback</span>';
+      if (infoApns) infoApns.innerHTML = '<span style="color:var(--warning)">🟡 Fallback Mode</span>';
+    }
+
+    renderRecipientOptions();
+    updateSelectedRecipientInfo();
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+
+function renderRecipientOptions() {
+  const select = document.getElementById('notif-recipient-select');
+  if (!select) return;
+  const currentVal = select.value || 'fishyemma';
+  select.innerHTML = '';
+
+  for (const r of allNotificationRecipients) {
+    const opt = document.createElement('option');
+    opt.value = r.username;
+    const deviceTag = r.deviceCount > 0 ? ` (${r.deviceCount} registered iOS device${r.deviceCount === 1 ? '' : 's'})` : ' (no app device yet)';
+    opt.textContent = `${r.username}${deviceTag}`;
+    select.appendChild(opt);
+  }
+
+  if (allNotificationRecipients.some(r => r.username.toLowerCase() === currentVal.toLowerCase())) {
+    select.value = currentVal;
+  } else if (allNotificationRecipients.some(r => r.username === 'fishyemma')) {
+    select.value = 'fishyemma';
+  }
+}
+
+function getSelectedRecipientUsername() {
+  const customInput = document.getElementById('notif-custom-username');
+  if (customInput && !customInput.classList.contains('hidden') && customInput.value.trim()) {
+    return customInput.value.trim();
+  }
+  const select = document.getElementById('notif-recipient-select');
+  return (select && select.value) || 'fishyemma';
+}
+
+function updateSelectedRecipientInfo() {
+  const username = getSelectedRecipientUsername();
+  const recipient = allNotificationRecipients.find(r => r.username.toLowerCase() === username.toLowerCase());
+
+  const infoUser = document.getElementById('notif-info-user');
+  const infoDevices = document.getElementById('notif-info-devices');
+  const hintEl = document.getElementById('notif-selected-device-hint');
+
+  if (infoUser) infoUser.textContent = username;
+
+  const deviceCount = recipient ? recipient.deviceCount : 0;
+  const hasDevice = deviceCount > 0;
+
+  if (infoDevices) {
+    infoDevices.innerHTML = hasDevice
+      ? `<span style="color:var(--success)">🟢 ${deviceCount} active device${deviceCount === 1 ? '' : 's'}</span>`
+      : `<span style="color:var(--text-muted)">⚪ 0 devices (in-app only)</span>`;
+  }
+
+  if (hintEl) {
+    hintEl.innerHTML = hasDevice
+      ? `<span style="color:var(--success)">● ${deviceCount} device${deviceCount === 1 ? '' : 's'} online for push</span>`
+      : `<span style="color:var(--text-muted)">○ In-app only (no device registered yet)</span>`;
+  }
+
+  document.querySelectorAll('#notif-quick-recipients .chip').forEach(chip => {
+    chip.classList.toggle('active', chip.dataset.username.toLowerCase() === username.toLowerCase());
+  });
+}
+
+function updateLivePreview() {
+  const titleInput = document.getElementById('notif-title-input');
+  const bodyInput = document.getElementById('notif-body-input');
+  const previewTitle = document.getElementById('ios-preview-title');
+  const previewBody = document.getElementById('ios-preview-body');
+  const titleCount = document.getElementById('notif-title-count');
+  const bodyCount = document.getElementById('notif-body-count');
+  const timeLabel = document.getElementById('ios-banner-time-label');
+
+  const title = (titleInput && titleInput.value.trim()) || 'Notification Title';
+  const body = (bodyInput && bodyInput.value.trim()) || 'Type your notification message to see it appear here in real time.';
+
+  if (previewTitle) previewTitle.textContent = title;
+  if (previewBody) previewBody.textContent = body;
+
+  if (titleCount && titleInput) titleCount.textContent = `${titleInput.value.length} / 80`;
+  if (bodyCount && bodyInput) bodyCount.textContent = `${bodyInput.value.length} / 200`;
+
+  const isScheduled = document.getElementById('notif-radio-scheduled')?.checked;
+  const schedTime = document.getElementById('notif-schedule-datetime')?.value;
+  if (timeLabel) {
+    if (isScheduled && schedTime) {
+      try {
+        const d = new Date(schedTime);
+        timeLabel.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch {
+        timeLabel.textContent = 'scheduled';
+      }
+    } else {
+      timeLabel.textContent = 'now';
+    }
+  }
+}
+
+async function loadNotificationHistory() {
+  try {
+    const data = await api('/api/admin/custom-notifications');
+    allCustomNotifications = Array.isArray(data.notifications) ? data.notifications : [];
+    renderNotificationHistory();
+  } catch (err) {
+    handleApiError(err);
+  }
+}
+
+function renderNotificationHistory() {
+  const tbody = document.getElementById('notif-history-tbody');
+  if (!tbody) return;
+
+  const filtered = allCustomNotifications.filter(n => {
+    if (currentNotificationFilter === 'all') return true;
+    return (n.status || '').toLowerCase() === currentNotificationFilter;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="chart-empty">No notifications found${currentNotificationFilter !== 'all' ? ` for status "${currentNotificationFilter}"` : ''}.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(n => {
+    const status = n.status || 'unknown';
+    const statusPill = `<span class="status-pill ${esc(status)}">${esc(status)}</span>`;
+    const when = n.scheduledFor
+      ? `<div style="font-weight:700">⏱️ Scheduled:</div><div style="font-size:0.75rem">${esc(new Date(n.scheduledFor).toLocaleString())}</div>`
+      : `<div style="font-weight:700">🚀 Sent:</div><div style="font-size:0.75rem">${esc(new Date(n.sentAt || n.createdAt).toLocaleString())}</div>`;
+
+    const details = n.resultMessage || (n.sentCount > 0 ? `Delivered to ${n.sentCount} device${n.sentCount === 1 ? '' : 's'}` : (n.failureReason || '—'));
+
+    const actions = `
+      <div class="row-actions">
+        <button type="button" class="btn btn-ghost btn-sm notif-resend-btn" data-id="${esc(n.id)}">Resend</button>
+        <button type="button" class="btn btn-ghost danger btn-sm notif-delete-btn" data-id="${esc(n.id)}">${status === 'scheduled' ? 'Cancel' : 'Delete'}</button>
+      </div>
+    `;
+
+    return `
+      <tr>
+        <td><strong>@${esc(n.recipientUsername || 'unknown')}</strong></td>
+        <td>
+          <div style="font-weight:700;color:var(--text);margin-bottom:2px;">${esc(n.title)}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.3;max-width:320px;">${esc(n.body)}</div>
+        </td>
+        <td>${statusPill}</td>
+        <td>${when}</td>
+        <td style="font-size:0.8rem;max-width:200px;">${esc(details)}</td>
+        <td>${actions}</td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('.notif-resend-btn').forEach(btn => {
+    btn.addEventListener('click', () => resendNotification(btn.dataset.id));
+  });
+  tbody.querySelectorAll('.notif-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteNotification(btn.dataset.id));
+  });
+}
+
+async function resendNotification(id) {
+  if (!confirm('Resend this notification immediately?')) return;
+  try {
+    await api(`/api/admin/custom-notifications/${encodeURIComponent(id)}/resend`, { method: 'POST' });
+    showNotificationBanner('Notification resent successfully!', 'success');
+    await loadNotificationHistory();
+  } catch (err) {
+    showNotificationBanner(err.message || 'Failed to resend notification', 'error');
+  }
+}
+
+async function deleteNotification(id) {
+  if (!confirm('Remove this notification?')) return;
+  try {
+    await api(`/api/admin/custom-notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    allCustomNotifications = allCustomNotifications.filter(n => n.id !== id);
+    renderNotificationHistory();
+    showNotificationBanner('Notification removed.', 'success');
+  } catch (err) {
+    showNotificationBanner(err.message || 'Failed to delete notification', 'error');
+  }
+}
+
+function showNotificationBanner(message, type = 'success') {
+  const banner = document.getElementById('notif-message-banner');
+  if (!banner) return;
+  banner.textContent = message;
+  banner.className = `notif-message-banner ${type}`;
+  banner.classList.remove('hidden');
+  setTimeout(() => {
+    banner.classList.add('hidden');
+  }, 6000);
+}
+
+function setupNotificationEvents() {
+  const recipientSelect = document.getElementById('notif-recipient-select');
+  const customUserInput = document.getElementById('notif-custom-username');
+  const toggleCustomBtn = document.getElementById('notif-toggle-custom-user');
+  const titleInput = document.getElementById('notif-title-input');
+  const bodyInput = document.getElementById('notif-body-input');
+  const radioNow = document.getElementById('notif-radio-now');
+  const radioSched = document.getElementById('notif-radio-scheduled');
+  const schedPicker = document.getElementById('notif-schedule-picker');
+  const schedInput = document.getElementById('notif-schedule-datetime');
+  const sendBtn = document.getElementById('notif-send-btn');
+  const refreshBtn = document.getElementById('notif-refresh-history-btn');
+
+  if (recipientSelect) {
+    recipientSelect.addEventListener('change', () => updateSelectedRecipientInfo());
+  }
+
+  if (toggleCustomBtn && customUserInput && recipientSelect) {
+    toggleCustomBtn.addEventListener('click', () => {
+      const isCustom = customUserInput.classList.toggle('hidden');
+      recipientSelect.classList.toggle('hidden', isCustom);
+      toggleCustomBtn.textContent = isCustom ? 'Select' : 'Custom';
+      if (isCustom) customUserInput.focus();
+      updateSelectedRecipientInfo();
+    });
+    customUserInput.addEventListener('input', () => updateSelectedRecipientInfo());
+  }
+
+  document.querySelectorAll('#notif-quick-recipients .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const uname = chip.dataset.username;
+      if (customUserInput) customUserInput.classList.add('hidden');
+      if (recipientSelect) {
+        recipientSelect.classList.remove('hidden');
+        if (allNotificationRecipients.some(r => r.username.toLowerCase() === uname.toLowerCase())) {
+          recipientSelect.value = uname;
+        }
+      }
+      if (toggleCustomBtn) toggleCustomBtn.textContent = 'Custom';
+      updateSelectedRecipientInfo();
+    });
+  });
+
+  document.querySelectorAll('#notif-templates .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (titleInput) titleInput.value = chip.dataset.title || '';
+      if (bodyInput) bodyInput.value = chip.dataset.body || '';
+      updateLivePreview();
+    });
+  });
+
+  if (titleInput) titleInput.addEventListener('input', updateLivePreview);
+  if (bodyInput) bodyInput.addEventListener('input', updateLivePreview);
+
+  function handleTimingChange() {
+    const isScheduled = radioSched && radioSched.checked;
+    if (schedPicker) schedPicker.classList.toggle('hidden', !isScheduled);
+    if (sendBtn) {
+      sendBtn.innerHTML = isScheduled
+        ? '<span>⏱️ Schedule Notification</span>'
+        : '<span>🚀 Send Notification Now</span>';
+    }
+    if (isScheduled && schedInput && !schedInput.value) {
+      const defaultDate = new Date(Date.now() + 60 * 60 * 1000);
+      const tzOffset = defaultDate.getTimezoneOffset() * 60000;
+      schedInput.value = new Date(defaultDate.getTime() - tzOffset).toISOString().slice(0, 16);
+    }
+    updateLivePreview();
+  }
+
+  if (radioNow) radioNow.addEventListener('change', handleTimingChange);
+  if (radioSched) radioSched.addEventListener('change', handleTimingChange);
+  if (schedInput) schedInput.addEventListener('input', updateLivePreview);
+
+  document.querySelectorAll('#notif-quick-times .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (!schedInput) return;
+      const now = new Date();
+      let targetDate = new Date();
+
+      if (chip.dataset.mins) {
+        targetDate = new Date(now.getTime() + Number(chip.dataset.mins) * 60 * 1000);
+      } else if (chip.dataset.special === 'tonight-8pm') {
+        targetDate.setHours(20, 0, 0, 0);
+        if (targetDate <= now) targetDate.setDate(targetDate.getDate() + 1);
+      } else if (chip.dataset.special === 'tomorrow-9am') {
+        targetDate.setDate(targetDate.getDate() + 1);
+        targetDate.setHours(9, 0, 0, 0);
+      } else if (chip.dataset.special === 'sunday-8pm') {
+        const day = targetDate.getDay();
+        const diff = (7 - day) % 7;
+        targetDate.setDate(targetDate.getDate() + (diff === 0 && targetDate.getHours() >= 20 ? 7 : diff));
+        targetDate.setHours(20, 0, 0, 0);
+      }
+
+      const tzOffset = targetDate.getTimezoneOffset() * 60000;
+      schedInput.value = new Date(targetDate.getTime() - tzOffset).toISOString().slice(0, 16);
+      updateLivePreview();
+    });
+  });
+
+  document.querySelectorAll('#notif-filter-chips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#notif-filter-chips .chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentNotificationFilter = chip.dataset.filter;
+      renderNotificationHistory();
+    });
+  });
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      refreshBtn.disabled = true;
+      await loadNotificationHistory();
+      refreshBtn.disabled = false;
+    });
+  }
+
+  if (sendBtn) {
+    sendBtn.addEventListener('click', async () => {
+      const recipientUsername = getSelectedRecipientUsername();
+      const title = (titleInput && titleInput.value.trim()) || '';
+      const body = (bodyInput && bodyInput.value.trim()) || '';
+      const isScheduled = radioSched && radioSched.checked;
+      let scheduledFor = null;
+
+      if (!recipientUsername) {
+        showNotificationBanner('Please select or enter a recipient username.', 'error');
+        return;
+      }
+      if (!title) {
+        showNotificationBanner('Please enter a notification title.', 'error');
+        if (titleInput) titleInput.focus();
+        return;
+      }
+      if (!body) {
+        showNotificationBanner('Please enter notification content.', 'error');
+        if (bodyInput) bodyInput.focus();
+        return;
+      }
+
+      if (isScheduled) {
+        if (!schedInput || !schedInput.value) {
+          showNotificationBanner('Please select a scheduled date and time.', 'error');
+          return;
+        }
+        const schedMs = Date.parse(schedInput.value);
+        if (!schedMs || schedMs <= Date.now() + 10_000) {
+          showNotificationBanner('Scheduled time must be at least 1 minute in the future.', 'error');
+          return;
+        }
+        scheduledFor = new Date(schedMs).toISOString();
+      }
+
+      sendBtn.disabled = true;
+      const originalText = sendBtn.innerHTML;
+      sendBtn.innerHTML = isScheduled ? '<span>⏱️ Scheduling…</span>' : '<span>🚀 Sending…</span>';
+
+      try {
+        const payload = { recipientUsername, title, body, scheduledFor };
+        const result = await api('/api/admin/custom-notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (result.scheduled) {
+          showNotificationBanner(`Notification scheduled for ${new Date(result.notification.scheduledFor).toLocaleString()}`, 'success');
+        } else {
+          showNotificationBanner(result.notification.resultMessage || `Push notification sent to @${recipientUsername}!`, 'success');
+        }
+
+        await loadNotificationHistory();
+      } catch (err) {
+        showNotificationBanner(err.message || 'Failed to send notification', 'error');
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = originalText;
+      }
+    });
+  }
+}
+
 /* ── boot ─────────────────────────────────────────────────────────── */
 Auth.onReady(user => {
   if (!user || !user.username || user.username.toLowerCase() !== 'yannick') {
@@ -2580,6 +3422,7 @@ Auth.onReady(user => {
     return;
   }
   showAuthorized();
+  setupNotificationEvents();
   loadOverview(30);
 });
 </script>
