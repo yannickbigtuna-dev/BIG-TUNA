@@ -309,6 +309,7 @@ async function deliverCustomNotification(notification) {
   }
 
   let sentCount = 0;
+  let lastFailureReason = null;
   const invalidTokens = [];
   for (const device of devices) {
     try {
@@ -327,8 +328,11 @@ async function deliverCustomNotification(notification) {
       });
       if (res && res.delivery === 'sent') {
         sentCount++;
-      } else if (res && res.reason === 'invalid_token') {
+      } else if (res && (res.reason === 'invalid_token' || res.reason === 'BadDeviceToken' || res.reason === 'Unregistered' || res.reason === 'ExpiredToken')) {
         invalidTokens.push(device);
+        lastFailureReason = res.reason;
+      } else if (res && res.reason) {
+        lastFailureReason = res.reason;
       }
     } catch (err) {
       stravaChallengeLogger.warn('custom notification push error:', err && err.message);
@@ -342,6 +346,9 @@ async function deliverCustomNotification(notification) {
           const key = `${device.userId}:${device.fingerprint}`;
           if (s.devices && s.devices[key]) {
             s.devices[key].disabledAt = new Date().toISOString();
+          }
+          if (s.challengeAccounts && s.challengeAccounts.devices && s.challengeAccounts.devices[key]) {
+            s.challengeAccounts.devices[key].disabledAt = new Date().toISOString();
           }
         }
       });
@@ -358,8 +365,8 @@ async function deliverCustomNotification(notification) {
     notification.resultMessage = 'APNs credentials not configured; saved in-app';
   } else {
     notification.status = 'failed';
-    notification.failureReason = 'APNs rejected token or delivery failed';
-    notification.resultMessage = 'APNs delivery failed';
+    notification.failureReason = lastFailureReason || 'APNs rejected token or delivery failed';
+    notification.resultMessage = `APNs delivery failed (${notification.failureReason})`;
   }
 
   return notification;
