@@ -168,6 +168,42 @@ test('native route issues scoped sessions and bounds command bodies', async () =
   assert.equal((await request('GET', '/api/lights/native/v1', { token: exchange.body.token })).status, 401);
 });
 
+test('lamp native route has an independent scoped token, state, and idempotent journal', async () => {
+  const lightSession = await request('POST', '/api/lights/native/v1/session', { token: OWNER_TOKEN });
+  const lampSession = await request('POST', '/api/lamp/native/v1/session', { token: OWNER_TOKEN });
+  assert.equal(lightSession.status, 200);
+  assert.equal(lampSession.status, 200);
+  assert.notEqual(lightSession.body.token, lampSession.body.token);
+
+  assert.equal((await request('GET', '/api/lamp/native/v1', { token: lightSession.body.token })).status, 401);
+  const lightsBefore = await request('GET', '/api/lights/native/v1', { token: OWNER_TOKEN });
+  const lampBefore = await request('GET', '/api/lamp/native/v1', { token: lampSession.body.token });
+  assert.equal(lampBefore.status, 200);
+  assert.equal(lampBefore.body.revision, '0');
+  const lampTarget = !lampBefore.body.physicalOn;
+
+  const lampOn = await request('PUT', '/api/lamp/native/v1', {
+    token: lampSession.body.token, body: { physicalOn: lampTarget, commandId: 'lamp-on-1' },
+  });
+  const lampReplay = await request('PUT', '/api/lamp/native/v1', {
+    token: lampSession.body.token, body: { physicalOn: lampTarget, commandId: 'lamp-on-1' },
+  });
+  const lampConflict = await request('PUT', '/api/lamp/native/v1', {
+    token: lampSession.body.token, body: { physicalOn: !lampTarget, commandId: 'lamp-on-1' },
+  });
+  assert.equal(lampOn.status, 200);
+  assert.equal(lampOn.body.physicalOn, lampTarget);
+  assert.equal(lampOn.body.revision, '1');
+  assert.deepEqual(lampReplay, lampOn);
+  assert.equal(lampConflict.status, 409);
+
+  const lightsAfter = await request('GET', '/api/lights/native/v1', { token: OWNER_TOKEN });
+  assert.equal(lightsAfter.body.physicalOn, lightsBefore.body.physicalOn);
+  assert.equal(lightsAfter.body.revision, lightsBefore.body.revision);
+  assert.equal((await request('DELETE', '/api/lamp/native/v1/session', { token: lampSession.body.token })).status, 200);
+  assert.equal((await request('GET', '/api/lamp/native/v1', { token: lampSession.body.token })).status, 401);
+});
+
 test('native command conflict protection survives control recreation', async () => {
   const { createNativeLightsControl } = require('../lib/lights-native-control');
   let desired = { on: false, revision: 0, updatedAt: new Date().toISOString() };
