@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0a">
+<title>Lamp</title>
+<link rel="stylesheet" href="/styles/tokens.css">
+<style>
+  html { min-height: 100%; }
+
+  body {
+    min-height: 100vh;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    background:
+      radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--warning) 10%, transparent), transparent 34%),
+      linear-gradient(180deg, var(--bg-raised), var(--bg));
+    transition: background 360ms ease;
+  }
+
+  body.is-on {
+    background:
+      radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--warning) 52%, transparent), transparent 38%),
+      linear-gradient(180deg, #b8924a, #5a4220);
+    color: #201b14;
+  }
+
+  body.standalone #topbar {
+    display: none;
+  }
+
+  main {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    padding: 32px 18px 44px;
+  }
+
+  .room {
+    width: min(100%, 520px);
+    display: grid;
+    justify-items: center;
+    gap: 24px;
+  }
+
+  .light-cone {
+    position: fixed;
+    inset: 52px 0 0;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(ellipse at 50% 36%, color-mix(in srgb, var(--warning) 46%, transparent), transparent 44%);
+    transition: opacity 360ms ease;
+  }
+
+  body.is-on .light-cone { opacity: 1; }
+
+  .switch-wrap {
+    width: min(74vw, 210px);
+    aspect-ratio: 0.64;
+    display: grid;
+    place-items: center;
+    filter: drop-shadow(0 30px 34px color-mix(in srgb, var(--bg) 55%, transparent));
+  }
+
+  .plate {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(145deg, var(--surface-3), var(--surface-2));
+    border: 1px solid var(--border-strong);
+    box-shadow:
+      inset 2px 2px 2px color-mix(in srgb, var(--text) 8%, transparent),
+      inset -3px -3px 6px color-mix(in srgb, var(--bg) 22%, transparent),
+      var(--shadow-3);
+  }
+
+  /* ON state: plate picks up warm tones from the ambient light */
+  body.is-on .plate {
+    background: linear-gradient(145deg, #e8d9b8, #c9bb9a);
+    border-color: #a09070;
+    box-shadow:
+      inset 2px 2px 2px color-mix(in srgb, #fff 42%, transparent),
+      inset -3px -3px 6px color-mix(in srgb, #5a4220 22%, transparent),
+      var(--shadow-3);
+  }
+
+  /* The two plate screws double as status indicators. */
+  .plate::before,
+  .plate::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    width: 11px;
+    height: 11px;
+    transform: translateX(-50%);
+    border-radius: var(--radius-full);
+    background: radial-gradient(circle at 35% 35%, var(--text), var(--border-strong) 58%, var(--surface) 100%);
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--bg) 35%, transparent);
+    transition: background 240ms ease, box-shadow 240ms ease;
+  }
+
+  body.is-on .plate::before,
+  body.is-on .plate::after {
+    background: radial-gradient(circle at 35% 35%, #fff, #aba393 58%, #6f685e 100%);
+  }
+
+  /* Bottom screw → green when the device polled within the last 5 seconds. */
+  body.is-polled .plate::after {
+    background: radial-gradient(circle at 35% 35%, #d9ffe0, var(--success) 58%, #1c5e2c 100%);
+    box-shadow:
+      inset 0 1px 2px color-mix(in srgb, #08230f 35%, transparent),
+      0 0 10px color-mix(in srgb, var(--success) 72%, transparent);
+  }
+
+  .plate::before { top: 21px; }
+  .plate::after { bottom: 21px; }
+
+  .switch {
+    width: 45%;
+    height: 46%;
+    min-width: 78px;
+    border: 0;
+    padding: 0;
+    position: relative;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    perspective: 600px;
+    touch-action: manipulation;
+  }
+
+  .switch:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+
+  .switch[disabled] {
+    cursor: default;
+  }
+
+  .paddle {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
+    border: 1px solid var(--border-strong);
+    box-shadow:
+      inset 0 10px 18px color-mix(in srgb, var(--text) 6%, transparent),
+      inset 0 -16px 20px color-mix(in srgb, var(--bg) 25%, transparent),
+      var(--shadow-2);
+    transform: rotateX(-13deg);
+    transform-origin: 50% 82%;
+    transition: transform 210ms cubic-bezier(.2,.9,.2,1), box-shadow 210ms ease;
+  }
+
+  .paddle::after {
+    content: "";
+    position: absolute;
+    inset: 50% 8px auto;
+    height: 1px;
+    background: color-mix(in srgb, var(--border-strong) 50%, transparent);
+  }
+
+  body.is-on .paddle {
+    background: linear-gradient(180deg, #e8d9b8, #c9bb9a);
+    border-color: #a09070;
+    transform: rotateX(13deg);
+    transform-origin: 50% 18%;
+    box-shadow:
+      inset 0 16px 20px color-mix(in srgb, #fff 40%, transparent),
+      inset 0 -9px 15px color-mix(in srgb, #5a4220 18%, transparent),
+      var(--shadow-1),
+      0 0 24px color-mix(in srgb, var(--warning) 38%, transparent);
+  }
+
+  .switch[aria-busy="true"] .paddle {
+    transition-duration: 80ms;
+    filter: saturate(0.78);
+  }
+
+  @media (max-width: 520px) {
+    main { padding: 24px 14px 34px; }
+    .switch-wrap { width: min(72vw, 180px); }
+    .room { gap: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="light-cone"></div>
+<main>
+  <section class="room" aria-label="Lamp switch">
+    <div class="switch-wrap">
+      <div class="plate">
+        <button class="switch" id="switch" type="button" role="switch" aria-checked="false" aria-label="Lamp" disabled>
+          <span class="paddle"></span>
+        </button>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/topbar.js"></script>
+<script>
+  Topbar.setTitle('Lamp');
+
+  const switchBtn = document.getElementById('switch');
+  const INVERT_WEBSITE_STATE = true;
+
+  let currentOn = false;
+  let canControl = false;
+  let pending = false;
+  let eventsConnected = false;
+  let lastUpdatedAt = '';
+  let hasLoadedState = false;
+  let stateLoadPromise = null;
+
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  document.body.classList.toggle('standalone', isStandalone);
+
+  function apiToWebsiteState(on) {
+    return INVERT_WEBSITE_STATE ? on !== true : on === true;
+  }
+
+  function websiteToApiState(on) {
+    return INVERT_WEBSITE_STATE ? on !== true : on === true;
+  }
+
+  function setVisual(on) {
+    currentOn = on === true;
+    document.body.classList.toggle('is-on', currentOn);
+    switchBtn.setAttribute('aria-checked', String(currentOn));
+  }
+
+  function applyServerState(data) {
+    if (!data || typeof data.on !== 'boolean') return false;
+    const updatedAt = typeof data.updatedAt === 'string' ? data.updatedAt : '';
+    if (updatedAt && lastUpdatedAt && updatedAt < lastUpdatedAt) return false;
+    if (updatedAt) lastUpdatedAt = updatedAt;
+    hasLoadedState = true;
+    setVisual(apiToWebsiteState(data.on));
+    updateAccess();
+    return true;
+  }
+
+  function updateAccess() {
+    canControl = hasLoadedState && !pending;
+    switchBtn.disabled = !canControl;
+  }
+
+  function loadState() {
+    if (stateLoadPromise) return stateLoadPromise;
+    stateLoadPromise = (async () => {
+      try {
+        const res = await fetch('/api/lamp', { cache: 'no-store' });
+        if (!res.ok) throw new Error('load failed');
+        applyServerState(await res.json());
+      } catch {
+        // Keep the last authoritative visual; nothing else to display.
+      } finally {
+        stateLoadPromise = null;
+        updateAccess();
+      }
+    })();
+    return stateLoadPromise;
+  }
+
+  // Bottom status dot: green when the relay polled the server within the last 5s.
+  async function loadDeviceStatus() {
+    try {
+      const res = await fetch('/api/lamp/device/status', { cache: 'no-store' });
+      if (!res.ok) throw new Error('status failed');
+      const data = await res.json();
+      document.body.classList.toggle('is-polled', data.recentlyPolled === true);
+    } catch {
+      document.body.classList.remove('is-polled');
+    }
+  }
+
+  function connectEvents() {
+    if (!window.EventSource) return false;
+
+    const events = new EventSource('/api/lamp/events');
+    events.onopen = () => {
+      eventsConnected = true;
+    };
+    events.onmessage = event => {
+      try {
+        applyServerState(JSON.parse(event.data));
+      } catch {}
+    };
+    events.onerror = () => {
+      eventsConnected = false;
+    };
+    return true;
+  }
+
+  async function saveState() {
+    if (!canControl || !hasLoadedState || pending) return;
+    pending = true;
+    switchBtn.setAttribute('aria-busy', 'true');
+    updateAccess();
+
+    try {
+      let latest = null;
+      for (let attempt = 0; attempt < 2 && !latest; attempt++) {
+        const latestRes = await fetch('/api/lamp', { cache: 'no-store' });
+        if (!latestRes.ok) throw new Error('load failed');
+        const candidate = await latestRes.json();
+        if (!candidate || typeof candidate.on !== 'boolean') throw new Error('invalid state');
+        if (applyServerState(candidate)) latest = candidate;
+      }
+      if (!latest) throw new Error('stale state');
+
+      const targetOn = !apiToWebsiteState(latest.on);
+      const res = await fetch('/api/lamp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ on: websiteToApiState(targetOn) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const error = new Error(data.error || 'save failed');
+        error.status = res.status;
+        throw error;
+      }
+      if (!applyServerState(data)) throw new Error('invalid state');
+    } catch {
+      await loadState();
+    } finally {
+      pending = false;
+      switchBtn.setAttribute('aria-busy', 'false');
+      updateAccess();
+    }
+  }
+
+  function handleSwitchPress(event) {
+    event.preventDefault();
+    saveState();
+  }
+
+  switchBtn.addEventListener('pointerdown', handleSwitchPress);
+  switchBtn.addEventListener('keydown', event => {
+    if (event.key === ' ' || event.key === 'Enter') handleSwitchPress(event);
+  });
+  window.addEventListener('online', () => {
+    if (!pending) loadState();
+  });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    if (!pending) loadState();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!pending) loadState();
+  });
+
+  updateAccess();
+  loadState();
+  loadDeviceStatus();
+  connectEvents();
+  setInterval(() => {
+    if (!pending && !eventsConnected) loadState();
+  }, 1000);
+  setInterval(loadDeviceStatus, 1000);
+</script>
+</body>
+</html>

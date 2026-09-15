@@ -24,6 +24,7 @@ const CLIMBV2_DIR  = path.join(DATA, 'climb-tracker');
 const QUIZZES_DIR       = path.join(DATA, 'quizzes');
 const SHARED_LISTS_DIR  = path.join(DATA, 'shared-lists');
 const LIGHTS_DIR        = path.join(DATA, 'lights');
+const LAMP_DIR          = path.join(DATA, 'lamp');
 const RADAR_DIR         = path.join(DATA, 'radar');
 const ASSIGNMENTS_DIR   = path.join(DATA, 'assignments');
 const ANALYTICS_DIR         = path.join(DATA, 'analytics');
@@ -53,6 +54,14 @@ const LIGHTS_DEVICE_POLL_MS = 250;
 const LIGHTS_DEVICE_RECENT_MS = 5000;
 const LIGHTS_DEVICE_INVERT_OUTPUT = true;
 const LIGHTS_DEVICE_API_TOKEN = String(process.env.LIGHTS_DEVICE_API_TOKEN || '');
+const LAMP_STATE_FILE = path.join(LAMP_DIR, 'state.json');
+const LAMP_DEVICE_STATUS_FILE = path.join(LAMP_DIR, 'device-status.json');
+const LAMP_NATIVE_COMMANDS_FILE = path.join(LAMP_DIR, 'native-commands.json');
+const LAMP_NATIVE_SESSIONS_FILE = path.join(LAMP_DIR, 'native-sessions.json');
+const LAMP_DEVICE_POLL_MS = 250;
+const LAMP_DEVICE_RECENT_MS = 5000;
+const LAMP_DEVICE_INVERT_OUTPUT = true;
+const LAMP_DEVICE_API_TOKEN = String(process.env.LAMP_DEVICE_API_TOKEN || process.env.LIGHTS_DEVICE_API_TOKEN || '');
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 const ECO_AI_STATUS_TIMEOUT_MS = 4000;
 const ECO_AI_CHAT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -424,7 +433,7 @@ try {
 }
 
 // ── Boot: ensure directories and files exist ──────────────────────────────────
-for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, RADAR_DIR, ASSIGNMENTS_DIR, ANALYTICS_EVENTS_DIR, EMAIL_TEMPLATES_DIR, EMAIL_CAMPAIGNS_DIR])
+for (const dir of [DATA, CLIMBS_DIR, SETTINGS_DIR, APPDATA_DIR, MEETS_DIR, CLIMBV2_DIR, QUIZZES_DIR, SHARED_LISTS_DIR, LIGHTS_DIR, LAMP_DIR, RADAR_DIR, ASSIGNMENTS_DIR, ANALYTICS_EVENTS_DIR, EMAIL_TEMPLATES_DIR, EMAIL_CAMPAIGNS_DIR])
   fs.mkdirSync(dir, { recursive: true });
 
 if (!fs.existsSync(USERS_FILE))    fs.writeFileSync(USERS_FILE,    '[]');
@@ -432,6 +441,14 @@ if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '[]');
 if (!fs.existsSync(PASSWORD_RESETS_FILE)) fs.writeFileSync(PASSWORD_RESETS_FILE, '[]');
 if (!fs.existsSync(LIGHTS_STATE_FILE)) {
   fs.writeFileSync(LIGHTS_STATE_FILE, JSON.stringify({
+    on: false,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'device',
+    revision: 0,
+  }, null, 2));
+}
+if (!fs.existsSync(LAMP_STATE_FILE)) {
+  fs.writeFileSync(LAMP_STATE_FILE, JSON.stringify({
     on: false,
     updatedAt: new Date().toISOString(),
     updatedBy: 'device',
@@ -565,6 +582,93 @@ const nativeLightsControl = createNativeLightsControl({
   saveCommands: commands => atomicWrite(LIGHTS_NATIVE_COMMANDS_FILE, commands),
 });
 
+function readLampState() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LAMP_STATE_FILE, 'utf8'));
+    return {
+      on: raw.on === true,
+      updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
+      updatedBy: typeof raw.updatedBy === 'string' ? raw.updatedBy : 'device',
+      revision: Number.isSafeInteger(raw.revision) && raw.revision >= 0 ? raw.revision : 0,
+    };
+  } catch {
+    return { on: false, updatedAt: new Date(0).toISOString(), updatedBy: 'device', revision: 0 };
+  }
+}
+
+function writeLampState(on, updatedBy) {
+  const previous = readLampState();
+  const state = {
+    on: on === true,
+    updatedAt: new Date().toISOString(),
+    updatedBy: updatedBy || 'device',
+    revision: previous.revision + 1,
+  };
+  atomicWrite(LAMP_STATE_FILE, state);
+  broadcastLampState(state);
+  return state;
+}
+
+function writeLampDeviceStatus(status) {
+  atomicWrite(LAMP_DEVICE_STATUS_FILE, status);
+}
+
+function readLampDeviceStatus() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LAMP_DEVICE_STATUS_FILE, 'utf8'));
+    return {
+      on: raw.on === true,
+      receivedAt: typeof raw.receivedAt === 'string' ? raw.receivedAt : '',
+      polledAt: typeof raw.polledAt === 'string' ? raw.polledAt : '',
+      trustedOn: typeof raw.trustedOn === 'boolean' ? raw.trustedOn : null,
+      trustedReceivedAt: typeof raw.trustedReceivedAt === 'string' ? raw.trustedReceivedAt : '',
+      trustedPolledAt: typeof raw.trustedPolledAt === 'string' ? raw.trustedPolledAt : '',
+    };
+  } catch {
+    return { on: false, receivedAt: '', polledAt: '', trustedOn: null, trustedReceivedAt: '', trustedPolledAt: '' };
+  }
+}
+
+function markLampDevicePolled(trusted) {
+  const status = readLampDeviceStatus();
+  const now = Date.now();
+  const lastPoll = Date.parse(status.polledAt) || 0;
+  if (now - lastPoll < 1000) return status;
+
+  const timestamp = new Date(now).toISOString();
+  const updated = { ...status, polledAt: timestamp, ...(trusted ? { trustedPolledAt: timestamp } : {}) };
+  writeLampDeviceStatus(updated);
+  return updated;
+}
+
+function getLampDeviceStatusPayload() {
+  const status = readLampDeviceStatus();
+  const lastPoll = Date.parse(status.trustedPolledAt) || 0;
+  return {
+    on: status.trustedOn,
+    receivedAt: status.trustedReceivedAt,
+    polledAt: status.trustedPolledAt,
+    recentlyPolled: lastPoll > 0 && Date.now() - lastPoll <= LAMP_DEVICE_RECENT_MS,
+    recentWindowMs: LAMP_DEVICE_RECENT_MS,
+  };
+}
+
+const nativeLampControl = createNativeLightsControl({
+  readDesired: readLampState,
+  writeDesired: writeLampState,
+  readDeviceStatus: () => {
+    const status = readLampDeviceStatus();
+    return { on: status.trustedOn, receivedAt: status.trustedReceivedAt, polledAt: status.trustedPolledAt };
+  },
+  invertOutput: LAMP_DEVICE_INVERT_OUTPUT,
+  recentWindowMs: LAMP_DEVICE_RECENT_MS,
+  loadCommands: () => {
+    try { const value = JSON.parse(fs.readFileSync(LAMP_NATIVE_COMMANDS_FILE, 'utf8')); return Array.isArray(value) ? value : []; }
+    catch { return []; }
+  },
+  saveCommands: commands => atomicWrite(LAMP_NATIVE_COMMANDS_FILE, commands),
+});
+
 async function startHomeKitLightBridge() {
   const bridge = createHomeKitLightBridge({
     dataDir: path.join(LIGHTS_DIR, 'homekit'),
@@ -631,6 +735,23 @@ function getNativeLightsUser(token) {
   const websiteUser = getSessionUser(token);
   if (websiteUser) return websiteUser;
   const session = readNativeLightsSessions().find(item => safeTokenEqual(item.token, token) && Date.parse(item.expiresAt) > Date.now());
+  return session ? readUsers().find(user => user.id === session.userId) || null : null;
+}
+
+function readNativeLampSessions() {
+  try { const value = JSON.parse(fs.readFileSync(LAMP_NATIVE_SESSIONS_FILE, 'utf8')); return Array.isArray(value) ? value : []; }
+  catch { return []; }
+}
+
+function writeNativeLampSessions(sessions) {
+  const now = Date.now();
+  atomicWrite(LAMP_NATIVE_SESSIONS_FILE, sessions.filter(session => Date.parse(session.expiresAt) > now).slice(-32));
+}
+
+function getNativeLampUser(token) {
+  const websiteUser = getSessionUser(token);
+  if (websiteUser) return websiteUser;
+  const session = readNativeLampSessions().find(item => safeTokenEqual(item.token, token) && Date.parse(item.expiresAt) > Date.now());
   return session ? readUsers().find(user => user.id === session.userId) || null : null;
 }
 
@@ -799,6 +920,7 @@ function writeSharedList(id, listData) {
 // SSE client registry: listId -> Set of { res, userId }
 const sseClients  = new Map();
 const lightsSseClients = new Set();
+const lampSseClients = new Set();
 const termSessions = new Map(); // sessionId -> { ws, shell, userId }
 
 function broadcastSharedList(listId, list) {
@@ -819,6 +941,18 @@ function broadcastLightsState(state) {
   if (!lightsSseClients.size) return;
   for (const client of [...lightsSseClients]) {
     try { sendLightsSse(client.res, state); } catch {}
+  }
+}
+
+function sendLampSse(res, state) {
+  const { on, updatedAt } = state;
+  res.write(`data: ${JSON.stringify({ on, updatedAt })}\n\n`);
+}
+
+function broadcastLampState(state) {
+  if (!lampSseClients.size) return;
+  for (const client of [...lampSseClients]) {
+    try { sendLampSse(client.res, state); } catch {}
   }
 }
 
@@ -932,6 +1066,10 @@ function safeTokenEqual(actual, expected) {
 
 function hasValidLightsDeviceToken(req) {
   return safeTokenEqual(req.headers['x-big-tuna-device-token'], LIGHTS_DEVICE_API_TOKEN);
+}
+
+function hasValidLampDeviceToken(req) {
+  return safeTokenEqual(req.headers['x-big-tuna-device-token'], LAMP_DEVICE_API_TOKEN);
 }
 
 function getToken(req) {
@@ -3216,6 +3354,161 @@ async function handleAPI(req, res, urlPath) {
         ...(trusted ? { trustedOn: body.on, trustedReceivedAt: timestamp } : {}),
       };
       writeLightsDeviceStatus(status);
+      return jsonRes(res, 200, { ok: true, trusted });
+    } catch (error) {
+      if (error && error.code === 'BODY_TOO_LARGE') return jsonRes(res, 413, { error: error.message });
+      if (error && error.code === 'INVALID_JSON') return jsonRes(res, 400, { error: error.message });
+      throw error;
+    }
+  }
+
+  // Exchange a normal website login for a revocable, least-privilege token.
+  // Apple extensions persist only this Lamp-scoped credential.
+  if (req.method === 'POST' && urlPath === '/api/lamp/native/v1/session') {
+    const websiteToken = getToken(req);
+    const user = getSessionUser(websiteToken);
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (String(user.username || '').toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+    const token = generateToken();
+    const sessions = readNativeLampSessions();
+    sessions.push({ token, userId: user.id, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() });
+    writeNativeLampSessions(sessions);
+    return jsonRes(res, 200, { token, username: user.username });
+  }
+
+  if (req.method === 'DELETE' && urlPath === '/api/lamp/native/v1/session') {
+    const token = getToken(req);
+    if (token) writeNativeLampSessions(readNativeLampSessions().filter(session => !safeTokenEqual(session.token, token)));
+    return jsonRes(res, 200, { ok: true });
+  }
+
+  if ((req.method === 'GET' || req.method === 'PUT') && urlPath === '/api/lamp/native/v1') {
+    const user = getNativeLampUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (String(user.username || '').toLowerCase() !== 'yannick') {
+      return jsonRes(res, 403, { error: 'Forbidden' });
+    }
+    if (req.method === 'GET') return jsonRes(res, 200, nativeLampControl.getState());
+
+    try {
+      const body = await parseBoundedJson(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).some(key => key !== 'physicalOn' && key !== 'commandId')
+          || typeof body.physicalOn !== 'boolean') {
+        return jsonRes(res, 400, { error: 'Body must contain only physicalOn and commandId' });
+      }
+      const state = await nativeLampControl.setTarget({
+        targetOn: body.physicalOn,
+        commandId: body.commandId,
+        updatedBy: user.username,
+      });
+      return jsonRes(res, 200, state);
+    } catch (error) {
+      if (error && (error.code === 'INVALID_TARGET' || error.code === 'INVALID_COMMAND_ID')) {
+        return jsonRes(res, 400, { error: error.message });
+      }
+      if (error && error.code === 'COMMAND_ID_CONFLICT') {
+        return jsonRes(res, 409, { error: error.message });
+      }
+      if (error && error.code === 'BODY_TOO_LARGE') return jsonRes(res, 413, { error: error.message });
+      if (error && error.code === 'INVALID_JSON') return jsonRes(res, 400, { error: error.message });
+      throw error;
+    }
+  }
+
+  // GET /api/lamp/events - public live desired lamp state stream
+  if (req.method === 'GET' && urlPath === '/api/lamp/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    const client = { res };
+    lampSseClients.add(client);
+    sendLampSse(res, readLampState());
+
+    const ping = setInterval(() => {
+      try { res.write(':\n\n'); } catch { clearInterval(ping); }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(ping);
+      lampSseClients.delete(client);
+    });
+    return;
+  }
+
+  // GET /api/lamp - public desired lamp state
+  if (req.method === 'GET' && urlPath === '/api/lamp') {
+    const { on, updatedAt } = readLampState();
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    });
+    return res.end(JSON.stringify({ on, updatedAt }));
+  }
+
+  // GET /api/lamp/homekit - pairing status stub
+  if (req.method === 'GET' && urlPath === '/api/lamp/homekit') {
+    return jsonRes(res, 200, { available: false, paired: false, name: 'BIG TUNA Lamp' });
+  }
+
+  // POST /api/lamp - public desired lamp state control
+  if (req.method === 'POST' && urlPath === '/api/lamp') {
+    try {
+      const body = await parseBoundedJson(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).length !== 1 || typeof body.on !== 'boolean') {
+        return jsonRes(res, 400, { error: 'Body must contain only on' });
+      }
+
+      const { on, updatedAt } = writeLampState(body.on, 'public');
+      return jsonRes(res, 200, { on, updatedAt });
+    } catch (error) {
+      if (error && error.code === 'BODY_TOO_LARGE') return jsonRes(res, 413, { error: error.message });
+      if (error && error.code === 'INVALID_JSON') return jsonRes(res, 400, { error: error.message });
+      throw error;
+    }
+  }
+
+  // GET /api/lamp/device - ESP polling endpoint for desired state
+  if (req.method === 'GET' && urlPath === '/api/lamp/device') {
+    const trusted = hasValidLampDeviceToken(req);
+    if (LAMP_DEVICE_API_TOKEN && !trusted) return jsonRes(res, 401, { error: 'Device authentication required' });
+    markLampDevicePolled(trusted);
+    const { on, updatedAt } = readLampState();
+    const deviceOn = LAMP_DEVICE_INVERT_OUTPUT ? !on : on;
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    });
+    return res.end(JSON.stringify({ on: deviceOn, updatedAt, pollAfterMs: LAMP_DEVICE_POLL_MS }));
+  }
+
+  // GET /api/lamp/device/status - public ESP polling heartbeat
+  if (req.method === 'GET' && urlPath === '/api/lamp/device/status') {
+    return jsonRes(res, 200, getLampDeviceStatusPayload());
+  }
+
+  // POST /api/lamp/device/status - optional relay heartbeat/status
+  if (req.method === 'POST' && urlPath === '/api/lamp/device/status') {
+    const trusted = hasValidLampDeviceToken(req);
+    if (LAMP_DEVICE_API_TOKEN && !trusted) return jsonRes(res, 401, { error: 'Device authentication required' });
+    try {
+      const body = await parseBoundedJson(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).some(key => key !== 'on') || typeof body.on !== 'boolean') {
+        return jsonRes(res, 400, { error: 'Body must contain only on' });
+      }
+      const timestamp = new Date().toISOString();
+      const status = {
+        ...readLampDeviceStatus(),
+        on: body.on,
+        receivedAt: timestamp,
+        ...(trusted ? { trustedOn: body.on, trustedReceivedAt: timestamp } : {}),
+      };
+      writeLampDeviceStatus(status);
       return jsonRes(res, 200, { ok: true, trusted });
     } catch (error) {
       if (error && error.code === 'BODY_TOO_LARGE') return jsonRes(res, 413, { error: error.message });

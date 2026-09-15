@@ -559,6 +559,23 @@ data/lights/homekit/
   code for the local BIG TUNA Lights bridge. Back it up with other runtime data;
   deleting it forces Apple Home to pair again.
 
+data/lamp/state.json
+  Desired lamp relay state for the Lamp app and ESP32 polling integration:
+  { on: boolean, updatedAt: ISO string, updatedBy: username or "device",
+    revision: non-negative integer }. Older files without `revision` read as 0.
+
+data/lamp/device-status.json
+  ESP32 polling heartbeat/status written by the device endpoints:
+  legacy `{ on, receivedAt, polledAt }` plus trusted `{ trustedOn,
+  trustedReceivedAt, trustedPolledAt }` fields written only when the configured
+  `X-Big-Tuna-Device-Token` (or `LAMP_DEVICE_API_TOKEN`) is valid.
+
+data/lamp/native-sessions.json
+  Bounded, expiring, Lamp-only Apple client bearer tokens.
+
+data/lamp/native-commands.json
+  Bounded ten-minute native command result journal for restart-safe idempotency.
+
 data/radar/yhz-YYYY-MM-DD.json
   Daily Halifax local-time set of unique ADSB aircraft IDs seen by the public YHZ radar endpoint, stored as a JSON array.
 
@@ -667,6 +684,22 @@ translate through the existing inverted storage boundary without changing legacy
 payloads.
 
 `hap-nodejs` also starts a LAN-only HomeKit bridge named `BIG TUNA Lights` on TCP 51826, advertised by mDNS only through the physical Wi-Fi IPv4 address (explicit `HOMEKIT_BIND_ADDRESS`, otherwise the first IPv4 on `HOMEKIT_BIND_INTERFACE`, default `Wi-Fi`) so Tailscale and IPv6 routes cannot break Apple Home pairing. It translates HomeKit's physical-light `On` value through the existing website/device inversion and uses the same `writeLightsState` path, so the ESP device endpoints' stored-state contract does not change. Pairing data lives in `data/lights/homekit/`; `GET /api/lights/homekit` returns status only to the authenticated `yannick` account, while the owner-gated `/api/lights/homekit/qr` returns a locally generated, no-store SVG from the HAP setup URI only before pairing. The Cloudflare Tunnel is not part of HomeKit discovery; see `docs/apple-home-lights.md` for the QR pairing/firewall guide.
+
+Lamp:
+
+```text
+GET  /api/lamp
+POST /api/lamp
+GET/PUT /api/lamp/native/v1
+POST/DELETE /api/lamp/native/v1/session
+GET  /api/lamp/events
+GET  /api/lamp/device
+GET/POST /api/lamp/device/status
+```
+
+`GET /api/lamp` is public and returns `{ on, updatedAt }`. `GET /api/lamp/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lamp` is public and accepts only a JSON body shaped exactly as `{ on: boolean }`; malformed bodies or non-Boolean `on` values are rejected. Device routes preserve legacy unauthenticated polling only when `LAMP_DEVICE_API_TOKEN` is unset, but those calls never create trusted telemetry. Once configured, both device routes require `X-Big-Tuna-Device-Token`; only authenticated polls/reports feed the website/native device indicators. `GET /api/lamp/device` returns the inverted stored `on` value and `pollAfterMs: 250`. `GET /api/lamp/device/status` returns the trusted `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` view.
+
+`GET/PUT /api/lamp/native/v1` is the owner-only Apple-client contract for Lamp, mirroring the Lights native v1 contract (`physicalOn`, `reportedPhysicalOn`, `recentlyPolled`, `updatedAt`, `revision`, bounded `commandId` idempotency). `POST/DELETE /api/lamp/native/v1/session` manages scoped bearer sessions.
 
 Radar:
 
@@ -807,6 +840,17 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - The yannick-only HomeKit panel fetches `/api/lights/homekit` after session validation and shows a first-pair code/status. The HomeKit bridge is local-LAN only; pairing and normal HomeKit control do not change the ESP32 polling request contract. See `docs/apple-home-lights.md`.
 - ESP8266 relay integration should poll `/api/lights/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, and keep last known relay state if the website is temporarily unreachable. The device endpoint currently inverts the stored website state before returning `on` to work around reversed relay behavior.
 - The unsigned macOS desktop controller zip is linked from the homepage downloads menu at `https://github.com/yannickbigtuna-dev/BIG-TUNA/releases/download/lights-mac-latest/big-tuna-lights-mac.zip`. The app zip is too large for GitHub's normal per-file repository limit, so it is hosted as a release asset rather than committed under `apps/`.
+
+`lamp`:
+
+- Public static app at `/lamp/`.
+- Does not load `auth.js`, because the page must remain publicly viewable without showing the login modal.
+- Chrome-free, tactile switch UI matching Lights, with warm glow, paddle animation, and status screws.
+- The plate's lower screw turns green (`body.is-polled`) when `/api/lamp/device/status` reports `recentlyPolled` (device polled within the last 5 seconds); the upper screw is decorative because web control is public.
+- Reads `/api/lamp` for state, inverts that API value client-side to match the physical lamp state, and posts the inverse value back when toggled. `POST /api/lamp` is public and strictly accepts `{ on: boolean }`.
+- Uses `/api/lamp/events` SSE for near-instant same-page updates across open browsers, with 1-second `/api/lamp` polling only as a fallback.
+- Supports iPhone home-screen installation with Apple web-app meta tags and hides the shared topbar when launched in standalone display mode.
+- ESP32 relay integration should poll `/api/lamp/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, report status to `/api/lamp/device/status`, and keep last known relay state if the website is temporarily unreachable. Stored state lives in `data/lamp/`.
 
 `weather`:
 

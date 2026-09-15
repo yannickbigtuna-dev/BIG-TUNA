@@ -1,0 +1,54 @@
+ESP32 LAMP FIRMWARE PROMPT
+
+Use this prompt to generate Arduino IDE firmware for an ESP32 (e.g. NodeMCU ESP32 / ESP-WROOM-32) that follows the BIG TUNA Lamp app's desired on/off state.
+
+Write Arduino IDE firmware for an ESP32 that controls one relay from the BIG TUNA Lamp website.
+
+Hardware:
+- Board: ESP32 (e.g. NodeMCU ESP32, ESP32 Dev Module, or ESP-WROOM-32).
+- Relay control pin: GPIO 23 by default. Define it as RELAY_PIN and make it easy to change.
+- The relay may be active-low or active-high. Add a RELAY_ACTIVE_LOW constant and write one applyRelay(bool on) function that handles the inversion in one place.
+
+Network configuration:
+- Use WiFi.h, HTTPClient.h, and WiFiClientSecure.h.
+- Define WIFI_SSID, WIFI_PASSWORD, and LAMP_DEVICE_API_TOKEN constants at the top as placeholders.
+- The website base URL is https://yannickmorgans.ca.
+
+Website API:
+- Poll GET https://yannickmorgans.ca/api/lamp/device.
+- Send the shared device secret in the `X-Big-Tuna-Device-Token` header. The exact same random value must be configured as `LAMP_DEVICE_API_TOKEN` in the server environment; never commit the real value.
+- Each GET request also updates the website's device poll timestamp, which the Lamp page uses to show whether the device has polled in the last 5 seconds.
+- The successful response is JSON with this shape:
+  { "on": true or false, "updatedAt": "ISO timestamp", "pollAfterMs": 250 }
+- The ESP32 must decide whether the relay output should be on or off only from the boolean JSON field named "on". The website currently applies the relay inversion workaround before returning this value.
+- If "on" is true, call applyRelay(true). If "on" is false, call applyRelay(false).
+- Respect the returned pollAfterMs value when it is present and reasonable. Clamp it to a safe range such as 250 ms minimum and 10000 ms maximum.
+- If the request fails, keep the last known relay state instead of toggling or defaulting off. Retry after a slower backoff delay, for example 5000 ms.
+
+Device status reporting:
+- After applying a new state, POST to https://yannickmorgans.ca/api/lamp/device/status.
+- Send Content-Type: application/json.
+- Send the same `X-Big-Tuna-Device-Token` header.
+- Send a JSON body with the relay's actual state:
+  { "on": true }
+  or
+  { "on": false }
+- Status reporting is helpful but must not block relay control. If the status POST fails, continue polling normally.
+
+Implementation requirements:
+- Use WiFiClientSecure for HTTPS and HTTPClient for requests.
+- Parse the small JSON response safely. If using ArduinoJson, include the needed library and show the exact include. If avoiding ArduinoJson, parse only the "on" boolean and pollAfterMs carefully without relying on field order.
+- Print useful Serial logs: Wi-Fi connection, HTTP status codes, desired state changes, parse failures, and retry delays.
+- Keep loop() non-blocking except for short HTTP requests. Use millis() scheduling instead of delay() for the polling interval.
+- Reconnect Wi-Fi automatically if disconnected.
+- On boot, leave the relay in a known safe initial state, then poll the website as soon as Wi-Fi is connected.
+- Include the full complete sketch, not fragments.
+
+Expected behavior summary:
+
+- The website stores the desired state.
+- The ESP32 polls /api/lamp/device.
+- The response field "on" is the source of truth.
+- on: true means energize the relay according to the configured relay polarity.
+- on: false means de-energize the relay according to the configured relay polarity.
+- If the website is unreachable, the ESP32 keeps the last state it successfully applied.

@@ -1,3 +1,62 @@
+# Active Plan — Lamp Micro-App, Homepage Launcher, and API Endpoints (2026-09-15)
+
+## Goal and mode
+
+STANDARD feature. Implement a second independent light device ("Lamp") that works exactly like the first one ("Lights").
+Provide a bottom-left button with a lamp icon on the homepage linking to `/lamp`, serve the Lamp app at `/lamp` matching
+the tactile Lights interface, and implement the full mirrored API endpoint suite under `/api/lamp/*` (including state, events,
+device polling/heartbeat, and native v1 session/control). Add comprehensive test coverage, deployment, and an exhaustive
+endpoint & hardware integration guide for native app clients and ESP32 receivers.
+
+## Scope and constraints
+
+- Preserve existing Lights behavior, data files, HomeKit bridge, and untracked user files (`artifacts/`, `backups/`).
+- Server (`server.js`):
+  - Initialize `data/lamp/` on boot with `state.json`, `device-status.json`, `native-commands.json`, `native-sessions.json`.
+  - Add `readLampState()`, `writeLampState()`, `readLampDeviceStatus()`, `writeLampDeviceStatus()`, `markLampDevicePolled()`,
+    `getLampDeviceStatusPayload()`, `readNativeLampSessions()`, `writeNativeLampSessions()`, `getNativeLampUser()`, `hasValidLampDeviceToken()`.
+  - Instantiate `nativeLampControl` using `createNativeLightsControl`.
+  - Add SSE client pool `lampSseClients`, `sendLampSse()`, `broadcastLampState()`.
+  - Add routes:
+    - `POST /api/lamp/native/v1/session`
+    - `DELETE /api/lamp/native/v1/session`
+    - `GET/PUT /api/lamp/native/v1`
+    - `GET /api/lamp/events`
+    - `GET /api/lamp`
+    - `POST /api/lamp`
+    - `GET /api/lamp/device`
+    - `GET /api/lamp/device/status`
+    - `POST /api/lamp/device/status`
+    - `GET /api/lamp/homekit` (graceful stub)
+- Frontend:
+  - Add bottom-left button `#lamp-btn` with SVG lamp icon on `apps/index.html` linking to `/lamp/`.
+  - Create `apps/lamp/index.html` mirroring `apps/lights/index.html` with title "Lamp", Topbar title "Lamp", switch aria-label "Lamp", and endpoints targeting `/api/lamp`.
+- Tests:
+  - Add integration tests in `test/lamp-native-control-routes.test.js` covering all `/api/lamp` routes, inversion semantics, authentication, and device status.
+- Documentation:
+  - Create `docs/lamp-esp32-prompt.txt` with detailed ESP32 receiver firmware guidance.
+  - Update `CODEX_CONTEXT.md` and `README.md`.
+  - Prepare user-facing detailed endpoint and ESP32/app guide.
+
+## Disjoint write scopes
+
+- Package A (Backend & Tests): `server.js`, `test/lamp-native-control-routes.test.js`
+- Package B (Frontend & Documentation): `apps/lamp/index.html`, `apps/index.html`, `docs/lamp-esp32-prompt.txt`, `README.md`, `CODEX_CONTEXT.md`
+- Root: Execution plan, coordination, review of combined diff, validation, test suite execution, Git commit, Git push, and final report.
+
+## Progress
+
+- [x] Write pre-code implementation spec and update active plan
+- [x] Implement backend lamp state and routes in server.js
+- [x] Write automated integration tests for lamp routes
+- [x] Implement frontend lamp app in apps/lamp/index.html and homepage button in apps/index.html
+- [x] Create docs/lamp-esp32-prompt.txt and update README.md & CODEX_CONTEXT.md
+- [x] Run test suite and verify clean diff
+- [x] Commit and push to main
+- [x] Provide detailed endpoint guide for native app and ESP32 receiver
+
+---
+
 # Active Plan — Yannick vs Emma Challenge Win / Loss Email Pool & Admin Editor (2026-09-14)
 
 ## Goal and mode

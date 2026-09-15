@@ -207,6 +207,15 @@
     align-items: center;
     gap: 14px;
   }
+  .corner-tools-left {
+    position: fixed;
+    left: clamp(14px, 3vw, 32px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(14px, 3vw, 32px));
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
   .tool-btn {
     width: 48px;
     height: 48px;
@@ -226,6 +235,7 @@
   .tool-btn:focus-visible { outline: none; box-shadow: var(--ring); }
   .tool-btn svg.ic { width: 20px; height: 20px; }
   #lights-btn:hover { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, transparent); }
+  #lamp-btn:hover { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, transparent); }
   #downloads-btn:hover { color: var(--accent); border-color: var(--accent-ring); }
 
   #downloads-menu { position: relative; }
@@ -386,6 +396,13 @@
     </a>
   </div>
 </main>
+
+<!-- Bottom-left corner tools -->
+<div class="corner-tools-left">
+  <a href="/lamp/" id="lamp-btn" class="tool-btn" aria-label="Lamp" title="Lamp">
+    <svg class="ic" viewBox="0 0 24 24"><path d="M8 2h8l3 8H5l3-8Z"/><path d="M12 10v11"/><path d="M7 21h10"/></svg>
+  </a>
+</div>
 
 <!-- Bottom-right corner tools -->
 <div class="corner-tools">

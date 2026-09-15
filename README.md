@@ -42,6 +42,7 @@ Current apps include:
 
 - `capitals-quiz`
 - `eco-ai`
+- `lamp`
 - `list-maker`
 - `lights`
 - `pace-calculator`
@@ -409,9 +410,15 @@ POST/DELETE       /api/lights/native/v1/session
 GET               /api/lights/events
 GET               /api/lights/device
 GET/POST          /api/lights/device/status
+GET/POST          /api/lamp
+GET/PUT           /api/lamp/native/v1
+POST/DELETE       /api/lamp/native/v1/session
+GET               /api/lamp/events
+GET               /api/lamp/device
+GET/POST          /api/lamp/device/status
 ```
 
-The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.txt](docs/lights-esp8266-prompt.txt). Configure the same `LIGHTS_DEVICE_API_TOKEN` on the server and device so relay telemetry is trusted; the unset-token fallback preserves relay operation but deliberately reports no confirmed heartbeat.
+The ESP8266 prompt for generating Lights relay firmware is documented in [docs/lights-esp8266-prompt.txt](docs/lights-esp8266-prompt.txt); the ESP32 prompt for generating Lamp relay firmware is documented in [docs/lamp-esp32-prompt.txt](docs/lamp-esp32-prompt.txt). Configure the corresponding `LIGHTS_DEVICE_API_TOKEN` / `LAMP_DEVICE_API_TOKEN` on the server and device so relay telemetry is trusted; the unset-token fallback preserves relay operation but deliberately reports no confirmed heartbeat.
 
 ## Yannick vs Emma Strava Challenge
 
