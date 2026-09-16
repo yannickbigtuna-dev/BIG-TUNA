@@ -3161,7 +3161,7 @@ async function handleAPI(req, res, urlPath) {
 
   if (req.method === 'POST' && urlPath === '/api/lamp/native/v1/session') {
     const websiteToken = getToken(req);
-    const user = getSessionUser(websiteToken);
+    const user = getSessionUser(websiteToken) || getNativeLightsUser(websiteToken, 'lights');
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
     if (String(user.username || '').toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
     const token = generateToken();

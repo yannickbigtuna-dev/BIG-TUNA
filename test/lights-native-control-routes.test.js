@@ -170,10 +170,12 @@ test('native route issues scoped sessions and bounds command bodies', async () =
 
 test('lamp native route has an independent scoped token, state, and idempotent journal', async () => {
   const lightSession = await request('POST', '/api/lights/native/v1/session', { token: OWNER_TOKEN });
-  const lampSession = await request('POST', '/api/lamp/native/v1/session', { token: OWNER_TOKEN });
+  const lampSession = await request('POST', '/api/lamp/native/v1/session', { token: lightSession.body.token });
   assert.equal(lightSession.status, 200);
   assert.equal(lampSession.status, 200);
   assert.notEqual(lightSession.body.token, lampSession.body.token);
+  assert.equal((await request('GET', '/api/auth/me', { token: lampSession.body.token })).status, 401,
+    'a Lamp token cannot access the wider website API');
 
   assert.equal((await request('GET', '/api/lamp/native/v1', { token: lightSession.body.token })).status, 401);
   const lightsBefore = await request('GET', '/api/lights/native/v1', { token: OWNER_TOKEN });
