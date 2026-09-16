@@ -61,10 +61,10 @@ const LAMP_NATIVE_SESSIONS_FILE = path.join(LAMP_DIR, 'native-sessions.json');
 const LAMP_DEVICE_POLL_MS = 250;
 const LAMP_DEVICE_RECENT_MS = 5000;
 const LAMP_NATIVE_INVERT_OUTPUT = true;
-// The Lamp relay module's hardware output is wired with the opposite
-// polarity from the previous server contract. Keep the native API's physical
-// state model unchanged, but send the flipped relay-facing value to the ESP.
-const LAMP_DEVICE_INVERT_OUTPUT = false;
+// The website stores the legacy Lamp value inverted, while the flashed relay
+// firmware is active-low. This single inversion restores physical ON/OFF
+// semantics at the ESP-facing device boundary.
+const LAMP_DEVICE_INVERT_OUTPUT = true;
 const LAMP_DEVICE_API_TOKEN = String(process.env.LAMP_DEVICE_API_TOKEN || process.env.LIGHTS_DEVICE_API_TOKEN || '');
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 const ECO_AI_STATUS_TIMEOUT_MS = 4000;
