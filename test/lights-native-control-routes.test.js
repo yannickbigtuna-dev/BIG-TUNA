@@ -88,10 +88,10 @@ test('native Lights route is owner-only and returns physical state without chang
   assert.equal(legacy.status, 200);
   assert.equal(legacy.body.on, false, 'legacy website value stays inverted');
   const device = await request('GET', '/api/lights/device', { headers: { 'X-Big-Tuna-Device-Token': 'device-test-token' } });
-  assert.equal(device.body.on, true, 'ESP output contract remains physical relay state');
+  assert.equal(device.body.on, false, 'ESP receives the stored relay command without server-side inversion');
 });
 
-test('native mutation validates its request and translates physical target through inversion', async () => {
+test('native mutation validates its request while the ESP receives the stored relay command unchanged', async () => {
   for (const body of [{}, { physicalOn: 'true', commandId: 'a' }, { physicalOn: true },
     { physicalOn: true, commandId: '' }, { physicalOn: true, commandId: 'bad space' },
     { physicalOn: true, commandId: 'a'.repeat(129) }]) {
@@ -109,7 +109,7 @@ test('native mutation validates its request and translates physical target throu
   const legacy = await request('GET', '/api/lights');
   const device = await request('GET', '/api/lights/device', { headers: { 'X-Big-Tuna-Device-Token': 'device-test-token' } });
   assert.equal(legacy.body.on, true, 'physical off is stored with the existing inverted website value');
-  assert.equal(device.body.on, false, 'the ESP still receives physical relay off');
+  assert.equal(device.body.on, true, 'the ESP receives the stored relay command without server-side inversion');
 });
 
 test('native command retries are idempotent and conflicting reuse is rejected', async () => {

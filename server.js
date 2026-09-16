@@ -3327,7 +3327,10 @@ async function handleAPI(req, res, urlPath) {
     if (LIGHTS_DEVICE_API_TOKEN && !trusted) return jsonRes(res, 401, { error: 'Device authentication required' });
     markLightsDevicePolled(trusted);
     const { on, updatedAt } = readLightsState();
-    const deviceOn = LIGHTS_DEVICE_INVERT_OUTPUT ? !on : on;
+    // The deployed relay firmware applies its own active-low output polarity.
+    // Keep this wire command separate from the legacy state-to-physical mapping
+    // used by native clients and HomeKit above.
+    const deviceOn = on;
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',

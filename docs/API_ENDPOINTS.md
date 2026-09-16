@@ -47,8 +47,9 @@ place it in a link shared with anyone else.
 ## Lights, HomeKit, relay, and native clients
 
 The public legacy state uses the stored `on` field. Native clients must use
-`physicalOn` exclusively: the server intentionally contains the relay-output
-inversion boundary. The native operation is idempotent by `commandId`; reuse
+`physicalOn` exclusively. The relay device endpoint returns the stored `on`
+command unchanged; ESP firmware owns any relay-polarity inversion. The native
+operation is idempotent by `commandId`; reuse
 for the same target is safe and reuse for a different target returns `409`.
 
 | Method and path | Access | Request → response summary |
@@ -62,7 +63,7 @@ for the same target is safe and reuse for a different target returns `409`.
 | `GET /api/lights/events` | Public SSE | See streaming section; starts with the current desired legacy state. |
 | `GET /api/lights/homekit` | Owner | HomeKit availability and pairing info; returns an unavailable shape when the bridge is off. |
 | `GET /api/lights/homekit/qr` | Owner | Unpaired HomeKit setup QR as SVG; `409` once pairing is unavailable and `503` without bridge. `Cache-Control: no-store`. |
-| `GET /api/lights/device` | Relay | Relay-oriented desired `{on,updatedAt,pollAfterMs}`; `on` may be inverted by server configuration. |
+| `GET /api/lights/device` | Relay | Stored relay command `{on,updatedAt,pollAfterMs}`; ESP firmware applies relay polarity. |
 | `GET /api/lights/device/status` | Public | Sanitized latest relay heartbeat/status. |
 | `POST /api/lights/device/status` | Relay | Only `{on:boolean}` → `{ok:true,trusted}`. When a relay token is configured, it is required. |
 

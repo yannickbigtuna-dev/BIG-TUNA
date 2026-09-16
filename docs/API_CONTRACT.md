@@ -112,8 +112,9 @@ visibility is intentionally device-local App Group state and has no server API.
 ## Yannick Lights native integration
 
 The native app uses physical-light terms and never calls the relay protocol.
-The legacy website/ESP stored `on` value is intentionally inverted at the
-server boundary. See `docs/openapi.yaml` for schemas and error responses.
+The relay device endpoint returns the stored `on` command unchanged; ESP
+firmware applies any required relay-polarity inversion. See `docs/openapi.yaml`
+for schemas and error responses.
 
 | Method | Route | Access | Purpose |
 | --- | --- | --- | --- |
@@ -140,7 +141,7 @@ Native state must only be cached after a successful GET or PUT response.
 | GET | `/api/lights/events` | public SSE | Desired-state stream; initial state followed by changes and 15-second keepalives. |
 | GET | `/api/lights/homekit` | owner website session | HomeKit availability/pairing status. |
 | GET | `/api/lights/homekit/qr` | owner website session | Unpaired setup QR SVG only; never cache it. |
-| GET | `/api/lights/device` | relay token when configured | Legacy relay desired state, possibly inverted, plus `pollAfterMs`. |
+| GET | `/api/lights/device` | relay token when configured | Stored relay command plus `pollAfterMs`; ESP firmware applies relay polarity. |
 | GET | `/api/lights/device/status` | public | Sanitized trusted relay heartbeat/status. |
 | POST | `/api/lights/device/status` | relay token when configured | Report relay `{on:boolean}`; response says whether the report was trusted. |
 
