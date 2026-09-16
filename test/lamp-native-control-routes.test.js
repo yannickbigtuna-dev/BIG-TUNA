@@ -91,7 +91,7 @@ test('native Lamp route is owner-only and returns physical state without changin
   assert.equal(legacy.status, 200);
   assert.equal(legacy.body.on, false, 'legacy website value stays inverted');
   const device = await request('GET', '/api/lamp/device', { headers: { 'X-Big-Tuna-Device-Token': 'lamp-device-test-token' } });
-  assert.equal(device.body.on, true, 'ESP output contract remains physical relay state');
+  assert.equal(device.body.on, false, 'ESP output contract uses the flipped Lamp relay state');
 
   const homekit = await request('GET', '/api/lamp/homekit');
   assert.equal(homekit.status, 200);
@@ -116,7 +116,7 @@ test('native mutation validates its request and translates physical target throu
   const legacy = await request('GET', '/api/lamp');
   const device = await request('GET', '/api/lamp/device', { headers: { 'X-Big-Tuna-Device-Token': 'lamp-device-test-token' } });
   assert.equal(legacy.body.on, true, 'physical off is stored with the existing inverted website value');
-  assert.equal(device.body.on, false, 'the ESP still receives physical relay off');
+  assert.equal(device.body.on, true, 'the ESP receives the flipped Lamp relay output');
 });
 
 test('native command retries are idempotent and conflicting reuse is rejected', async () => {
