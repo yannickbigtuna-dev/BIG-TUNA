@@ -61,10 +61,6 @@ const LAMP_NATIVE_SESSIONS_FILE = path.join(LAMP_DIR, 'native-sessions.json');
 const LAMP_DEVICE_POLL_MS = 250;
 const LAMP_DEVICE_RECENT_MS = 5000;
 const LAMP_NATIVE_INVERT_OUTPUT = true;
-// The website stores the legacy Lamp value inverted, while the flashed relay
-// firmware is active-low. This single inversion restores physical ON/OFF
-// semantics at the ESP-facing device boundary.
-const LAMP_DEVICE_INVERT_OUTPUT = true;
 const LAMP_DEVICE_API_TOKEN = String(process.env.LAMP_DEVICE_API_TOKEN || process.env.LIGHTS_DEVICE_API_TOKEN || '');
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 const ECO_AI_STATUS_TIMEOUT_MS = 4000;
@@ -3485,12 +3481,11 @@ async function handleAPI(req, res, urlPath) {
     if (LAMP_DEVICE_API_TOKEN && !trusted) return jsonRes(res, 401, { error: 'Device authentication required' });
     markLampDevicePolled(trusted);
     const { on, updatedAt } = readLampState();
-    const deviceOn = LAMP_DEVICE_INVERT_OUTPUT ? !on : on;
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
-    return res.end(JSON.stringify({ on: deviceOn, updatedAt, pollAfterMs: LAMP_DEVICE_POLL_MS }));
+    return res.end(JSON.stringify({ on, updatedAt, pollAfterMs: LAMP_DEVICE_POLL_MS }));
   }
 
   // GET /api/lamp/device/status - public ESP polling heartbeat

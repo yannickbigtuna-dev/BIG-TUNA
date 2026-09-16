@@ -55,6 +55,43 @@ endpoint & hardware integration guide for native app clients and ESP32 receivers
 - [x] Commit and push to main
 - [x] Provide detailed endpoint guide for native app and ESP32 receiver
 
+## Active Extension — Lamp relay on/off correction (2026-09-16)
+
+### Goal and mode
+
+DEEP device and live deployment: correct the Lamp relay's reversed physical
+on/off behavior while preserving its public, native, authentication, telemetry,
+and persisted-state contracts.
+
+### Existing behavior and approach
+
+- `data/lamp/state.json` retains its existing legacy desired `on` value; no
+  migration or direct live-data edit is permitted.
+- `/api/lamp/device` currently inverts that value before returning it to the
+  ESP32. The installed firmware already applies active-low polarity locally,
+  so this produces a second inversion.
+- Remove only this ESP-facing server inversion. The ESP receives the stored
+  command and continues to apply its one configured polarity conversion in
+  `applyRelay()`.
+
+### Safety, validation, and rollback
+
+- Preserve the device token, 250 ms polling hint, trusted heartbeat, retry and
+  last-known-state firmware behavior; do not alter firmware or secrets.
+- Back up the existing Lamp state/status JSON before the PM2 restart. Run the
+  focused Lamp integration test, full regression suite, and diff/secret review.
+- After push, verify the deployed commit, PM2/log health, localhost and public
+  Lamp reads, plus one authenticated/device-token endpoint without writing
+  state. Roll back with the scoped commit if unsafe behavior or a restart loop
+  appears.
+
+### Progress
+
+- [x] Trace the duplicate server/firmware polarity conversion and define the
+  DEEP-mode compatibility constraints.
+- [x] Update implementation, tests, and device contract documentation.
+- [ ] Validate, commit, push, back up Lamp state, deploy, and verify live health.
+
 ---
 
 # Active Plan — Yannick vs Emma Challenge Win / Loss Email Pool & Admin Editor (2026-09-14)

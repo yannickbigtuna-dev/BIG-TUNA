@@ -20,8 +20,9 @@ Website API:
 - Each GET request also updates the website's device poll timestamp, which the Lamp page uses to show whether the device has polled in the last 5 seconds.
 - The successful response is JSON with this shape:
   { "on": true or false, "updatedAt": "ISO timestamp", "pollAfterMs": 250 }
-- The ESP32 must decide whether the relay output should be on or off only from the boolean JSON field named "on". The website currently applies the relay inversion workaround before returning this value.
+- The ESP32 must decide whether the relay output should be on or off only from the boolean JSON field named "on". The website returns the stored legacy command unchanged; it does not invert this value.
 - If "on" is true, call applyRelay(true). If "on" is false, call applyRelay(false).
+- Make exactly one polarity conversion, inside `applyRelay(bool on)`. For the existing active-low relay wiring, keep `RELAY_ACTIVE_LOW = true`; do not invert the API value anywhere else.
 - Respect the returned pollAfterMs value when it is present and reasonable. Clamp it to a safe range such as 250 ms minimum and 10000 ms maximum.
 - If the request fails, keep the last known relay state instead of toggling or defaulting off. Retry after a slower backoff delay, for example 5000 ms.
 
@@ -46,9 +47,8 @@ Implementation requirements:
 
 Expected behavior summary:
 
-- The website stores the desired state.
+- The website stores the legacy relay command and returns it unchanged.
 - The ESP32 polls /api/lamp/device.
 - The response field "on" is the source of truth.
-- on: true means energize the relay according to the configured relay polarity.
-- on: false means de-energize the relay according to the configured relay polarity.
+- `applyRelay` makes the single relay-polarity conversion; with `RELAY_ACTIVE_LOW = true`, `on: true` drives the active-low output and `on: false` de-energizes it.
 - If the website is unreachable, the ESP32 keeps the last state it successfully applied.

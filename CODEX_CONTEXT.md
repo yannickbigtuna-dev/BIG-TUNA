@@ -697,7 +697,7 @@ GET  /api/lamp/device
 GET/POST /api/lamp/device/status
 ```
 
-`GET /api/lamp` is public and returns `{ on, updatedAt }`. `GET /api/lamp/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lamp` is public and accepts only a JSON body shaped exactly as `{ on: boolean }`; malformed bodies or non-Boolean `on` values are rejected. Device routes preserve legacy unauthenticated polling only when `LAMP_DEVICE_API_TOKEN` is unset, but those calls never create trusted telemetry. Once configured, both device routes require `X-Big-Tuna-Device-Token`; only authenticated polls/reports feed the website/native device indicators. `GET /api/lamp/device` returns the inverted stored `on` value and `pollAfterMs: 250`. `GET /api/lamp/device/status` returns the trusted `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` view.
+`GET /api/lamp` is public and returns `{ on, updatedAt }`. `GET /api/lamp/events` is a public Server-Sent Events stream that immediately emits the same desired state payload whenever it changes. `POST /api/lamp` is public and accepts only a JSON body shaped exactly as `{ on: boolean }`; malformed bodies or non-Boolean `on` values are rejected. Device routes preserve legacy unauthenticated polling only when `LAMP_DEVICE_API_TOKEN` is unset, but those calls never create trusted telemetry. Once configured, both device routes require `X-Big-Tuna-Device-Token`; only authenticated polls/reports feed the website/native device indicators. `GET /api/lamp/device` returns the stored legacy `on` command unchanged with `pollAfterMs: 250`; the ESP32 makes exactly one polarity conversion in `applyRelay`. Existing active-low wiring keeps `RELAY_ACTIVE_LOW = true`. `GET /api/lamp/device/status` returns the trusted `{ on, receivedAt, polledAt, recentlyPolled, recentWindowMs }` view.
 
 `GET/PUT /api/lamp/native/v1` is the owner-only Apple-client contract for Lamp, mirroring the Lights native v1 contract (`physicalOn`, `reportedPhysicalOn`, `recentlyPolled`, `updatedAt`, `revision`, bounded `commandId` idempotency). `POST/DELETE /api/lamp/native/v1/session` manages scoped bearer sessions.
 
@@ -850,7 +850,7 @@ Only username `yannick` is allowed to open terminal WebSocket sessions. The serv
 - Reads `/api/lamp` for state, inverts that API value client-side to match the physical lamp state, and posts the inverse value back when toggled. `POST /api/lamp` is public and strictly accepts `{ on: boolean }`.
 - Uses `/api/lamp/events` SSE for near-instant same-page updates across open browsers, with 1-second `/api/lamp` polling only as a fallback.
 - Supports iPhone home-screen installation with Apple web-app meta tags and hides the shared topbar when launched in standalone display mode.
-- ESP32 relay integration should poll `/api/lamp/device`, respect the returned `pollAfterMs` hint when practical, apply the returned `on` value, report status to `/api/lamp/device/status`, and keep last known relay state if the website is temporarily unreachable. Stored state lives in `data/lamp/`.
+- ESP32 relay integration should poll `/api/lamp/device`, respect the returned `pollAfterMs` hint when practical, pass the unchanged returned `on` value to `applyRelay`, make exactly one polarity conversion there (keep `RELAY_ACTIVE_LOW = true` for the existing active-low wiring), report status to `/api/lamp/device/status`, and keep last known relay state if the website is temporarily unreachable. Stored state lives in `data/lamp/`.
 
 `weather`:
 
