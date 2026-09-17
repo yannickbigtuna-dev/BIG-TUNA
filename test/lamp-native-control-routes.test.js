@@ -186,6 +186,21 @@ test('native route issues scoped sessions and bounds command bodies', async () =
   assert.equal((await request('GET', '/api/lamp/native/v1', { token: exchange.body.token })).status, 401);
 });
 
+test('existing Lights-only installations can exchange their scoped token for Lamp access', async () => {
+  assert.equal((await request('POST', '/api/lamp/native/v1/session')).status, 401);
+  assert.equal((await request('POST', '/api/lamp/native/v1/session', { token: OTHER_TOKEN })).status, 403);
+  const lightsExchange = await request('POST', '/api/lights/native/v1/session', { token: OWNER_TOKEN });
+  assert.equal(lightsExchange.status, 200);
+
+  const lampExchange = await request('POST', '/api/lamp/native/v1/session', { token: lightsExchange.body.token });
+  assert.equal(lampExchange.status, 200);
+  assert.equal(typeof lampExchange.body.token, 'string');
+  assert.notEqual(lampExchange.body.token, lightsExchange.body.token);
+  assert.equal((await request('GET', '/api/lamp/native/v1', { token: lampExchange.body.token })).status, 200);
+  assert.equal((await request('GET', '/api/lights/native/v1', { token: lampExchange.body.token })).status, 401,
+    'a Lamp token cannot be used as a Lights token');
+});
+
 test('web Lamp writes are public but strictly validate the body', async () => {
   const publicWrite = await request('POST', '/api/lamp', { body: { on: false } });
   assert.equal(publicWrite.status, 200);

@@ -3368,8 +3368,12 @@ async function handleAPI(req, res, urlPath) {
   // Exchange a normal website login for a revocable, least-privilege token.
   // Apple extensions persist only this Lamp-scoped credential.
   if (req.method === 'POST' && urlPath === '/api/lamp/native/v1/session') {
-    const websiteToken = getToken(req);
-    const user = getSessionUser(websiteToken);
+    const sourceToken = getToken(req);
+    // New logins exchange their short-lived website session for both scoped
+    // credentials. Existing app installs already hold only a Lights token, so
+    // permit that least-privilege credential to bootstrap the separate Lamp
+    // token without forcing the owner to enter a password again.
+    const user = getNativeLightsUser(sourceToken);
     if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
     if (String(user.username || '').toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
     const token = generateToken();

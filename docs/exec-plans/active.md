@@ -1270,3 +1270,37 @@ APNs provider acceptance remains the existing `delivery` state.
 ## CHALLENGERS account creation and invites (2026-09-11)
 
 This independent extension is specified in docs/exec-plans/challengers-accounts-invites.md. Existing unfinished plans above are preserved. Scope: shared BIG TUNA registration, explicit-consent challenge invitations, browser fallback, native sharing and login branding.
+# Lights app Lamp authentication and system-surface reliability (2026-09-16)
+
+## Goal
+
+Repair the released Yannick Lights app so existing Lights-only installations can
+obtain Lamp access, Light and Lamp controls/widgets remain independently
+authenticated, and both desired state and trusted device status stay truthful
+while a physical relay is offline.
+
+## Constraints and approach
+
+- Preserve native physical-state semantics and legacy inverted web/device state.
+- Preserve all Apple identities, App Group keys, and server data formats.
+- Accept a valid owner Lights-scoped token only as a bootstrap credential for a
+  separate Lamp token; never broaden either token to normal website APIs.
+- Clear only the credential rejected by its endpoint and let every Lamp system
+  surface lazily repair a missing Lamp token through the shared coordinator.
+- Keep writes explicit and idempotent; an offline relay does not block desired
+  server state changes or fabricate `reportedPhysicalOn`/`recentlyPolled`.
+
+## Validation and rollback
+
+- Run focused Lights/Lamp native route tests, full Node tests, Swift static/unit
+  checks available on Windows, and project/spec identity checks.
+- Restart only `apps-server`, then verify PM2/logs plus localhost and public
+  desired/status reads without issuing a production toggle.
+- Roll back code by commit; runtime `data/` is unchanged and needs no rollback.
+
+## Progress
+
+- [x] Reproduced the Lights-token to Lamp-session contract mismatch in source.
+- [x] Fix and test server session exchange.
+- [x] Fix iPhone, widget, and control credential/state flows while preserving the Watch Light path.
+- [ ] Run acceptance checks, push both repositories, and restart/verify server.

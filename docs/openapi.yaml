@@ -282,6 +282,27 @@ paths:
       security: [{ NativeLightsBearerAuth: [] }, { WebsiteBearerAuth: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SetNativeLightState' } } } }
       responses: { '200': { description: State, content: { application/json: { schema: { $ref: '#/components/schemas/NativeLightState' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
+  /api/lamp/native/v1/session:
+    post:
+      tags: [Native Lights]
+      summary: Create a separate Lamp token from an owner website or Lights session
+      security: [{ WebsiteBearerAuth: [] }, { NativeLightsBearerAuth: [] }]
+      responses: { '200': { description: Scoped Lamp token, content: { application/json: { schema: { $ref: '#/components/schemas/NativeSession' } } } }, '401': { $ref: '#/components/responses/NotAuthenticated' }, '403': { $ref: '#/components/responses/Forbidden' } }
+    delete:
+      tags: [Native Lights]
+      summary: Revoke a supplied Lamp token
+      security: [{ NativeLampBearerAuth: [] }]
+      responses: { '200': { description: Revoked, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } } }
+  /api/lamp/native/v1:
+    get:
+      tags: [Native Lights]
+      security: [{ NativeLampBearerAuth: [] }]
+      responses: { '200': { description: Lamp state, content: { application/json: { schema: { $ref: '#/components/schemas/NativeLightState' } } } } }
+    put:
+      tags: [Native Lights]
+      security: [{ NativeLampBearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SetNativeLightState' } } } }
+      responses: { '200': { description: Lamp state, content: { application/json: { schema: { $ref: '#/components/schemas/NativeLightState' } } } }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } }
   /api/strava-challenge/public:
     get:
       tags: [Public score]
@@ -328,6 +349,7 @@ components:
   securitySchemes:
     WebsiteBearerAuth: { type: http, scheme: bearer, description: Normal BIG TUNA website session, also used by native Challenge. }
     NativeLightsBearerAuth: { type: http, scheme: bearer, description: Revocable owner-only Lights token. }
+    NativeLampBearerAuth: { type: http, scheme: bearer, description: Revocable owner-only Lamp token. }
   parameters:
     ChallengeId: { name: challengeId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
     ReviewId: { name: reviewId, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' } }

@@ -58,6 +58,10 @@ for the same target is safe and reuse for a different target returns `409`.
 | `DELETE /api/lights/native/v1/session` | Token optional | Revokes the supplied native bearer token → `{ok:true}` even if omitted. |
 | `GET /api/lights/native/v1` | Native Lights | Authoritative physical desired state plus trusted relay status. |
 | `PUT /api/lights/native/v1` | Native Lights | Only `{physicalOn:boolean,commandId}` → authoritative command result; `400`, `409`, or `413` for invalid body/conflict/oversize. |
+| `POST /api/lamp/native/v1/session` | Owner website or Native Lights | No body → `{token,username}` separate Lamp-only token (30-day lifetime). |
+| `DELETE /api/lamp/native/v1/session` | Token optional | Revokes the supplied Lamp bearer token → `{ok:true}` even if omitted. |
+| `GET /api/lamp/native/v1` | Native Lamp | Authoritative Lamp physical desired state plus trusted relay status. |
+| `PUT /api/lamp/native/v1` | Native Lamp | Only `{physicalOn:boolean,commandId}` → authoritative Lamp command result. |
 | `GET /api/lights` | Public | Legacy desired `{on,updatedAt}`. |
 | `POST /api/lights` | Public | Only `{on:boolean}` → updated `{on,updatedAt}`; `400` invalid JSON/shape, `413` oversized body. |
 | `GET /api/lights/events` | Public SSE | See streaming section; starts with the current desired legacy state. |

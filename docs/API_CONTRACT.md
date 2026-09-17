@@ -122,6 +122,10 @@ for schemas and error responses.
 | DELETE | `/api/lights/native/v1/session` | token optional | Revoke the supplied native token; returns `{ok:true}` even when absent. |
 | GET | `/api/lights/native/v1` | owner Lights-scoped token | Read authoritative desired physical state and trusted relay status. |
 | PUT | `/api/lights/native/v1` | owner Lights-scoped token | Set explicit `physicalOn` with a retry-safe `commandId`. |
+| POST | `/api/lamp/native/v1/session` | owner website session or owner Lights-scoped token | Create the separate revocable Lamp token, including upgrades of existing app installations. |
+| DELETE | `/api/lamp/native/v1/session` | token optional | Revoke the supplied Lamp token; returns `{ok:true}` even when absent. |
+| GET | `/api/lamp/native/v1` | owner Lamp-scoped token | Read authoritative Lamp desired physical state and trusted relay status. |
+| PUT | `/api/lamp/native/v1` | owner Lamp-scoped token | Set explicit Lamp `physicalOn` with a retry-safe `commandId`. |
 | GET | `/api/strava-challenge/public` | public | Read the cached weekly Yannick-versus-Emma score used by native score surfaces. |
 | POST/GET | `/api/strava-challenge/review-requests` | `yannick` or `fishyemma` website session | Create/list durable fixed-scoreboard manual reviews; server maps those usernames to Yannick/Emma and never accepts a participant ID. |
 | POST | `/api/strava-challenge/review-requests/{reviewId}/decision` | Other fixed participant | Idempotently approve/reject; approval returns the same safe public-scoreboard shape and updates the authoritative activity. |
@@ -190,6 +194,10 @@ external consumer; it is not permission to expose a private route.
 | `DELETE /api/lights/native/v1/session` | Native Bearer optional | `{ok:true}` | Yannick Lights logout/extensions |
 | `GET /api/lights/native/v1` | Native Lights Bearer | Physical state object; `401/403` | iPhone, Watch, widgets, controls |
 | `PUT /api/lights/native/v1` | `{physicalOn:boolean,commandId}` | Physical state object; `400/401/403/409/413` | iPhone, Watch, widgets, controls |
+| `POST /api/lamp/native/v1/session` | No body; website or Lights Bearer | `{token,username}`; `401/403` | Yannick Lights iPhone/extensions Lamp bootstrap |
+| `DELETE /api/lamp/native/v1/session` | Lamp Bearer optional | `{ok:true}` | Yannick Lights logout/extensions |
+| `GET /api/lamp/native/v1` | Native Lamp Bearer | Physical state object; `401/403` | iPhone, Lamp widgets, Lamp controls |
+| `PUT /api/lamp/native/v1` | `{physicalOn:boolean,commandId}` | Physical state object; `400/401/403/409/413` | iPhone, Lamp widgets, Lamp controls |
 | `GET /api/strava-challenge/public` | None | Sanitized cached dashboard; `503` if unavailable | Homepage, native score widgets |
 | `POST/GET /api/strava-challenge/review-requests` | `{activityId,reason?}` / status filter | Durable review or actionable other-party review list; `400/401/403/404/409` | Fixed Yannick/Emma accounts only |
 | `POST /api/strava-challenge/review-requests/{reviewId}/decision` | `{decision:"approve"|"reject",reason?}` | `{review,scoreboard,idempotent}`; `400/401/403/404/409` | Fixed other participant only |
@@ -208,6 +216,12 @@ external consumer; it is not permission to expose a private route.
 | `GET /api/lights/device` | `X-Big-Tuna-Device-Token` when configured | Relay desired state and polling hint; `401` | ESP8266/ESP32 relay firmware |
 | `GET /api/lights/device/status` | None | Sanitized heartbeat status | Website/device status UI |
 | `POST /api/lights/device/status` | Relay status JSON, device header when configured | Trust/result status; `400/401` | ESP8266/ESP32 telemetry |
+| `GET /api/lamp` | None | `{on,updatedAt}` | Public Lamp website |
+| `POST /api/lamp` | Strict `{on:boolean}` | `{on,updatedAt}`; `400` invalid body | Public Lamp website |
+| `GET /api/lamp/events` | None | SSE desired-state events + keepalives | Lamp website; public browser stream |
+| `GET /api/lamp/device` | `X-Big-Tuna-Device-Token` when configured | Lamp desired state and polling hint; `401` | Lamp relay firmware |
+| `GET /api/lamp/device/status` | None | Sanitized Lamp heartbeat status | Website/device status UI |
+| `POST /api/lamp/device/status` | Relay status JSON, device header when configured | Trust/result status; `400/401` | Lamp relay telemetry |
 
 ### Strava challenge and leaderboard
 
