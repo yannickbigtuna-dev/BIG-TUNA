@@ -14,6 +14,19 @@ async function challenge(s, owner = user('owner')) { return s.createChallenge(ow
 async function seedActivity(s, challengeId, activity) { await s._mutate(state => { state.challenges[challengeId].activities[activity.id] = activity; }); }
 async function rejectsCode(promise, code) { await assert.rejects(promise, error => error instanceof ChallengeAccountsError && error.code === code); }
 
+test('state adapters operate directly on the supplied account namespace', async () => {
+  const namespace = { version: 1, challenges: {}, devices: { existing: { id: 'existing' } }, notificationEvents: {} };
+  const adapter = {
+    read: fn => fn(namespace),
+    mutate: async fn => fn(namespace),
+  };
+  const s = createChallengeAccounts({ stateAdapter: adapter });
+  assert.equal(s._readState().devices.existing.id, 'existing');
+  await s._mutate(state => { state.devices.added = { id: 'added' }; });
+  assert.equal(namespace.devices.added.id, 'added');
+  assert.equal(namespace.challengeAccounts, undefined);
+});
+
 test('validates rules and isolates challenge visibility by membership', async () => {
   const s = service();
   await rejectsCode(s.createChallenge(user('owner'), { template: 'custom', qualifyingActivities: [] }), 'invalid_rules');
@@ -221,7 +234,7 @@ test('shared state adapter stores challenge account data in the existing state t
   const root = {}; const adapter = { read: fn => fn(root), mutate: async fn => fn(root) };
   const s = createChallengeAccounts({ stateAdapter: adapter, now, deviceTokenCipher: { encrypt: token => Buffer.from(token).toString('base64'), decrypt: cipher => Buffer.from(cipher, 'base64').toString() } });
   await s.createChallenge(user('owner'), { template: 'custom', name: 'Shared', qualifyingActivities: ['Run'] });
-  assert.ok(root.challengeAccounts); assert.equal(Object.keys(root.challengeAccounts.challenges).length, 1);
+  assert.equal(Object.keys(root.challenges).length, 1); assert.equal(root.challengeAccounts, undefined);
 });
 
 test('manager invitations store only hashes, preview by link or normalized code, and accept the authenticated member idempotently', async () => {

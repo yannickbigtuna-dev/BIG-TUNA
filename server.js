@@ -95,6 +95,7 @@ const assignmentCoach = require('./lib/assignment-coach');
 const { createStravaChallenge } = require('./lib/strava-challenge');
 const { createChallengeAccounts } = require('./lib/challenge-accounts');
 const { createChallengeApns, createDeviceTokenCipher } = require('./lib/challenge-apns');
+const { createChallengeNotificationScheduler } = require('./lib/challenge-notification-scheduler');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
 const { createTriviaTopicPool } = require('./lib/trivia-topic-pool');
@@ -158,11 +159,17 @@ const stravaChallengeLogger = Object.freeze({
 
 let stravaChallenge = null;
 let challengeAccounts = null;
+let challengeNotificationScheduler = null;
 const challengeDeviceTokenCipher = createDeviceTokenCipher({ env: process.env });
 const challengeApns = createChallengeApns({ env: process.env, logger: stravaChallengeLogger });
 const CHALLENGE_REFRESH_COOLDOWN_MS = 5 * 60_000;
 let challengeRefreshInFlight = null;
 let challengeRefreshCooldownUntil = 0;
+function challengeAccountIdForParticipant(participantId) {
+  const username = { yannick: 'yannick', emma: 'fishyemma' }[participantId];
+  const matched = username && readUsers().find(account => normalizedChallengeUsername(account) === username);
+  return matched && matched.id;
+}
 try {
   stravaChallenge = createStravaChallenge({
     dataDir: path.join(DATA, 'strava-challenge'),
@@ -178,11 +185,8 @@ try {
       return { sent: result.delivery === 'sent', invalidToken: result.reason === 'invalid_token' };
     },
     deviceTokenCipher: challengeDeviceTokenCipher,
-    participantAccountIdFor: participantId => {
-      const username = { yannick: 'yannick', emma: 'fishyemma' }[participantId];
-      const matched = username && readUsers().find(account => normalizedChallengeUsername(account) === username);
-      return matched && matched.id;
-    },
+    participantAccountIdFor: challengeAccountIdForParticipant,
+    onAuthoritativeSync: update => challengeNotificationScheduler && challengeNotificationScheduler.handleAuthoritativeUpdate(update),
   });
 } catch (error) {
   // A missing Strava configuration must never take down the public site.
@@ -246,6 +250,25 @@ try {
   });
 } catch (error) {
   stravaChallengeLogger.error('challenge accounts unavailable during startup:', error && error.message);
+}
+
+try {
+  if (stravaChallenge && challengeAccounts) {
+    challengeNotificationScheduler = createChallengeNotificationScheduler({
+      refresh: () => stravaChallenge.syncAll(),
+      getDashboard: () => stravaChallenge.getPublicDashboard(),
+      getPendingReviews: () => stravaChallenge.getPendingNotificationReviews(),
+      readState: () => challengeAccounts._readState(),
+      mutateState: mutation => challengeAccounts._mutate(mutation),
+      resolveAccountId: challengeAccountIdForParticipant,
+      decryptToken: encrypted => challengeDeviceTokenCipher.decrypt(encrypted),
+      sendNotification: payload => challengeApns.send(payload),
+      apnsConfigured: challengeApns.configured,
+      logger: stravaChallengeLogger,
+    });
+  }
+} catch (error) {
+  stravaChallengeLogger.error('challenge notification scheduler unavailable during startup:', error && error.message);
 }
 
 // ── Custom Push Notifications & Scheduler ──────────────────────────────────────
@@ -381,20 +404,65 @@ async function deliverCustomNotification(notification) {
   return notification;
 }
 
+let customNotificationsDispatchInFlight = null;
+async function runScheduledCustomNotifications({ currentTime = Date.now(), deliver = deliverCustomNotification } = {}) {
+  const list = readCustomNotifications();
+  let changed = false;
+  const due = [];
+  for (const item of list) {
+    if (!item) continue;
+    if (item.status === 'dispatching') {
+      item.status = 'failed';
+      item.failureReason = 'dispatch_interrupted';
+      item.resultMessage = 'Delivery outcome is indeterminate after a server interruption; notification was not retried';
+      changed = true;
+      continue;
+    }
+    if (item.status !== 'scheduled' || !item.scheduledFor) continue;
+    const scheduledTime = Date.parse(item.scheduledFor);
+    if (!Number.isFinite(scheduledTime) || scheduledTime > currentTime) continue;
+    if (customNotificationDueState(item, currentTime) === 'missed') {
+      item.status = 'missed';
+      item.failureReason = 'delivery_window_expired';
+      item.resultMessage = 'Scheduled delivery window expired; notification was not sent';
+      changed = true;
+      continue;
+    }
+    item.status = 'dispatching';
+    item.dispatchStartedAt = new Date(currentTime).toISOString();
+    due.push(item);
+    changed = true;
+  }
+  if (changed) writeCustomNotifications(list);
+  for (const item of due) {
+    try {
+      await deliver(item);
+    } catch {
+      item.status = 'failed';
+      item.failureReason = 'delivery_failed';
+      item.resultMessage = 'Scheduled delivery failed and was not retried';
+    }
+    writeCustomNotifications(list);
+  }
+  return { changed, notifications: list };
+}
+
+function processScheduledCustomNotifications(options = {}) {
+  if (customNotificationsDispatchInFlight) return customNotificationsDispatchInFlight;
+  customNotificationsDispatchInFlight = runScheduledCustomNotifications(options).finally(() => { customNotificationsDispatchInFlight = null; });
+  return customNotificationsDispatchInFlight;
+}
+
+function customNotificationDueState(item, currentTime = Date.now()) {
+  if (!item || item.status !== 'scheduled' || !item.scheduledFor) return 'inactive';
+  const scheduledTime = Date.parse(item.scheduledFor);
+  if (!Number.isFinite(scheduledTime) || scheduledTime > currentTime) return 'waiting';
+  return currentTime - scheduledTime > 15 * 60_000 ? 'missed' : 'due';
+}
+
 const customNotificationsScheduler = setInterval(async () => {
   try {
-    const list = readCustomNotifications();
-    const now = Date.now();
-    let changed = false;
-    for (const item of list) {
-      if (item && item.status === 'scheduled' && item.scheduledFor && Date.parse(item.scheduledFor) <= now) {
-        await deliverCustomNotification(item);
-        changed = true;
-      }
-    }
-    if (changed) {
-      writeCustomNotifications(list);
-    }
+    await processScheduledCustomNotifications();
   } catch (err) {
     stravaChallengeLogger.error('custom notifications scheduler error:', err && err.message);
   }
@@ -5865,6 +5933,7 @@ server.listen(PORT, '0.0.0.0', () => {
       stravaChallengeLogger.error('scheduler did not start:', error && error.message);
     });
   }
+  if (challengeNotificationScheduler) challengeNotificationScheduler.start();
 });
 
 server.on('error', err => {
@@ -5883,4 +5952,4 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
 
-module.exports = { server, resolveHomeKitBindAddress, _test: { getChallengeAccounts: () => challengeAccounts, getStravaChallenge: () => stravaChallenge, setStravaChallenge: value => { stravaChallenge = value; }, refreshChallengeAccountData } };
+module.exports = { server, resolveHomeKitBindAddress, _test: { getChallengeAccounts: () => challengeAccounts, getStravaChallenge: () => stravaChallenge, setStravaChallenge: value => { stravaChallenge = value; }, refreshChallengeAccountData, processScheduledCustomNotifications, customNotificationDueState } };

@@ -259,6 +259,22 @@ fallback on absent/unavailable APNs. Neither device tokens nor provider error
 details appear in responses, event records, or logs. An invalid/unregistered
 APNs token disables that device record.
 
+Timed CHALLENGERS score alerts are server-owned and do not depend on the app
+running. The server refreshes both authoritative Strava participants before
+rendering recipient-specific alerts at 09:00, 13:00, and 20:00
+`America/Halifax`. Each recipient/slot is claimed in a bounded durable ledger;
+the five-minute delivery window is attempted at most once, partial refresh or
+APNs failures are terminal for that slot, and missed slots are never replayed.
+Fresh score-change events use the same encrypted device registry with a
+durable 15-minute category cooldown. Pending peer reviews receive one current
+reminder after two hours and no more often than every three hours. None of
+these scheduler records contains a raw device token.
+
+Admin-created scheduled notifications have a 15-minute delivery window. The
+server persists a `dispatching` claim before contacting APNs; expired records
+become `missed`, and an interrupted dispatch becomes terminal `failed` with an
+indeterminate outcome instead of being resent after restart.
+
 ### APNs production configuration
 
 Set deployment-only environment variables (never in a native app, source tree,

@@ -574,6 +574,17 @@ process, alongside the existing site jobs:
 - overdue unfinalized weeks are retryable after outages or restarts;
 - homepage requests read local cached state and never call Strava.
 
+CHALLENGERS push delivery is also owned by the continuously running server. At
+09:00, 13:00, and 20:00 `America/Halifax`, the server claims each recipient's
+slot durably, refreshes both authoritative participants, renders current score
+copy, and sends it through APNs. A slot has a five-minute delivery window and
+is attempted at most once; expired, interrupted, refresh-failed, or provider-
+failed slots are terminal and are never replayed when the server restarts or
+the app next opens. Fresh score changes and pending-review reminders use the
+same encrypted device registry and durable cooldown ledger. The iOS app owns
+permission, token registration, presentation, navigation, and explicit test
+alerts only—it does not synthesize production alerts from foreground refreshes.
+
 Authoritative review notification events are recipient-only. Native clients may
 acknowledge an event after processing its push or in-app fallback with
 `POST /api/strava-challenge/notification-events/:eventId/acknowledge` and no

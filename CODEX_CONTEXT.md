@@ -989,6 +989,21 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   deployment credentials truthfully result in `failed` while the redacted
   in-app event persists. `APNS_*` credentials and
   `CHALLENGE_DEVICE_TOKEN_CRYPTO_SECRET` are deployment-only requirements.
+- Production CHALLENGERS notifications are server-owned. The long-running app
+  server sends current-score alerts at 09:00, 13:00, and 20:00
+  `America/Halifax`, refreshes authoritative data before rendering, and claims
+  every recipient/slot in the canonical challenge-account namespace before
+  contacting APNs. The five-minute slot window is at-most-once: missed,
+  interrupted, refresh-failed, or provider-failed claims are terminal and are
+  never replayed on restart or app launch. Fresh score events and pending-review
+  reminders use the same durable ledger and cooldown rules. App foregrounding
+  may refresh UI state but must never manufacture production notifications.
+- The Strava store adapter supplies the challenge-account namespace directly.
+  A legacy deployment accidentally nested a second `challengeAccounts` object;
+  startup validates and atomically merges byte-equivalent/non-overlapping
+  records into the canonical namespace, fails closed on conflicting IDs, and
+  removes the nested source. Take an external timestamped state backup before
+  deploying a build that performs this migration.
 
 ## Apple App Factory
 

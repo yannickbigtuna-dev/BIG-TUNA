@@ -12,7 +12,7 @@ test('custom notifications admin endpoints, validation, immediate send, and sche
   const previousDataDir = process.env.BIG_TUNA_DATA_DIR;
   process.env.BIG_TUNA_DATA_DIR = dataDir;
 
-  const { server } = require('../server');
+  const { server, _test } = require('../server');
   const OWNER_TOKEN = 'test-owner-token';
   const OTHER_TOKEN = 'test-other-token';
 
@@ -116,6 +116,17 @@ test('custom notifications admin endpoints, validation, immediate send, and sche
     assert.equal(schedRes.body.scheduled, true);
     assert.equal(schedRes.body.notification.status, 'scheduled');
     assert.equal(schedRes.body.notification.scheduledFor, futureDate);
+    assert.equal(_test.customNotificationDueState({ status: 'scheduled', scheduledFor: new Date(Date.now() - 14 * 60_000).toISOString() }), 'due');
+    assert.equal(_test.customNotificationDueState({ status: 'scheduled', scheduledFor: new Date(Date.now() - 16 * 60_000).toISOString() }), 'missed');
+    const scheduledFile = path.join(dataDir, 'custom-notifications.json');
+    const scheduledRecords = JSON.parse(fs.readFileSync(scheduledFile, 'utf8'));
+    scheduledRecords.find(item => item.id === schedRes.body.notification.id).scheduledFor = new Date(Date.now() - 60_000).toISOString();
+    fs.writeFileSync(scheduledFile, JSON.stringify(scheduledRecords, null, 2));
+    let dispatches = 0;
+    const deliver = async item => { dispatches++; await new Promise(resolve => setTimeout(resolve, 10)); item.status = 'sent'; };
+    await Promise.all([_test.processScheduledCustomNotifications({ deliver }), _test.processScheduledCustomNotifications({ deliver })]);
+    assert.equal(dispatches, 1);
+    assert.equal(JSON.parse(fs.readFileSync(scheduledFile, 'utf8')).find(item => item.id === schedRes.body.notification.id).status, 'sent');
 
     // 6. List custom notifications
     const listRes = await apiReq('GET', '/api/admin/custom-notifications');
