@@ -1596,7 +1596,8 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
   const initialChallenges = await Promise.all(initialSummaries.map(challenge => accounts.getChallenge(user, challenge.id)));
   const deadlineAt = Date.now() + Math.max(1, timeoutMs);
   const remainingMs = () => deadlineAt - Date.now();
-  const participantIds = [...new Set(initialChallenges.flatMap(challenge => (challenge.participants || []).map(participant => participant.userId).filter(Boolean)))];
+  const syncableChallenges = initialChallenges.filter(challenge => challenge.template !== 'yannick-emma-default');
+  const participantIds = [...new Set(syncableChallenges.flatMap(challenge => (challenge.participants || []).map(participant => participant.userId).filter(Boolean)))];
   let partial = false;
 
   if (service && typeof service.getAccountStatus === 'function' && typeof service.syncAccountActivities === 'function') {
@@ -1631,7 +1632,7 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
     }
   } else if (participantIds.length) partial = true;
 
-  for (const challenge of initialChallenges) {
+  for (const challenge of syncableChallenges) {
     for (const participant of challenge.participants || []) {
       const cached = cachedByParticipant.get(participant.userId) || [];
       try {
