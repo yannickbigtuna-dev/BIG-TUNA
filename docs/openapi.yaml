@@ -175,7 +175,7 @@ paths:
     post:
       tags: [Native Challenge]
       summary: Refresh all caller-visible challenges within a bounded wait
-      description: Accepts no body. Each unique connected participant shared by the caller's challenges is synchronized at most once and concurrent requests reuse in-flight participant work. Available cached or fresh activity is imported into every visible challenge. Provider failures or the 12-second deadline return HTTP 200 with partial true and durable last-known challenge details.
+      description: Accepts no body. Each unique connected participant shared by the caller's challenges is synchronized at most once and concurrent requests reuse in-flight participant work through completion. Waits up to 70 seconds for Strava within an 80-second overall refresh budget, then imports available cached or fresh activity into every visible challenge. Provider failures or the deadline return HTTP 200 with partial true and durable last-known challenge details.
       security: [{ WebsiteBearerAuth: [] }]
       responses:
         '200': { description: Durable refreshed challenge collection, content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeRefreshResult' } } } }

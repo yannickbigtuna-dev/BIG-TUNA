@@ -103,10 +103,13 @@ readiness plan for validation and deployment prerequisites.
 
 `POST /api/challenges/refresh` is the only challenge-account read flow that
 waits on Strava. It accepts no request body, coalesces a participant shared by
-multiple visible challenges, waits at most 12 seconds for provider work, then
+multiple visible challenges, waits up to 70 seconds for provider work within an
+80-second overall refresh budget, then
 imports each participant's available cache into every caller-visible challenge.
 It still returns `200` and the last durable challenge data when Strava fails or
-times out; `partial:true` tells clients the refresh was incomplete. Widget
+times out; `partial:true` tells clients the refresh was incomplete. An in-flight
+participant sync remains shared after a request deadline until Strava finishes,
+so another request does not start a duplicate sync. Widget
 visibility is intentionally device-local App Group state and has no server API.
 
 ## Yannick Lights native integration

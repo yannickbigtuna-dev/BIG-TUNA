@@ -212,6 +212,39 @@ test('detail reads are durable-only and refresh coalesces participants across vi
   }
 });
 
+test('refresh waits for a slow Strava response and imports the new activity before replying', async () => {
+  const detail = {
+    id: 'challenge_slow_sync', template: 'custom',
+    participants: [{ userId: 'owner-id', role: 'owner', team: 'red' }, { userId: 'member-id', role: 'member', team: 'blue' }],
+    activities: [],
+  };
+  const accounts = {
+    listChallenges: async () => [detail],
+    getChallenge: async () => structuredClone(detail),
+    ingestActivities: async (_user, _challengeId, activities) => {
+      for (const activity of activities) {
+        const index = detail.activities.findIndex(existing => existing.id === activity.id);
+        if (index < 0) detail.activities.push(activity);
+        else detail.activities[index] = activity;
+      }
+    },
+  };
+  let fresh = [];
+  const service = {
+    getAccountStatus: async ({ id }) => ({ connected: id === 'owner-id' }),
+    syncAccountActivities: async () => {
+      await new Promise(resolve => setTimeout(resolve, 45));
+      fresh = [{ id: 'slow-run', sportType: 'Run', name: 'New Strava run', startDate: '2026-09-12T12:00:00.000Z', distanceMeters: 8000, movingTime: 2400 }];
+    },
+    getAccountActivities: () => fresh,
+    getPublicDashboard: async () => ({ currentWeek: { activities: [] } }),
+  };
+  const result = await _test.refreshChallengeAccountData({ id: 'owner-id' }, { accounts, service, timeoutMs: 150 });
+  assert.equal(result.partial, false);
+  assert.ok(result.challenges[0].activities.some(activity => activity.id === 'account_owner-id_slow-run'));
+  assert.ok((await accounts.getChallenge({ id: 'member-id' }, detail.id)).activities.some(activity => activity.id === 'account_owner-id_slow-run'));
+});
+
 test('refresh wait is bounded and overlapping requests reuse the participant sync', async () => {
   const detail = {
     id: 'challenge_bound',
@@ -225,9 +258,10 @@ test('refresh wait is bounded and overlapping requests reuse the participant syn
     ingestActivities: async () => [],
   };
   let syncCalls = 0;
+  let finishSync;
   const service = {
     getAccountStatus: async () => ({ connected: true }),
-    syncAccountActivities: async () => { syncCalls++; return new Promise(() => {}); },
+    syncAccountActivities: async () => { syncCalls++; return new Promise(resolve => { finishSync = resolve; }); },
     getAccountActivities: () => [],
     getPublicDashboard: async () => ({ currentWeek: { activities: [] } }),
   };
@@ -243,7 +277,13 @@ test('refresh wait is bounded and overlapping requests reuse the participant syn
   assert.equal(results.every(result => result.challenges[0].activities[0].id === 'saved-activity'), true);
   const retry = await _test.refreshChallengeAccountData({ id: 'bounded-user' }, { accounts, service, timeoutMs: 20 });
   assert.equal(retry.partial, true);
+  assert.equal(syncCalls, 1);
+  finishSync();
+  await new Promise(resolve => setImmediate(resolve));
+  const afterCompletion = await _test.refreshChallengeAccountData({ id: 'bounded-user' }, { accounts, service, timeoutMs: 20 });
+  assert.equal(afterCompletion.partial, true);
   assert.equal(syncCalls, 2);
+  finishSync();
 });
 
 test('refresh deadline also bounds cache and legacy dashboard reads', async () => {

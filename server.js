@@ -1643,7 +1643,7 @@ async function syncLegacyStravaActivitiesForChallenge(user, challengeId, { accou
   }
 }
 
-function coalescedChallengeAccountSync(service, participantId, timeoutMs) {
+function coalescedChallengeAccountSync(service, participantId) {
   let serviceSyncs = challengeAccountSyncsByService.get(service);
   if (!serviceSyncs) {
     serviceSyncs = new Map();
@@ -1651,20 +1651,17 @@ function coalescedChallengeAccountSync(service, participantId, timeoutMs) {
   }
   const existing = serviceSyncs.get(participantId);
   if (existing) return existing;
-  const upstream = Promise.resolve().then(async () => {
+  const operation = Promise.resolve().then(async () => {
     const status = await service.getAccountStatus({ id: participantId });
     if (!status || !status.connected) return { connected: false };
     await service.syncAccountActivities({ id: participantId });
     return { connected: true };
   });
-  let timer;
-  const operation = Promise.race([
-    upstream,
-    new Promise((resolve, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('Challenge account refresh timed out.'), { code: 'refresh_timeout' })), Math.max(1, timeoutMs)); }),
-  ]).finally(() => {
-    if (timer) clearTimeout(timer);
+  // A request deadline must not release the shared lock while Strava is still
+  // working. Otherwise the next swipe starts a second sync for the same account.
+  operation.finally(() => {
     if (serviceSyncs.get(participantId) === operation) serviceSyncs.delete(participantId);
-  });
+  }).catch(() => {});
   serviceSyncs.set(participantId, operation);
   return operation;
 }
@@ -1685,7 +1682,7 @@ function boundedChallengeRefreshOperation(operation, timeoutMs, label) {
   });
 }
 
-async function refreshChallengeAccountData(user, { accounts = challengeAccounts, service = stravaChallenge, timeoutMs = 12_000 } = {}) {
+async function refreshChallengeAccountData(user, { accounts = challengeAccounts, service = stravaChallenge, timeoutMs = 80_000 } = {}) {
   if (!accounts) throw Object.assign(new Error('Challenge accounts are temporarily unavailable.'), { status: 503 });
   // Capture complete durable detail before any provider wait. If Strava uses
   // the entire deadline, the response must still contain the saved scores and
@@ -1699,7 +1696,12 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
   let partial = false;
 
   if (service && typeof service.getAccountStatus === 'function' && typeof service.syncAccountActivities === 'function') {
-    const results = await Promise.allSettled(participantIds.map(participantId => coalescedChallengeAccountSync(service, participantId, remainingMs())));
+    // Leave ten seconds of the request budget for durable activity import and
+    // fresh detail reads after the provider has finished.
+    const syncWaitMs = Math.max(1, remainingMs() - Math.min(10_000, timeoutMs / 8));
+    const results = await Promise.allSettled(participantIds.map(participantId => boundedChallengeRefreshOperation(
+      () => coalescedChallengeAccountSync(service, participantId), syncWaitMs, 'Challenge account sync',
+    )));
     partial = results.some(result => result.status === 'rejected');
   } else if (participantIds.length) {
     partial = true;

@@ -978,11 +978,12 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   is not a server setting.
 - `GET /api/challenges/{id}` is a durable, membership-scoped read and never
   waits on Strava. `POST /api/challenges/refresh` accepts no body, coalesces each
-  unique participant shared by the caller's challenges, waits at most 12
-  seconds for account sync, imports available cached/fresh activities into all
+  unique participant shared by the caller's challenges, waits up to 70
+  seconds for account sync within an 80-second refresh budget, imports available cached/fresh activities into all
   visible challenges, and returns `{challenges,refreshedAt,partial}`. Provider
   failure or timeout produces `partial:true` with last-known data, not a failed
-  or empty dashboard.
+  or empty dashboard. Concurrent requests share a participant sync until the
+  upstream operation finishes, even if one request reaches its deadline.
 - `POST /api/challenge-devices` accepts an iOS token only, stores its encrypted
   value plus a fingerprint, and never returns or logs either raw token. The
   server-side APNs service records `pending`, `sent`, or `failed`; missing APNs
