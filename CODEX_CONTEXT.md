@@ -75,6 +75,14 @@ deployment.
 
 ## Runtime Architecture
 
+### Mac migration tooling (2026-10-14)
+
+Windows remains the live host until owner cutover. `docs/MAC-MIGRATION.md` is the exact preparation, final export, Mac activation, boot verification and recovery procedure; `docs/exec-plans/mac-migration.md` is the implementation specification. `scripts/migration/` makes authenticated encrypted private snapshots of SERVER/APPS/Git/data/keys and selected developer/runtime configuration. Its preliminary exports are explicitly nontransactional; only strict stopped-writer final exports can activate production. Never publish payloads/recovery keys or put them in apps/.
+
+`tools/mac-migration/` provides Finder .command setup/restore/verify/activate/stop/backup/reboot/AI/SSH/update entrypoints. It restores fresh `~/BigTuna/generations/<id>` roots, uses isolated PM2 state under `~/BigTuna/control/pm2`, translates platform paths privately, and installs an owner-run system LaunchDaemon for all configured services after activation. Stop removes the exact boot plist persistently. Full Xcode/sign-in/device/launchd/reboot checks require the real Mac. `BIG_TUNA_STAGING=1` binds main/MCP to localhost and disables boot schedulers/custom notification polling/HomeKit; production defaults are unchanged. MCP uses configurable `MCP_ROOT` and platform shell with strict path-component containment; PTY uses Windows PowerShell or macOS zsh.
+
+`tools/windows-migration/` supplies explicit final stop/export, checked resume and private LAN download tools. Final export disables exact startup tasks and quarantines the known Cloudflare Startup link before stopping scoped process trees. Scripts elevate only as the same account and never auto-cutover. The download tool whitelists only encrypted kit/payloads, never recovery keys, with temporary Private-profile LocalSubnet firewall access. Initial artifacts are assembled outside the web tree under `C:\BigTuna-Migration`. No main push is needed for migration preparation; a main push would trigger the Windows auto-deployer.
+
 There are two Node servers.
 
 Main server:

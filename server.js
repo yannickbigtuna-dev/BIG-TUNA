@@ -10,6 +10,8 @@ const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
 
 const PORT        = 3000;
+const STAGING     = process.env.BIG_TUNA_STAGING === '1';
+const BIND_HOST   = STAGING ? '127.0.0.1' : (process.env.BIG_TUNA_BIND_HOST || '0.0.0.0');
 const ROOT        = path.join(__dirname, 'apps');
 // Test harnesses may use an isolated data directory. Production keeps the
 // existing repository-local data path unless this explicit server setting is set.
@@ -460,14 +462,14 @@ function customNotificationDueState(item, currentTime = Date.now()) {
   return currentTime - scheduledTime > 15 * 60_000 ? 'missed' : 'due';
 }
 
-const customNotificationsScheduler = setInterval(async () => {
+const customNotificationsScheduler = STAGING ? null : setInterval(async () => {
   try {
     await processScheduledCustomNotifications();
   } catch (err) {
     stravaChallengeLogger.error('custom notifications scheduler error:', err && err.message);
   }
 }, 15_000);
-if (typeof customNotificationsScheduler.unref === 'function') customNotificationsScheduler.unref();
+if (customNotificationsScheduler && typeof customNotificationsScheduler.unref === 'function') customNotificationsScheduler.unref();
 
 const {
   TRIVIA_MODEL,
@@ -5919,11 +5921,11 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req, user, cols, rows));
 });
 
-if (require.main === module) {
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n Server running at http://localhost:${PORT}`);
-  console.log(` Apps folder: C:\\SERVER\\apps\\`);
-  console.log(` Data folder: C:\\SERVER\\data\\\n`);
+function startBackgroundServices() {
+  if (STAGING) {
+    console.log(' Migration preview: background schedulers and HomeKit are disabled.');
+    return;
+  }
   assignmentCoach.startScheduler();
   startHomeKitLightBridge().catch(error => {
     // HomeKit is a local convenience integration; leave the website and ESP
@@ -5937,6 +5939,14 @@ server.listen(PORT, '0.0.0.0', () => {
     });
   }
   if (challengeNotificationScheduler) challengeNotificationScheduler.start();
+}
+
+if (require.main === module) {
+server.listen(PORT, BIND_HOST, () => {
+  console.log(`\n Server running at http://localhost:${PORT}`);
+  console.log(` Apps folder: ${ROOT}`);
+  console.log(` Data folder: ${DATA}\n`);
+  startBackgroundServices();
 });
 
 server.on('error', err => {
@@ -5955,4 +5965,4 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
 
-module.exports = { server, resolveHomeKitBindAddress, _test: { getChallengeAccounts: () => challengeAccounts, getStravaChallenge: () => stravaChallenge, setStravaChallenge: value => { stravaChallenge = value; }, refreshChallengeAccountData, processScheduledCustomNotifications, customNotificationDueState } };
+module.exports = { server, resolveHomeKitBindAddress, _test: { startBackgroundServices, staging: STAGING, bindHost: BIND_HOST, hasCustomNotificationsScheduler: !!customNotificationsScheduler, getChallengeAccounts: () => challengeAccounts, getStravaChallenge: () => stravaChallenge, setStravaChallenge: value => { stravaChallenge = value; }, refreshChallengeAccountData, processScheduledCustomNotifications, customNotificationDueState } };

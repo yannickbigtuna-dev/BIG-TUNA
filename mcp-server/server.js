@@ -1,17 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { randomUUID } from "crypto";
-import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, existsSync } from "fs";
-import { join, resolve, dirname, relative } from "path";
+import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "fs";
+import { dirname } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { createServer } from "http";
 import { z } from "zod";
+import { runtimeConfig, createSafePath } from './platform.js';
 
 const execAsync = promisify(exec);
 
 const PORT       = 3001;
-const ROOT       = "C:\\SERVER";
+const { root: ROOT, shell: COMMAND_SHELL, host: HOST } = runtimeConfig();
 const SECRET     = process.env.MCP_SECRET;
 
 if (!SECRET) {
@@ -21,14 +22,7 @@ if (!SECRET) {
 }
 
 // ── Path safety ───────────────────────────────────────────────────────────────
-function safePath(p) {
-  // Accept both relative (to ROOT) and absolute paths
-  const abs = resolve(p.startsWith("C:") || p.startsWith("c:") ? p : join(ROOT, p));
-  if (!abs.toLowerCase().startsWith(ROOT.toLowerCase())) {
-    throw new Error(`Path outside server root: ${abs}`);
-  }
-  return abs;
-}
+const safePath = createSafePath(ROOT);
 
 // ── Session store ─────────────────────────────────────────────────────────────
 const transports = {};
@@ -40,7 +34,7 @@ function buildMcpServer() {
   // read_file
   server.tool(
     "read_file",
-    { path: z.string().describe("File path (relative to C:\\SERVER or absolute under C:\\SERVER)") },
+    { path: z.string().describe("File path relative to the configured server root, or absolute within it") },
     async ({ path: p }) => {
       const abs = safePath(p);
       const content = readFileSync(abs, "utf8");
@@ -52,13 +46,13 @@ function buildMcpServer() {
   server.tool(
     "write_file",
     {
-      path:    z.string().describe("File path (relative to C:\\SERVER or absolute under C:\\SERVER)"),
+      path:    z.string().describe("File path relative to the configured server root, or absolute within it"),
       content: z.string().describe("New file content"),
     },
     async ({ path: p, content }) => {
       const abs = safePath(p);
       mkdirSync(dirname(abs), { recursive: true });
-      writeFileSync(abs, content, "utf8");
+      writeFileSync(safePath(p), content, "utf8");
       return { content: [{ type: "text", text: `Saved: ${abs}` }] };
     }
   );
@@ -66,7 +60,7 @@ function buildMcpServer() {
   // list_directory
   server.tool(
     "list_directory",
-    { path: z.string().default(".").describe("Directory path (relative to C:\\SERVER or absolute)") },
+    { path: z.string().default(".").describe("Directory path relative to the configured server root, or absolute within it") },
     async ({ path: p }) => {
       const abs = safePath(p);
       const entries = readdirSync(abs, { withFileTypes: true });
@@ -78,15 +72,15 @@ function buildMcpServer() {
     }
   );
 
-  // run_command — runs in C:\SERVER, 30 s timeout
+  // Commands remain owner-authorized shell access with a 30 s timeout.
   server.tool(
     "run_command",
-    { command: z.string().describe("Command to run (executed in C:\\SERVER via cmd.exe)") },
+    { command: z.string().describe("Shell command to run in the configured server root") },
     async ({ command }) => {
       try {
         const { stdout, stderr } = await execAsync(command, {
           cwd: ROOT,
-          shell: "cmd.exe",
+          shell: COMMAND_SHELL,
           timeout: 30000,
           windowsHide: true,
         });
@@ -105,7 +99,7 @@ function buildMcpServer() {
     {},
     async () => {
       try {
-        const { stdout } = await execAsync("pm2 jlist", { shell: "cmd.exe", timeout: 10000 });
+        const { stdout } = await execAsync("pm2 jlist", { cwd: ROOT, shell: COMMAND_SHELL, timeout: 10000, windowsHide: true });
         const procs = JSON.parse(stdout || "[]").map(p =>
           `${p.name}: ${p.pm2_env.status} (pid ${p.pid}, restarts ${p.pm2_env.restart_time})`
         );
@@ -190,7 +184,7 @@ const httpServer = createServer((req, res) => {
   res.writeHead(405); res.end("Method not allowed");
 });
 
-httpServer.listen(PORT, "0.0.0.0", () => {
+httpServer.listen(PORT, HOST, () => {
   console.log(`\n MCP server listening on http://localhost:${PORT}/mcp`);
   console.log(` Public URL:  https://mcp.yannickmorgans.ca/mcp`);
   console.log(` Root:        ${ROOT}\n`);

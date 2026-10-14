@@ -1304,3 +1304,6 @@ while a physical relay is offline.
 - [x] Fix and test server session exchange.
 - [x] Fix iPhone, widget, and control credential/state flows while preserving the Watch Light path.
 - [ ] Run acceptance checks, push both repositories, and restart/verify server.
+
+## Mac migration (2026-10-14)
+The separate DEEP migration specification and progress are in docs/exec-plans/mac-migration.md. Existing unfinished plans above are preserved. No live cutover or main push is authorized by this preparation workflow.

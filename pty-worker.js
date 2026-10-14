@@ -2,22 +2,34 @@
 // pty-worker.js — isolated child process for one terminal session.
 // A native crash here only kills this session, not the main server.
 
-const pty = require('node-pty');
-
 const POWERSHELL = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 
+function terminalOptions(env = process.env, platform = process.platform) {
+  const windows = platform === 'win32';
+  return {
+    executable: env.BIG_TUNA_TERMINAL_SHELL || (windows ? POWERSHELL : platform === 'darwin' ? '/bin/zsh' : '/bin/bash'),
+    args: windows ? ['-NoLogo'] : ['-l'],
+    cwd: env.BIG_TUNA_TERMINAL_CWD || env.BIG_TUNA_ROOT || __dirname,
+    ...(windows ? { useConpty: false } : {}),
+  };
+}
+
+module.exports = { terminalOptions };
+
+if (require.main === module) {
+const pty = require('node-pty');
 let shell = null;
 
 process.on('message', msg => {
   if (msg.type === 'start') {
     try {
-      shell = pty.spawn(POWERSHELL, ['-NoLogo'], {
+      const { executable, args, ...options } = terminalOptions();
+      shell = pty.spawn(executable, args, {
         name: 'xterm-256color',
         cols: msg.cols || 220,
         rows: msg.rows || 50,
-        cwd: 'C:\\SERVER',
         env: process.env,
-        useConpty: false,
+        ...options,
       });
     } catch (err) {
       process.send({ type: 'error', message: err.message });
@@ -48,3 +60,4 @@ process.on('message', msg => {
 
 // Ensure we exit if the parent dies
 process.on('disconnect', () => process.exit(0));
+}
