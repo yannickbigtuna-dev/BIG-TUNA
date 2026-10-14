@@ -30,6 +30,6 @@ Production data, keys, APNs secrets, OAuth tokens and HomeKit identities must mo
 
 - [x] Initial inventory and specification.
 - [x] Parallel implementation.
-- [x] Combined diff/security review and tests: 247/247 Node tests, all shell/Node syntax checks, Windows PowerShell parse checks, and independent boot/backup/export/download acceptance review. Mac physical execution remains owner-operated.
+- [x] Combined diff/security review and tests: 249/249 Node tests, all shell/Node syntax checks, Windows PowerShell parse checks, and independent boot/backup/export/download acceptance review. The real export identified BigTunaAppStore's mapped shared Git worktree; bounded relocation now preserves staged/unstaged/untracked work and tracked executable modes. Mac physical execution remains owner-operated.
 - [ ] Assemble kit and preliminary encrypted export.
 - [ ] Deliver exact owner procedure and limitations.

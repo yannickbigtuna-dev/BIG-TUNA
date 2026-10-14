@@ -56,10 +56,51 @@ function xml(v) { return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 function plist({node,pm2,home,owner,label,log}) {
   return `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${xml(label)}</string><key>UserName</key><string>${xml(owner)}</string><key>ProgramArguments</key><array>${[node,pm2,'resurrect','--no-daemon'].map(v=>'<string>'+xml(v)+'</string>').join('')}</array><key>EnvironmentVariables</key><dict><key>HOME</key><string>${xml(home)}</string><key>PM2_HOME</key><string>${xml(path.join(home,'BigTuna/control/pm2'))}</string><key>TZ</key><string>America/Halifax</string><key>PATH</key><string>${xml(path.dirname(node))}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardOutPath</key><string>${xml(log)}</string><key>StandardErrorPath</key><string>${xml(log)}</string></dict></plist>`;
 }
-function write(file,data) { fs.writeFileSync(file,data,{mode:0o600}); }
+function write(file,data) {
+  // Windows marks Git pointer files hidden; opening an existing hidden file with 'w' fails.
+  if(fs.existsSync(file)) {const fd=fs.openSync(file,'r+');try{fs.writeFileSync(fd,data);fs.ftruncateSync(fd,Buffer.byteLength(data));}finally{fs.closeSync(fd);}fs.chmodSync(file,0o600);}
+  else fs.writeFileSync(file,data,{mode:0o600});
+}
+function relocateWorktrees(target,manifest) {
+  const base=fs.realpathSync(target);
+  function endpoint(relative) {
+    if(typeof relative!=='string'||relative.includes('\\')||relative.includes(':')||relative.startsWith('/')||relative.split('/').some(p=>!p||p==='.'||p==='..')||!['SERVER','APPS'].includes(relative.split('/')[0]))throw Error('Unsafe Git worktree manifest path');
+    const full=path.resolve(base,relative);const real=fs.realpathSync(full);
+    if(!real.startsWith(base+path.sep)||real!==full)throw Error('Git worktree endpoint escaped restore root');
+    return full;
+  }
+  for(const worktree of manifest.gitWorktrees||[]) {
+    const worktreeRoot=endpoint(worktree.worktreePath);const gitDirectory=endpoint(worktree.gitDirectoryPath);const commonDirectory=endpoint(worktree.commonDirectoryPath);
+    const pointer=endpoint(worktree.worktreePath+'/.git');const backpointer=endpoint(worktree.gitDirectoryPath+'/gitdir');const commonPointer=endpoint(worktree.gitDirectoryPath+'/commondir');
+    if(!fs.statSync(worktreeRoot).isDirectory()||!fs.statSync(gitDirectory).isDirectory()||!fs.statSync(commonDirectory).isDirectory()||!fs.statSync(pointer).isFile()||!fs.statSync(backpointer).isFile()||!fs.statSync(commonPointer).isFile())throw Error('Git worktree metadata missing from restored bundle');
+    const relative=(from,to)=>path.relative(from,to).split(path.sep).join('/');
+    // Relative pointers survive moving the entire generation and future encrypted backups.
+    write(pointer,'gitdir: '+relative(path.dirname(pointer),gitDirectory)+'\n');
+    write(backpointer,relative(path.dirname(backpointer),pointer)+'\n');
+    write(commonPointer,relative(path.dirname(commonPointer),commonDirectory)+'\n');
+  }
+}
+function restoreExecutableBits(target,manifest) {
+  const base=fs.realpathSync(target);const repos=new Set(['SERVER',...(manifest.gitWorktrees||[]).map(w=>w.worktreePath)]);
+  for(const dir of manifest.directories||[])if(dir.endsWith('/.git'))repos.add(dir.slice(0,-5));
+  const restored=[];
+  for(const relative of repos) {
+    if(typeof relative!=='string'||relative.startsWith('/')||relative.includes('\\')||relative.includes(':')||relative.split('/').some(p=>!p||p==='.'||p==='..')||!['SERVER','APPS'].includes(relative.split('/')[0]))throw Error('Unsafe Git repository path');
+    const repo=path.resolve(base,relative);if(!fs.existsSync(path.join(repo,'.git')))continue;
+    const listing=cp.execFileSync('git',['-C',repo,'ls-files','--stage','-z'],{encoding:'utf8',maxBuffer:50*1024*1024});
+    for(const entry of listing.split('\0')) {
+      const match=/^100755 [a-f0-9]+ 0\t([\s\S]+)$/.exec(entry);if(!match)continue;
+      const file=path.resolve(repo,match[1]);if(!file.startsWith(repo+path.sep))throw Error('Git executable path escaped repository');
+      if(!fs.existsSync(file))continue;const stat=fs.lstatSync(file);if(!stat.isFile()||fs.realpathSync(file)!==file)throw Error('Git executable path is linked or unsupported');
+      fs.chmodSync(file,(stat.mode&0o700)|0o100);restored.push(file);
+    }
+  }return restored;
+}
 function prepare(target,node,chromium,ethernet) {
   const manifest=JSON.parse(fs.readFileSync(path.join(target,'manifest.json'),'utf8'));
   const server=path.join(target,'SERVER'); const control=path.join(target,'control'); fs.mkdirSync(control,{mode:0o700});
+  relocateWorktrees(target,manifest);
+  restoreExecutableBits(target,manifest);
   const raw=fs.readFileSync(path.join(server,'server.env'),'utf8'); const env={...runtimeEnvironment(target),...envParse(raw)};
   const pathKeys=new Set(['BIG_TUNA_DATA_DIR','BRIGHTSPACE_USER_DATA_DIR','APPLE_APP_FACTORY_RELEASE_ROOT','APPLE_APP_FACTORY_DEPLOY_ROOT','APPLE_APP_FACTORY_DEPLOY_SSH_KEY_PATH','MCP_ROOT','BIG_TUNA_ROOT','BIG_TUNA_TERMINAL_CWD','PUPPETEER_EXECUTABLE_PATH']);
   for(const k of Object.keys(env)) {
@@ -108,7 +149,7 @@ function checkDump(target,dumpFile) {
 function backupSnapshot(source,target) {
   fs.mkdirSync(target,{mode:0o700});
   const previous=JSON.parse(fs.readFileSync(path.join(source,'manifest.json')));
-  const manifest={schemaVersion:1,createdAt:new Date().toISOString(),consistency:'final-stopped-writers',roots:[...previous.roots],files:[],directories:[],exclusions:[]};
+  const manifest={schemaVersion:1,createdAt:new Date().toISOString(),consistency:'final-stopped-writers',roots:[...previous.roots],gitWorktrees:previous.gitWorktrees||[],files:[],directories:[],exclusions:[]};
   const directories=new Map();const originals=new Map();
   function fileHash(file) {
     const hash=require('node:crypto').createHash('sha256');const fd=fs.openSync(file,'r');const chunk=Buffer.alloc(1024*1024);
@@ -182,4 +223,4 @@ if(require.main===module) {
     else throw Error('Unknown helper operation');
   } catch(e) { console.error(e.message); process.exitCode=1; }
 }
-module.exports={envParse,mapPath,xml,plist,prepare,backupSnapshot,checkDump,runtimeEnvironment};
+module.exports={envParse,mapPath,xml,plist,prepare,backupSnapshot,checkDump,runtimeEnvironment,relocateWorktrees,restoreExecutableBits};

@@ -73,3 +73,16 @@ test('saved PM2 runtime state is included and external configured release roots 
   fs.writeFileSync(path.join(home, '.pm2', 'dump.pm2'), JSON.stringify([{ name: 'apps-server', env: { OPENAI_API_KEY: 'SAVED-PM2-SECRET', APPLE_APP_FACTORY_RELEASE_ROOT: external } }]));
   const roots = await discover(server, apps, home); assert.ok(roots.some(r => r.archivePath === 'PRIVATE/runtime/pm2-dump.json')); assert.ok(roots.some(r => r.source === external && r.archivePath.startsWith('PRIVATE/external-')));
 });
+test('bounded linked Git worktree round trip preserves staged, unstaged and untracked work', async t => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'bigtuna-worktree-test-')); t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const server = path.join(temp, 'server'), apps = path.join(temp, 'apps'), linked = path.join(apps, 'LinkedApp'); fs.mkdirSync(server); fs.mkdirSync(apps);
+  function git(...args) { const result = spawnSync('git', ['-C', server, ...args], { encoding: 'utf8' }); assert.equal(result.status, 0, result.stderr); }
+  git('init', '-b', 'main'); fs.writeFileSync(path.join(server, 'tracked.txt'), 'base'); git('add', 'tracked.txt'); git('-c', 'user.name=Migration Test', '-c', 'user.email=migration@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'Synthetic fixture'); git('worktree', 'add', '-b', 'migration-fixture', linked);
+  fs.writeFileSync(path.join(linked, 'tracked.txt'), 'staged'); assert.equal(spawnSync('git', ['-C', linked, 'add', 'tracked.txt']).status, 0); fs.writeFileSync(path.join(linked, 'tracked.txt'), 'unstaged'); fs.writeFileSync(path.join(linked, 'untracked.txt'), 'unfinished');
+  const output = path.join(temp, 'export'); await exportBundle({ output, appEnvironment: {}, roots: [{ source: server, archivePath: 'SERVER' }, { source: apps, archivePath: 'APPS' }] });
+  const tar = path.join(temp, 'snapshot.tar'); await decrypt(path.join(output, 'migration.btm'), tar, fs.readFileSync(path.join(output, 'RECOVERY-KEY.txt'), 'utf8')); await validateArchive(tar);
+  const restored = path.join(temp, 'restored'); fs.mkdirSync(restored); assert.equal(spawnSync(process.platform === 'win32' ? 'tar.exe' : 'tar', ['-xf', tar, '-C', restored]).status, 0); const manifest = await validateDirectory(restored);
+  assert.equal(manifest.gitWorktrees.length, 1); const record = manifest.gitWorktrees[0]; assert.equal(record.worktreePath, 'APPS/LinkedApp'); assert.equal(record.commonDirectoryPath, 'SERVER/.git'); assert.ok(record.gitDirectoryPath.startsWith('SERVER/.git/worktrees/'));
+  assert.equal(fs.readFileSync(path.join(restored, 'APPS/LinkedApp/tracked.txt'), 'utf8'), 'unstaged'); assert.equal(fs.readFileSync(path.join(restored, 'APPS/LinkedApp/untracked.txt'), 'utf8'), 'unfinished');
+  assert.equal(await hash(path.join(restored, ...record.gitDirectoryPath.split('/'), 'index')), await hash(path.join(record.gitDirectorySource, 'index')));
+});

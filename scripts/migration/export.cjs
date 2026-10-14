@@ -98,13 +98,44 @@ async function exportBundle({ server = 'C:\\SERVER', apps = 'C:\\APPS', home = o
   // Existing output directories may be publicly served; require a fresh private one.
   await fs.promises.mkdir(output, { mode: 0o700 }); privatePermissions(output);
   const stage = path.join(output, '.staging'); await fs.promises.mkdir(stage, { mode: 0o700 });
-  const manifest = { schemaVersion: 1, createdAt: new Date().toISOString(), consistency: final ? 'final-stopped-writers' : 'preliminary', roots, files: [], directories: [], exclusions: [], changedSources: [], warnings: ['Windows browser profiles preserved; Mac reauthentication may be necessary', 'Large optional Ollama weights are not included; model names retained', includeCodexHistory ? 'Codex history preserved as private recovery files; automatic cross-platform restoration is not guaranteed' : 'Codex conversation histories and unrelated home folders are outside this developer-config export'] };
+  const manifest = { schemaVersion: 1, createdAt: new Date().toISOString(), consistency: final ? 'final-stopped-writers' : 'preliminary', roots, files: [], directories: [], exclusions: [], changedSources: [], gitWorktrees: [], warnings: ['Windows browser profiles preserved; Mac reauthentication may be necessary', 'Large optional Ollama weights are not included; model names retained', includeCodexHistory ? 'Codex history preserved as private recovery files; automatic cross-platform restoration is not guaranteed' : 'Codex conversation histories and unrelated home folders are outside this developer-config export'] };
   const directorySnapshots = [];
+  const canonical = p => process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
+  function archivePathFor(source) {
+    const root = roots.filter(r => contained(r.source, source)).sort((a, b) => b.source.length - a.source.length)[0];
+    if (!root) throw new Error('Linked Git worktree references unmapped external metadata: ' + source);
+    const relative = path.relative(root.source, source).split(path.sep).join('/');
+    return safePath(root.archivePath + (relative ? '/' + relative : ''));
+  }
+  async function checkedGitPath(source, kind) {
+    archivePathFor(source);
+    const stat = await fs.promises.lstat(source), resolved = await fs.promises.realpath(source);
+    if (stat.isSymbolicLink() || canonical(source) !== canonical(resolved) || (kind === 'file' ? !stat.isFile() : !stat.isDirectory())) throw new Error('Linked Git worktree contains linked or unsupported metadata: ' + source);
+  }
+  async function registerWorktree(gitFile) {
+    await checkedGitPath(gitFile, 'file');
+    const text = (await fs.promises.readFile(gitFile, 'utf8')).trim(), match = text.match(/^gitdir: ([^\r\n\0]+)$/);
+    if (!match || text.length > 8192) throw new Error('Linked Git worktree has invalid .git pointer: ' + gitFile);
+    const gitDirectorySource = path.resolve(path.dirname(gitFile), match[1]); await checkedGitPath(gitDirectorySource, 'directory');
+    const pointerFile = path.join(gitDirectorySource, 'gitdir'), commonFile = path.join(gitDirectorySource, 'commondir');
+    await checkedGitPath(pointerFile, 'file'); await checkedGitPath(commonFile, 'file');
+    const pointer = (await fs.promises.readFile(pointerFile, 'utf8')).trim(), common = (await fs.promises.readFile(commonFile, 'utf8')).trim();
+    if (!pointer || !common || /[\r\n\0]/.test(pointer + common) || pointer.length + common.length > 8192) throw new Error('Linked Git worktree has invalid metadata pointers');
+    if (canonical(path.resolve(gitDirectorySource, pointer)) !== canonical(gitFile)) throw new Error('Linked Git worktree backpointer does not match .git file');
+    const commonDirectorySource = path.resolve(gitDirectorySource, common); await checkedGitPath(commonDirectorySource, 'directory');
+    const relativeGit = path.relative(commonDirectorySource, gitDirectorySource).split(path.sep).join('/');
+    if (path.basename(commonDirectorySource) !== '.git' || !/^worktrees\/[^/]+$/.test(relativeGit)) throw new Error('Linked Git worktree does not use a supported common Git directory');
+    await checkedGitPath(path.join(commonDirectorySource, 'objects'), 'directory');
+    await checkedGitPath(path.join(commonDirectorySource, 'HEAD'), 'file');
+    const worktreeSource = path.dirname(gitFile); await checkedGitPath(worktreeSource, 'directory');
+    const record = { worktreeSource, gitDirectorySource, commonDirectorySource, worktreePath: archivePathFor(worktreeSource), gitDirectoryPath: archivePathFor(gitDirectorySource), commonDirectoryPath: archivePathFor(commonDirectorySource) };
+    if (!manifest.gitWorktrees.some(r => canonical(r.worktreeSource) === canonical(worktreeSource))) manifest.gitWorktrees.push(record);
+    return record;
+  }
   async function walk(source, relative) {
     const stat = await fs.promises.lstat(source);
     if (stat.isSymbolicLink()) throw new Error('Link requires explicit migration handling; no target followed: ' + source);
     const resolvedSource = await fs.promises.realpath(source);
-    const canonical = p => process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
     if (canonical(resolvedSource) !== canonical(source)) throw new Error('Linked ancestor requires explicit migration handling: ' + source);
     const reason = exclusion(relative, path.basename(source));
     if (reason) { manifest.exclusions.push({ source, path: relative, reason }); return; }
@@ -114,9 +145,16 @@ async function exportBundle({ server = 'C:\\SERVER', apps = 'C:\\APPS', home = o
       const names = (await fs.promises.readdir(source)).sort(); directorySnapshots.push({ source, path: relative, names });
       for (const name of names) await walk(path.join(source, name), relative + '/' + name);
     } else if (stat.isFile()) {
-      if (path.basename(source) === '.git') throw new Error('Linked Git worktree detected; include its common Git directory explicitly before migration: ' + source);
+      if (path.basename(source) === '.git') await registerWorktree(source);
       if (/\/.git\/objects\/info\/alternates$/.test(relative) && (await fs.promises.readFile(source, 'utf8')).trim()) throw new Error('Git external object store detected; include linked metadata explicitly before migration: ' + source);
-      if (/\/.git\/worktrees\//.test(relative) && ['gitdir', 'commondir'].includes(path.basename(source))) throw new Error('Git worktree metadata requires explicit relocation before migration: ' + source);
+      if (/\/.git\/worktrees\//.test(relative) && ['gitdir', 'commondir'].includes(path.basename(source))) {
+        const metadataDirectory = path.dirname(source), backpointerFile = path.join(metadataDirectory, 'gitdir');
+        await checkedGitPath(backpointerFile, 'file');
+        const backpointer = (await fs.promises.readFile(backpointerFile, 'utf8')).trim();
+        if (!backpointer || /[\r\n\0]/.test(backpointer)) throw new Error('Linked Git worktree has invalid backpointer');
+        const registered = await registerWorktree(path.resolve(metadataDirectory, backpointer));
+        if (canonical(registered.gitDirectorySource) !== canonical(metadataDirectory)) throw new Error('Linked Git worktree admin directory does not match its .git pointer');
+      }
       await fs.promises.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
       let copied = false;
       for (let attempt = 0; attempt < 3; attempt++) {

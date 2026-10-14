@@ -4,9 +4,30 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const cp=require('node:child_process');
-const {envParse,mapPath,plist,prepare,backupSnapshot,checkDump,runtimeEnvironment}=require('../tools/mac-migration/helper.cjs');
+const {envParse,mapPath,plist,prepare,backupSnapshot,checkDump,runtimeEnvironment,relocateWorktrees,restoreExecutableBits}=require('../tools/mac-migration/helper.cjs');
 test('env parser treats shell expressions as data without evaluating them',()=>{
  assert.deepEqual(envParse('A="$(touch /tmp/nope)"\nB=secret=token\n# c'),{A:'$(touch /tmp/nope)',B:'secret=token'});
+});
+test('relocated Git worktree retains staged, unstaged and untracked work with safe relative pointers',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'mac-git-worktree-'));const old=path.join(root,'old');const fresh=path.join(root,'fresh');const server=path.join(old,'SERVER');const work=path.join(old,'APPS/App');
+ const git=(cwd,args)=>cp.execFileSync('git',['-C',cwd,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']});
+ try {
+  fs.mkdirSync(server,{recursive:true});fs.mkdirSync(path.dirname(work),{recursive:true});
+  git(server,['init']);fs.writeFileSync(path.join(server,'tracked.txt'),'original');fs.writeFileSync(path.join(server,'script.sh'),'#!/bin/sh\necho fixture\n');git(server,['add','tracked.txt','script.sh']);git(server,['update-index','--chmod=+x','script.sh']);git(server,['-c','user.name=Synthetic','-c','user.email=synthetic@example.test','commit','-m','fixture']);
+  git(server,['worktree','add','--detach',work,'HEAD']);
+  fs.writeFileSync(path.join(work,'tracked.txt'),'unstaged local work');fs.writeFileSync(path.join(work,'staged.txt'),'staged local work');git(work,['add','staged.txt']);fs.writeFileSync(path.join(work,'untracked.txt'),'untracked local work');
+  const originalPointer=fs.readFileSync(path.join(work,'.git'),'utf8');const expected=git(work,['status','--porcelain']);
+  fs.mkdirSync(fresh);fs.cpSync(server,path.join(fresh,'SERVER'),{recursive:true});fs.cpSync(path.join(old,'APPS'),path.join(fresh,'APPS'),{recursive:true});
+  const registration=path.basename(originalPointer.trim().slice('gitdir: '.length));
+  const manifest={gitWorktrees:[{worktreePath:'APPS/App',gitDirectoryPath:'SERVER/.git/worktrees/'+registration,commonDirectoryPath:'SERVER/.git'}]};
+  relocateWorktrees(fresh,manifest);
+  const executable=restoreExecutableBits(fresh,manifest);assert.ok(executable.includes(path.join(fresh,'SERVER/script.sh')));assert.ok(executable.includes(path.join(fresh,'APPS/App/script.sh')));
+  const movedWork=path.join(fresh,'APPS/App');assert.equal(git(movedWork,['status','--porcelain']),expected);
+  const worktreeList=git(path.join(fresh,'SERVER'),['worktree','list','--porcelain']);assert.ok(worktreeList.replace(/\\/g,'/').includes('worktree '+movedWork.replace(/\\/g,'/')));
+  assert.equal(fs.readFileSync(path.join(movedWork,'tracked.txt'),'utf8'),'unstaged local work');assert.equal(fs.readFileSync(path.join(work,'.git'),'utf8'),originalPointer);
+  assert.match(fs.readFileSync(path.join(movedWork,'.git'),'utf8'),/^gitdir: \.\.\/\.\.\/SERVER\//);assert.equal(git(movedWork,['rev-parse','--git-common-dir']).trim().replace(/\\/g,'/').endsWith('/SERVER/.git'),true);
+  assert.throws(()=>relocateWorktrees(fresh,{gitWorktrees:[{...manifest.gitWorktrees[0],gitDirectoryPath:'SERVER/../outside'}]}),/Unsafe/);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('stopping launchd removes persistent registration even when no live job remains',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'mac-stop-'));const installed=path.join(root,'service.plist');
