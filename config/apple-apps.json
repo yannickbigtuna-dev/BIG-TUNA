@@ -4,9 +4,14 @@
     {
       "slug": "big-tuna-lights",
       "name": "Yannick Lights",
-      "workspacePath": "C:\\APPS\\YannickLightsIOS",
+      "workspacePath": "/Users/yannickmorgans/BigTuna/generations/20261014-200802-250c4cd9-bb74-48f7-a775-8c142476fdeb/APPS/YannickLightsIOS",
       "repository": "yannickbigtuna-dev/YannickLightsIOS",
-      "platforms": ["iOS", "watchOS", "WidgetKit", "Control Center"],
+      "platforms": [
+        "iOS",
+        "watchOS",
+        "WidgetKit",
+        "Control Center"
+      ],
       "serverApiContract": "docs/openapi.yaml",
       "nativeApiDiscovery": "API-DISCOVERY.md",
       "backendApis": [
@@ -30,7 +35,10 @@
         "status": "configured per owner-provided Apple-side workflow; not verifiable from Windows",
         "branch": "main",
         "trigger": "changes to main",
-        "actions": ["Archive iOS", "Archive watchOS"]
+        "actions": [
+          "Archive iOS",
+          "Archive watchOS"
+        ]
       },
       "testFlight": {
         "status": "configured per owner-provided workflow; Apple processing/device delivery not verifiable from Windows",
