@@ -998,15 +998,35 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   deployment credentials truthfully result in `failed` while the redacted
   in-app event persists. `APNS_*` credentials and
   `CHALLENGE_DEVICE_TOKEN_CRYPTO_SECRET` are deployment-only requirements.
-- Production CHALLENGERS notifications are server-owned. The long-running app
-  server sends current-score alerts at 09:00, 13:00, and 20:00
-  `America/Halifax`, refreshes authoritative data before rendering, and claims
-  every recipient/slot in the canonical challenge-account namespace before
-  contacting APNs. The five-minute slot window is at-most-once: missed,
-  interrupted, refresh-failed, or provider-failed claims are terminal and are
-  never replayed on restart or app launch. Fresh score events and pending-review
-  reminders use the same durable ledger and cooldown rules. App foregrounding
-  may refresh UI state but must never manufacture production notifications.
+- Production CHALLENGERS notifications are server-owned
+  (`lib/challenge-notification-scheduler.js`). Kinds and their per-account
+  opt-out keys (`notificationPreferences[userId]` in the challenge-account
+  namespace, default on, `GET/PUT /api/challenge-notifications/preferences`):
+  `dailyScore` — one score update per participant at 19:00 `America/Halifax`
+  (30-minute at-most-once window, claimed in `timedNotificationLedger`, never
+  caught up); `activityEvents` — new uploads by you/your opponent plus lead
+  changes (`overtook`/`overtaken`), detected from a durable
+  `eventNotificationCursor` (seen activity IDs + last weekly score) that the
+  Strava service triggers after every `syncParticipant` and review decision
+  (debounced), so any sync path produces events exactly once and the first run
+  only seeds; `weeklyResults` — sent from `finalizeWeek` via `onWeekFinalized`
+  (`week:<weekStart>:<participant>` ledger keys); `reviewRequests` — review
+  requested/approved/rejected pushes plus pending-review reminders (~2h, ~8h,
+  then daily, max 5, quiet 22:00–08:00). Admin custom notifications
+  (`/api/admin/custom-notifications`, recipient `everyone` broadcasts) and the
+  in-app test push ignore preferences and are never mentioned in the app.
+- APNs transport (`lib/challenge-apns.js`): devices register their build's
+  environment (`development`→sandbox, `production`) and are sent to that host
+  first, then the other. Provider JWTs are cached 40 minutes per environment.
+  Optional `APNS_PRODUCTION_KEY_ID/AUTH_KEY_BASE64` and `APNS_SANDBOX_*` override
+  the shared `APNS_KEY_ID/APNS_AUTH_KEY_BASE64` for environment-restricted
+  keys. `BadEnvironmentKeyInToken` is a server key problem and never disables a
+  device; only `Unregistered` or `BadDeviceToken` from both accepting hosts
+  does. `GET /api/admin/custom-notifications/health` (admin) probes both hosts
+  with an all-zero token and lists devices plus recent ledger outcomes; the
+  admin dashboard shows it as "Delivery Health". Install a new key with
+  `node scripts/set-apns-key.js ~/Downloads/AuthKey_KEYID.p8` then
+  `pm2 restart bigtuna-web --update-env`.
 - The Strava store adapter supplies the challenge-account namespace directly.
   A legacy deployment accidentally nested a second `challengeAccounts` object;
   startup validates and atomically merges byte-equivalent/non-overlapping

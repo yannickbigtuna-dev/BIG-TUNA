@@ -182,13 +182,15 @@ try {
     // Authoritative Yannick-vs-Emma review events use the existing encrypted
     // APNs-device pipeline.  The service stores only redacted delivery state.
     notificationConfigured: challengeApns.configured,
-    notificationSender: async ({ token, platform, event }) => {
-      const result = await challengeApns.send({ token, platform, eventType: event.eventType || event.type, challengeId: event.challengeId, reviewId: event.reviewId, title: event.title, body: event.body });
+    notificationSender: async ({ token, platform, environment, event }) => {
+      const result = await challengeApns.send({ token, platform, environment, eventType: event.eventType || event.type, challengeId: event.challengeId, reviewId: event.reviewId, title: event.title, body: event.body });
       return { sent: result.delivery === 'sent', invalidToken: result.reason === 'invalid_token' };
     },
     deviceTokenCipher: challengeDeviceTokenCipher,
     participantAccountIdFor: challengeAccountIdForParticipant,
+    notificationAllowed: (accountId, kind) => !challengeAccounts || challengeAccounts.notificationAllowed(accountId, kind),
     onAuthoritativeSync: update => challengeNotificationScheduler && challengeNotificationScheduler.handleAuthoritativeUpdate(update),
+    onWeekFinalized: snapshot => challengeNotificationScheduler && challengeNotificationScheduler.handleWeekFinalized(snapshot),
   });
 } catch (error) {
   // A missing Strava configuration must never take down the public site.
@@ -242,8 +244,8 @@ try {
     // Strava service state, never a parallel data directory or account store.
     stateAdapter: challengeStateAdapter,
     notificationConfigured: challengeApns.configured,
-    notificationSender: async ({ token, platform, event }) => {
-      const result = await challengeApns.send({ token, platform, eventType: event.type, challengeId: event.challengeId, reviewId: event.reviewId, title: event.title, body: event.body });
+    notificationSender: async ({ token, platform, environment, event }) => {
+      const result = await challengeApns.send({ token, platform, environment, eventType: event.type, challengeId: event.challengeId, reviewId: event.reviewId, title: event.title, body: event.body });
       return { sent: result.delivery === 'sent', invalidToken: result.reason === 'invalid_token' };
     },
     deviceTokenCipher: challengeDeviceTokenCipher,
@@ -266,6 +268,7 @@ try {
       decryptToken: encrypted => challengeDeviceTokenCipher.decrypt(encrypted),
       sendNotification: payload => challengeApns.send(payload),
       apnsConfigured: challengeApns.configured,
+      isAllowed: (accountId, kind) => challengeAccounts.notificationAllowed(accountId, kind),
       logger: stravaChallengeLogger,
     });
   }
@@ -287,122 +290,103 @@ function writeCustomNotifications(notifications) {
   atomicWrite(CUSTOM_NOTIFICATIONS_FILE, notifications);
 }
 
+// Admin-composed notifications are always delivered: they deliberately ignore
+// the per-user Challengers notification preferences.
+const CUSTOM_NOTIFICATION_BROADCAST = new Set(['*', 'all', 'everyone']);
 async function deliverCustomNotification(notification) {
   const users = readUsers();
   const targetUsername = String(notification.recipientUsername || '').trim().toLowerCase();
-  const targetUser = users.find(u =>
+  const broadcast = CUSTOM_NOTIFICATION_BROADCAST.has(targetUsername);
+  const targetUser = broadcast ? null : users.find(u =>
     (notification.recipientId && u.id === notification.recipientId) ||
     (targetUsername && String(u.username || '').trim().toLowerCase() === targetUsername)
   );
-
   const targetUserId = targetUser ? targetUser.id : notification.recipientId;
-  const resolvedUsername = targetUser ? targetUser.username : (notification.recipientUsername || targetUserId || 'unknown');
+  const resolvedUsername = broadcast ? 'everyone' : targetUser ? targetUser.username : (notification.recipientUsername || targetUserId || 'unknown');
 
   let devices = [];
   if (challengeAccounts && typeof challengeAccounts._readState === 'function') {
     try {
       const state = challengeAccounts._readState();
-      devices = Object.values(state.devices || {}).filter(d =>
-        d && !d.disabledAt && (
-          (targetUserId && d.userId === targetUserId) ||
-          (d.userId === 'fishyemma' && targetUsername === 'fishyemma') ||
-          (d.userId === 'emma' && (targetUsername === 'fishyemma' || targetUsername === 'emma'))
-        )
-      );
+      devices = Object.values(state.devices || {}).filter(d => d && !d.disabledAt && (broadcast || (targetUserId && d.userId === targetUserId)));
     } catch {}
   }
 
   notification.deviceCount = devices.length;
-
-  // Record in-app notification event so user can see it in their Challengers app
-  if (challengeAccounts && typeof challengeAccounts._mutate === 'function' && targetUserId) {
-    try {
-      await challengeAccounts._mutate(s => {
-        s.notificationEvents ||= {};
-        const event = {
-          id: 'event_' + crypto.randomBytes(8).toString('hex'),
-          challengeId: 'website_yannick_emma',
-          type: 'custom_notification',
-          recipientId: targetUserId,
-          title: notification.title,
-          body: notification.body,
-          createdAt: new Date().toISOString(),
-          delivery: 'pending'
-        };
-        s.notificationEvents[event.id] = event;
-      });
-    } catch {}
-  }
-
+  notification.sentAt = new Date().toISOString();
+  notification.failureReason = null;
   if (devices.length === 0) {
-    notification.status = 'sent';
-    notification.sentAt = new Date().toISOString();
+    notification.status = 'failed';
     notification.sentCount = 0;
-    notification.resultMessage = `Recorded in-app for @${resolvedUsername} (no active iOS push device registered yet)`;
+    notification.failureReason = 'no_registered_devices';
+    notification.resultMessage = `@${resolvedUsername} has no iOS device registered for notifications yet`;
+    return notification;
+  }
+  if (!challengeApns || !challengeApns.configured) {
+    notification.status = 'failed';
+    notification.sentCount = 0;
+    notification.failureReason = 'apns_unconfigured';
+    notification.resultMessage = 'APNs credentials are not configured on the server';
     return notification;
   }
 
   let sentCount = 0;
   let lastFailureReason = null;
-  const invalidTokens = [];
+  const invalidDevices = [];
+  const environmentUpdates = [];
   for (const device of devices) {
     try {
-      const token = challengeDeviceTokenCipher && typeof challengeDeviceTokenCipher.decrypt === 'function'
-        ? challengeDeviceTokenCipher.decrypt(device.tokenEncrypted)
-        : null;
+      const token = challengeDeviceTokenCipher.decrypt(device.tokenEncrypted);
       if (!token) continue;
-      const res = await challengeApns.send({
+      const result = await challengeApns.send({
         token,
         platform: 'ios',
+        environment: device.environment || null,
         eventType: 'custom_notification',
         challengeId: 'website_yannick_emma',
         reviewId: null,
         title: notification.title,
         body: notification.body
       });
-      if (res && res.delivery === 'sent') {
+      if (result && result.delivery === 'sent') {
         sentCount++;
-      } else if (res && (res.reason === 'invalid_token' || res.reason === 'BadDeviceToken' || res.reason === 'Unregistered' || res.reason === 'ExpiredToken')) {
-        invalidTokens.push(device);
-        lastFailureReason = res.reason;
-      } else if (res && res.reason) {
-        lastFailureReason = res.reason;
+        if (result.environment && result.environment !== device.environment) environmentUpdates.push([device, result.environment]);
+      } else if (result && result.reason === 'invalid_token') {
+        invalidDevices.push(device);
+        lastFailureReason = result.providerReason || 'invalid_token';
+      } else if (result && result.reason) {
+        lastFailureReason = result.reason;
       }
     } catch (err) {
+      lastFailureReason = 'delivery_failed';
       stravaChallengeLogger.warn('custom notification push error:', err && err.message);
     }
   }
 
-  if (invalidTokens.length > 0 && challengeAccounts && typeof challengeAccounts._mutate === 'function') {
+  if ((invalidDevices.length || environmentUpdates.length) && typeof challengeAccounts._mutate === 'function') {
     try {
       await challengeAccounts._mutate(s => {
-        for (const device of invalidTokens) {
+        for (const device of invalidDevices) {
           const key = `${device.userId}:${device.fingerprint}`;
-          if (s.devices && s.devices[key]) {
-            s.devices[key].disabledAt = new Date().toISOString();
-          }
-          if (s.challengeAccounts && s.challengeAccounts.devices && s.challengeAccounts.devices[key]) {
-            s.challengeAccounts.devices[key].disabledAt = new Date().toISOString();
-          }
+          if (s.devices && s.devices[key]) s.devices[key].disabledAt = new Date().toISOString();
+        }
+        for (const [device, environment] of environmentUpdates) {
+          const key = `${device.userId}:${device.fingerprint}`;
+          if (s.devices && s.devices[key]) s.devices[key].environment = environment;
         }
       });
     } catch {}
   }
 
   notification.sentCount = sentCount;
-  notification.sentAt = new Date().toISOString();
   if (sentCount > 0) {
     notification.status = 'sent';
-    notification.resultMessage = `Delivered to ${sentCount} device${sentCount === 1 ? '' : 's'} via APNs`;
-  } else if (!challengeApns || !challengeApns.configured) {
-    notification.status = 'sent';
-    notification.resultMessage = 'APNs credentials not configured; saved in-app';
+    notification.resultMessage = `Delivered to ${sentCount} of ${devices.length} device${devices.length === 1 ? '' : 's'} via APNs`;
   } else {
     notification.status = 'failed';
-    notification.failureReason = lastFailureReason || 'APNs rejected token or delivery failed';
+    notification.failureReason = lastFailureReason || 'delivery_failed';
     notification.resultMessage = `APNs delivery failed (${notification.failureReason})`;
   }
-
   return notification;
 }
 
@@ -2820,6 +2804,21 @@ async function handleAPI(req, res, urlPath) {
     catch (error) { return challengeAccountsError(res, error); }
   }
 
+  if (urlPath === '/api/challenge-notifications/preferences' && (req.method === 'GET' || req.method === 'PUT' || req.method === 'POST')) {
+    setSensitiveResponseHeaders(res);
+    const user = challengeAccountsUser(req, res);
+    if (!user) return;
+    if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
+    if (req.method === 'GET') {
+      try { return jsonRes(res, 200, await challengeAccounts.getNotificationPreferences(user)); }
+      catch (error) { return challengeAccountsError(res, error); }
+    }
+    const body = await challengeAccountsBody(req, res);
+    if (body === null) return;
+    try { return jsonRes(res, 200, await challengeAccounts.updateNotificationPreferences(user, body)); }
+    catch (error) { return challengeAccountsError(res, error); }
+  }
+
   if (urlPath === '/api/challenge-review-inbox' && req.method === 'GET') {
     setSensitiveResponseHeaders(res);
     const user = challengeAccountsUser(req, res);
@@ -4437,6 +4436,26 @@ async function handleAPI(req, res, urlPath) {
   }
 
   // ── Custom Push Notifications: Admin endpoints (yannick only) ──────────────
+
+  // GET /api/admin/custom-notifications/health — APNs key/environment check
+  if (req.method === 'GET' && urlPath === '/api/admin/custom-notifications/health') {
+    const user = getSessionUser(getToken(req));
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (user.username.toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+    let apns;
+    try { apns = await challengeApns.probe(); } catch { apns = { configured: Boolean(challengeApns.configured), production: 'unreachable', sandbox: 'unreachable' }; }
+    let devices = [];
+    let recent = [];
+    try {
+      const state = challengeAccounts ? challengeAccounts._readState() : {};
+      const names = new Map(readUsers().map(u => [u.id, u.username]));
+      devices = Object.values(state.devices || {}).filter(d => d && !d.disabledAt).map(d => ({ username: names.get(d.userId) || d.userId, environment: d.environment || 'unknown', updatedAt: d.updatedAt || null }));
+      recent = Object.values(state.timedNotificationLedger || {}).filter(r => r && r.completedAt)
+        .sort((a, b) => String(b.claimedAt).localeCompare(String(a.claimedAt))).slice(0, 15)
+        .map(r => ({ at: r.claimedAt, type: r.type || 'daily_score', category: r.category || null, participant: r.participantId || null, status: r.status, reason: r.reason || null, title: r.title || null }));
+    } catch {}
+    return jsonRes(res, 200, { apns, devices, recent });
+  }
 
   // GET /api/admin/custom-notifications/recipients
   if (req.method === 'GET' && urlPath === '/api/admin/custom-notifications/recipients') {

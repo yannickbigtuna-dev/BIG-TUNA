@@ -98,7 +98,9 @@ test('custom notifications admin endpoints, validation, immediate send, and sche
     assert.equal(sendRes.body.scheduled, false);
     assert.equal(sendRes.body.notification.title, 'Workout Time!');
     assert.equal(sendRes.body.notification.recipientUsername, 'fishyemma');
-    assert.equal(sendRes.body.notification.status, 'sent');
+    // No iOS device is registered in this fixture, so delivery is truthfully reported as failed.
+    assert.equal(sendRes.body.notification.status, 'failed');
+    assert.equal(sendRes.body.notification.failureReason, 'no_registered_devices');
     assert.ok(sendRes.body.notification.sentAt);
 
     // 5. Schedule future delivery
@@ -137,7 +139,7 @@ test('custom notifications admin endpoints, validation, immediate send, and sche
     const resendRes = await apiReq('POST', `/api/admin/custom-notifications/${schedRes.body.notification.id}/resend`);
     assert.equal(resendRes.status, 200);
     assert.equal(resendRes.body.ok, true);
-    assert.equal(resendRes.body.notification.status, 'sent');
+    assert.equal(resendRes.body.notification.status, 'failed');
 
     // 8. Delete notification
     const deleteRes = await apiReq('DELETE', `/api/admin/custom-notifications/${sendRes.body.notification.id}`);

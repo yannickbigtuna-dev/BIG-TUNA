@@ -826,7 +826,7 @@
       <!-- ── CUSTOM NOTIFICATIONS ──────────────────────────────────── -->
       <section id="view-notifications" class="view-section hidden">
         <h1 class="page-title">Custom Push Notifications</h1>
-        <div class="page-sub">Send immediate or scheduled custom notifications to Challengers app users (default: fishyemma).</div>
+        <div class="page-sub">Send immediate or scheduled custom notifications to Challengers app users. These always deliver — they ignore each user's notification toggles.</div>
 
         <div class="notif-layout-grid">
           <!-- Compose Card -->
@@ -848,6 +848,7 @@
                 <div class="chip-row notif-quick-recipients" id="notif-quick-recipients">
                   <button type="button" class="chip active" data-username="fishyemma">🎯 fishyemma (Emma)</button>
                   <button type="button" class="chip" data-username="yannick">👤 yannick (Yannick)</button>
+                  <button type="button" class="chip" data-username="everyone">📣 Everyone</button>
                 </div>
                 <div class="notif-recipient-input-row">
                   <select class="input" id="notif-recipient-select" aria-label="Select target user">
@@ -973,6 +974,26 @@
                   <b>AES-256-GCM Active</b>
                 </div>
               </div>
+            </section>
+
+            <section class="card info-card">
+              <div class="card-head">
+                <h3>Delivery Health</h3>
+                <button type="button" class="btn btn-ghost btn-sm" id="notif-health-refresh-btn">Re-check</button>
+              </div>
+              <div class="notif-info-grid">
+                <div class="challenge-fact">
+                  <span>Production key (TestFlight / App Store)</span>
+                  <b id="notif-health-production">Checking…</b>
+                </div>
+                <div class="challenge-fact">
+                  <span>Sandbox key (Xcode builds)</span>
+                  <b id="notif-health-sandbox">Checking…</b>
+                </div>
+              </div>
+              <div class="caption" id="notif-health-devices" style="margin-top:8px"></div>
+              <div class="caption" style="margin-top:8px"><b>Recent automatic notifications</b></div>
+              <div class="caption" id="notif-health-recent" style="white-space:pre-line; font-family:ui-monospace,monospace; font-size:0.72rem; max-height:180px; overflow:auto">Loading…</div>
             </section>
           </div>
         </div>
@@ -2995,8 +3016,51 @@ async function loadCustomNotificationsView() {
   updateLivePreview();
   await Promise.all([
     loadNotificationRecipients(),
-    loadNotificationHistory()
+    loadNotificationHistory(),
+    loadNotificationHealth()
   ]);
+}
+
+function describeApnsHealth(value) {
+  if (value === 'ok') return '<span style="color:var(--success)">🟢 Key accepted</span>';
+  if (value === 'BadEnvironmentKeyInToken') return '<span style="color:var(--danger, #e5484d)">🔴 Key not valid for this environment</span>';
+  if (value === 'unconfigured') return '<span style="color:var(--warning)">🟡 Not configured</span>';
+  return `<span style="color:var(--danger, #e5484d)">🔴 ${esc(String(value || 'unknown'))}</span>`;
+}
+
+async function loadNotificationHealth() {
+  const prodEl = document.getElementById('notif-health-production');
+  const sandEl = document.getElementById('notif-health-sandbox');
+  const devEl = document.getElementById('notif-health-devices');
+  const recentEl = document.getElementById('notif-health-recent');
+  try {
+    const data = await api('/api/admin/custom-notifications/health');
+    const apns = data.apns || {};
+    if (prodEl) prodEl.innerHTML = describeApnsHealth(apns.production);
+    if (sandEl) sandEl.innerHTML = describeApnsHealth(apns.sandbox);
+    const apnsIndicator = document.getElementById('notif-apns-indicator');
+    const infoApns = document.getElementById('notif-info-apns');
+    const productionOk = apns.production === 'ok';
+    if (apnsIndicator) apnsIndicator.innerHTML = productionOk ? '<span class="status-pill sent">APNs Ready</span>' : '<span class="status-pill failed">APNs Key Problem</span>';
+    if (infoApns) infoApns.innerHTML = productionOk ? '<span style="color:var(--success)">🟢 Production key accepted</span>' : describeApnsHealth(apns.production);
+    if (devEl) {
+      const devices = Array.isArray(data.devices) ? data.devices : [];
+      devEl.textContent = devices.length
+        ? 'Registered devices: ' + devices.map(d => `${d.username} (${d.environment})`).join(', ')
+        : 'No registered devices yet.';
+    }
+    if (recentEl) {
+      const recent = Array.isArray(data.recent) ? data.recent : [];
+      recentEl.textContent = recent.length ? recent.map(r => {
+        const when = r.at ? new Date(r.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        return `${when}  ${r.participant || ''}  ${r.category || r.type}  → ${r.status}${r.reason ? ' (' + r.reason + ')' : ''}`;
+      }).join('\n') : 'Nothing sent yet.';
+    }
+  } catch (err) {
+    if (prodEl) prodEl.textContent = 'Unavailable';
+    if (sandEl) sandEl.textContent = 'Unavailable';
+    if (recentEl) recentEl.textContent = '';
+  }
 }
 
 function initNotificationClock() {
@@ -3023,15 +3087,14 @@ async function loadNotificationRecipients() {
   try {
     const data = await api('/api/admin/custom-notifications/recipients');
     allNotificationRecipients = Array.isArray(data.recipients) ? data.recipients : [];
+    const totalDevices = allNotificationRecipients.reduce((sum, r) => sum + (Number(r.deviceCount) || 0), 0);
+    allNotificationRecipients.push({ id: 'everyone', username: 'everyone', email: null, deviceCount: totalDevices, hasDevice: totalDevices > 0 });
 
     const apnsIndicator = document.getElementById('notif-apns-indicator');
     const infoApns = document.getElementById('notif-info-apns');
-    if (data.apnsConfigured) {
-      if (apnsIndicator) apnsIndicator.innerHTML = '<span class="status-pill sent">APNs Configured</span>';
-      if (infoApns) infoApns.innerHTML = '<span style="color:var(--success)">🟢 Active (Apple APNs)</span>';
-    } else {
-      if (apnsIndicator) apnsIndicator.innerHTML = '<span class="status-pill scheduled">APNs Sandbox/Fallback</span>';
-      if (infoApns) infoApns.innerHTML = '<span style="color:var(--warning)">🟡 Fallback Mode</span>';
+    if (!data.apnsConfigured) {
+      if (apnsIndicator) apnsIndicator.innerHTML = '<span class="status-pill failed">APNs Not Configured</span>';
+      if (infoApns) infoApns.innerHTML = '<span style="color:var(--warning)">🟡 Not configured</span>';
     }
 
     renderRecipientOptions();
@@ -3051,7 +3114,7 @@ function renderRecipientOptions() {
     const opt = document.createElement('option');
     opt.value = r.username;
     const deviceTag = r.deviceCount > 0 ? ` (${r.deviceCount} registered iOS device${r.deviceCount === 1 ? '' : 's'})` : ' (no app device yet)';
-    opt.textContent = `${r.username}${deviceTag}`;
+    opt.textContent = r.username === 'everyone' ? `📣 Everyone${deviceTag}` : `${r.username}${deviceTag}`;
     select.appendChild(opt);
   }
 
@@ -3087,13 +3150,13 @@ function updateSelectedRecipientInfo() {
   if (infoDevices) {
     infoDevices.innerHTML = hasDevice
       ? `<span style="color:var(--success)">🟢 ${deviceCount} active device${deviceCount === 1 ? '' : 's'}</span>`
-      : `<span style="color:var(--text-muted)">⚪ 0 devices (in-app only)</span>`;
+      : `<span style="color:var(--text-muted)">⚪ 0 devices (cannot receive push)</span>`;
   }
 
   if (hintEl) {
     hintEl.innerHTML = hasDevice
       ? `<span style="color:var(--success)">● ${deviceCount} device${deviceCount === 1 ? '' : 's'} online for push</span>`
-      : `<span style="color:var(--text-muted)">○ In-app only (no device registered yet)</span>`;
+      : `<span style="color:var(--text-muted)">○ No device registered yet</span>`;
   }
 
   document.querySelectorAll('#notif-quick-recipients .chip').forEach(chip => {
@@ -3274,6 +3337,9 @@ function setupNotificationEvents() {
       updateSelectedRecipientInfo();
     });
   });
+
+  const healthBtn = document.getElementById('notif-health-refresh-btn');
+  if (healthBtn) healthBtn.addEventListener('click', () => loadNotificationHealth());
 
   document.querySelectorAll('#notif-templates .chip').forEach(chip => {
     chip.addEventListener('click', () => {
