@@ -326,12 +326,16 @@ test('AASA is fail-closed until the exact application identifier is configured',
   const original = process.env.CHALLENGE_AASA_APPLICATION_ID;
   try {
     process.env.CHALLENGE_AASA_APPLICATION_ID = 'ABCDEFGHIJ.ca.yannickmorgans.OtherApp';
-    assert.equal((await request('GET', '/.well-known/apple-app-site-association')).status, 404);
+    // Challengers entry stays fail-closed; the AURA entry is always served.
+    const auraOnly = await request('GET', '/.well-known/apple-app-site-association');
+    assert.equal(auraOnly.status, 200);
+    assert.deepEqual(auraOnly.body, { applinks: { details: [{ appIDs: ['P2YVULJ374.ca.yannickmorgans.aura'], components: [{ '/': '/aura/invite' }, { '/': '/aura/invite/*' }] }] } });
     process.env.CHALLENGE_AASA_APPLICATION_ID = 'ABCDEFGHIJ.ca.yannickmorgans.YannickChallengeIOS';
     const response = await request('GET', '/.well-known/apple-app-site-association?token=should-not-appear');
     assert.equal(response.status, 200);
     assert.equal(response.headers['content-type'], 'application/json; charset=utf-8');
-    assert.deepEqual(response.body, { applinks: { details: [{ appIDs: ['ABCDEFGHIJ.ca.yannickmorgans.YannickChallengeIOS'], components: [{ '/': '/challenge-invite' }, { '/': '/challenge-invite/*' }] }] } });
+    assert.deepEqual(response.body.applinks.details[0], { appIDs: ['ABCDEFGHIJ.ca.yannickmorgans.YannickChallengeIOS'], components: [{ '/': '/challenge-invite' }, { '/': '/challenge-invite/*' }] });
+    assert.equal(response.body.applinks.details.length, 2);
     assert.equal(JSON.stringify(response.body).includes('should-not-appear'), false);
     assert.equal((await request('HEAD', '/apple-app-site-association')).status, 200);
   } finally {

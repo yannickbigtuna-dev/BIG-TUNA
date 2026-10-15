@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>AURA invitation</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+    background: #F7F9FC; color: #1d2733; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; }
+  .card { width: 100%; max-width: 360px; text-align: center; background: #fff; border-radius: 24px; padding: 40px 28px;
+    box-shadow: 0 8px 30px rgba(137, 207, 240, .35); }
+  .heart { font-size: 56px; line-height: 1; color: #89CFF0; }
+  h1 { margin: 12px 0 4px; font-size: 28px; letter-spacing: .3em; font-weight: 700; }
+  p { margin: 12px 0 0; color: #5b6878; font-size: 17px; }
+  .btn { display: inline-block; margin-top: 28px; padding: 14px 28px; border-radius: 999px; background: #89CFF0; color: #0b2b3c;
+    font-weight: 600; font-size: 17px; text-decoration: none; }
+  .btn[hidden] { display: none; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="heart" aria-hidden="true">&#9829;</div>
+  <h1>AURA</h1>
+  <p id="message">Checking your invitation&hellip;</p>
+  <a id="open" class="btn" href="#" hidden>Open in AURA</a>
+</main>
+<script>
+(function () {
+  var message = document.getElementById('message');
+  var open = document.getElementById('open');
+  function fail() { message.textContent = 'This invite expired'; open.hidden = true; }
+  var match = /^#token=([A-Za-z0-9_-]{20,128})$/.exec(location.hash);
+  if (!match) { fail(); return; }
+  var token = match[1];
+  fetch('/api/aura/v1/invites/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    referrerPolicy: 'no-referrer',
+    cache: 'no-store',
+    body: JSON.stringify({ token: token })
+  }).then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (data) {
+      message.textContent = String(data.fromName || 'Someone') + ' invited you';
+      open.href = 'aura://invite?token=' + encodeURIComponent(token);
+      open.hidden = false;
+    })
+    .catch(fail);
+})();
+</script>
+</body>
+</html>

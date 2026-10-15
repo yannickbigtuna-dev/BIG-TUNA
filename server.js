@@ -109,6 +109,8 @@ const assignmentCoach = require('./lib/assignment-coach');
 const { createStravaChallenge } = require('./lib/strava-challenge');
 const { createChallengeAccounts } = require('./lib/challenge-accounts');
 const { createChallengeApns, createDeviceTokenCipher } = require('./lib/challenge-apns');
+const { createAura } = require('./lib/aura');
+const { createAuraApns } = require('./lib/aura-apns');
 const { createChallengeNotificationScheduler } = require('./lib/challenge-notification-scheduler');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
@@ -176,6 +178,13 @@ let challengeAccounts = null;
 let challengeNotificationScheduler = null;
 const challengeDeviceTokenCipher = createDeviceTokenCipher({ env: process.env });
 const challengeApns = createChallengeApns({ env: process.env, logger: stravaChallengeLogger });
+const aura = createAura({
+  dataDir: path.join(DATA, 'aura'),
+  getSessionUser: token => getSessionUser(token),
+  readUsers: () => readUsers(),
+  apns: createAuraApns({ env: process.env, logger: console }),
+  logger: console,
+});
 if (require.main === module && challengeApns.configured) {
   // Surface a broken or environment-restricted APNs key in the logs right away.
   setTimeout(() => challengeApns.probe().then(result => {
@@ -2652,6 +2661,9 @@ function parsePbestPDF(buf) {
 
 // ── API router ────────────────────────────────────────────────────────────────
 async function handleAPI(req, res, urlPath) {
+
+  // AURA private two-person app backend (lib/aura.js).
+  if (urlPath.startsWith('/api/aura/v1/') && await aura.handle(req, res, urlPath)) return;
 
   // Apple App Factory: browser code is public, but every release response is
   // owner-authenticated and read from a non-static release root.
@@ -5809,6 +5821,20 @@ function challengeAssociationPayload(env = process.env) {
   };
 }
 
+function auraAssociationEntry(env = process.env) {
+  const configured = typeof env.AURA_AASA_APPLICATION_ID === 'string' ? env.AURA_AASA_APPLICATION_ID.trim() : '';
+  const applicationId = configured || 'P2YVULJ374.ca.yannickmorgans.aura';
+  return { appIDs: [applicationId], components: [{ '/': '/aura/invite' }, { '/': '/aura/invite/*' }] };
+}
+
+// Challengers entry (unchanged, only when configured) followed by the AURA entry.
+function appAssociationPayload(env = process.env) {
+  const challenge = challengeAssociationPayload(env);
+  const details = challenge ? [...challenge.applinks.details] : [];
+  details.push(auraAssociationEntry(env));
+  return { applinks: { details } };
+}
+
 // ── HTTP server ───────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   let urlPath;
@@ -5828,14 +5854,21 @@ const server = http.createServer(async (req, res) => {
   }
 
   if ((urlPath === '/.well-known/apple-app-site-association' || urlPath === '/apple-app-site-association') && ['GET', 'HEAD'].includes(req.method)) {
-    const association = challengeAssociationPayload();
-    if (!association) {
-      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(req.method === 'HEAD' ? undefined : JSON.stringify({ error: 'Not found' }));
-      return;
-    }
+    const association = appAssociationPayload();
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
     res.end(req.method === 'HEAD' ? undefined : JSON.stringify(association));
+    return;
+  }
+
+  if ((urlPath === '/aura/invite' || urlPath === '/aura/invite/') && ['GET', 'HEAD'].includes(req.method)) {
+    try {
+      const page = fs.readFileSync(path.join(ROOT, 'aura-invite', 'index.html'));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'Referrer-Policy': 'no-referrer' });
+      res.end(req.method === 'HEAD' ? undefined : page);
+    } catch {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not Found');
+    }
     return;
   }
 
@@ -5976,6 +6009,7 @@ function startBackgroundServices() {
     });
   }
   if (challengeNotificationScheduler) challengeNotificationScheduler.start();
+  aura.startScheduler();
 }
 
 if (require.main === module) {
