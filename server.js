@@ -9,8 +9,20 @@ const { fork }            = require('child_process');
 const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
 
+// PM2 keeps the environment captured when a process was first registered, so a
+// rotated APNs key in server.env would otherwise be ignored on restart. When run
+// as the live server, re-read the APNS_* entries from server.env at startup.
+if (require.main === module) {
+  try {
+    for (const line of fs.readFileSync(path.join(__dirname, 'server.env'), 'utf8').split(/\r?\n/)) {
+      const match = line.trim().match(/^(APNS_[A-Z0-9_]+)=(.*)$/);
+      if (match) process.env[match[1]] = match[2].trim().replace(/^(["'])(.*)\1$/, '$2');
+    }
+  } catch {}
+}
+
 const PORT        = 3000;
-const STAGING     = process.env.BIG_TUNA_STAGING === '1';
+const STAGING    = process.env.BIG_TUNA_STAGING === '1';
 const BIND_HOST   = STAGING ? '127.0.0.1' : (process.env.BIG_TUNA_BIND_HOST || '0.0.0.0');
 const ROOT        = path.join(__dirname, 'apps');
 // Test harnesses may use an isolated data directory. Production keeps the
@@ -164,6 +176,12 @@ let challengeAccounts = null;
 let challengeNotificationScheduler = null;
 const challengeDeviceTokenCipher = createDeviceTokenCipher({ env: process.env });
 const challengeApns = createChallengeApns({ env: process.env, logger: stravaChallengeLogger });
+if (require.main === module && challengeApns.configured) {
+  // Surface a broken or environment-restricted APNs key in the logs right away.
+  setTimeout(() => challengeApns.probe().then(result => {
+    stravaChallengeLogger.info(`APNs key ${process.env.APNS_KEY_ID || ''}: production=${result.production} sandbox=${result.sandbox}`);
+  }).catch(() => {}), 2000).unref();
+}
 const CHALLENGE_REFRESH_COOLDOWN_MS = 5 * 60_000;
 let challengeRefreshInFlight = null;
 let challengeRefreshCooldownUntil = 0;
