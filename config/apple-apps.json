@@ -46,6 +46,34 @@
         "postAction": "TestFlight Internal Testing",
         "group": "Yannick"
       }
+    },
+    {
+      "slug": "aura",
+      "name": "AURA",
+      "workspacePath": "/Users/yannickmorgans/BigTuna/generations/20261014-200802-250c4cd9-bb74-48f7-a775-8c142476fdeb/APPS/AURA",
+      "repository": "yannickbigtuna-dev/AURA",
+      "platforms": [
+        "iOS",
+        "WidgetKit"
+      ],
+      "serverApiContract": "docs/exec-plans/aura-backend.md",
+      "nativeApiDiscovery": "docs/API.md",
+      "backendApis": [
+        "POST /api/auth/register",
+        "POST /api/auth/login",
+        "/api/aura/v1/*"
+      ],
+      "bundleId": "ca.yannickmorgans.aura",
+      "bundleIds": [
+        "ca.yannickmorgans.aura",
+        "ca.yannickmorgans.aura.widgets",
+        "ca.yannickmorgans.aura.notificationservice"
+      ],
+      "appGroupId": "group.ca.yannickmorgans.aura",
+      "testFlight": {
+        "status": "pending: App Store Connect record and signing account not yet configured",
+        "postAction": "TestFlight Internal Testing (owner only)"
+      }
     }
   ]
 }

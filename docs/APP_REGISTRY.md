@@ -10,6 +10,7 @@ Apple signing, releases, or deployment.
 | Slug | Workspace | Platforms | Server contract | Native contract | Identity |
 | --- | --- | --- | --- | --- |
 | `big-tuna-lights` | `C:\APPS\YannickLightsIOS` | iOS, watchOS, WidgetKit, Control Center | `docs/openapi.yaml` | `API-DISCOVERY.md` | `ca.yannickmorgans.bigtuna.lights` plus widget/Watch IDs |
+| `aura` | `~/BigTuna/APPS/AURA` | iOS, WidgetKit | `docs/exec-plans/aura-backend.md` | `docs/API.md` | `ca.yannickmorgans.aura` plus `.widgets` / `.notificationservice` |
 
 Yannick Lights retains App Group
 `group.ca.yannickmorgans.bigtuna.lights`. Its released target graph and all
