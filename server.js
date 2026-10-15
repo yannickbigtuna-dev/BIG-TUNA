@@ -111,6 +111,7 @@ const { createChallengeAccounts } = require('./lib/challenge-accounts');
 const { createChallengeApns, createDeviceTokenCipher } = require('./lib/challenge-apns');
 const { createAura } = require('./lib/aura');
 const { createAuraApns } = require('./lib/aura-apns');
+const { createPocketShift } = require('./lib/pocketshift');
 const { createChallengeNotificationScheduler } = require('./lib/challenge-notification-scheduler');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
@@ -182,6 +183,11 @@ const aura = createAura({
   dataDir: path.join(DATA, 'aura'),
   getSessionUser: token => getSessionUser(token),
   readUsers: () => readUsers(),
+  apns: createAuraApns({ env: process.env, logger: console }),
+  logger: console,
+});
+const pocketShift = createPocketShift({
+  dataDir: path.join(DATA, 'pocketshift'),
   apns: createAuraApns({ env: process.env, logger: console }),
   logger: console,
 });
@@ -2664,6 +2670,9 @@ async function handleAPI(req, res, urlPath) {
 
   // AURA private two-person app backend (lib/aura.js).
   if (urlPath.startsWith('/api/aura/v1/') && await aura.handle(req, res, urlPath)) return;
+
+  // PocketShift Live Activity push relay (lib/pocketshift.js).
+  if (urlPath.startsWith('/api/pocketshift/v1/') && await pocketShift.handle(req, res, urlPath)) return;
 
   // Apple App Factory: browser code is public, but every release response is
   // owner-authenticated and read from a non-static release root.
@@ -6010,6 +6019,7 @@ function startBackgroundServices() {
   }
   if (challengeNotificationScheduler) challengeNotificationScheduler.start();
   aura.startScheduler();
+  pocketShift.startScheduler();
 }
 
 if (require.main === module) {
