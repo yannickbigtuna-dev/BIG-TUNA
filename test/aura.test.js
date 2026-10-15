@@ -269,7 +269,7 @@ test('canvas: inbox versions, validation, limits and pushes to the partner only'
     // pushes: 2 canvases x (1 widgets + 1 app) to B only
     assert.equal(h.sent.length, 4);
     const w = h.sent.filter(s => s.pushType === 'widgets');
-    const a = h.sent.filter(s => s.pushType === 'alert');
+    const a = h.sent.filter(s => s.pushType === 'background');
     assert.equal(w.length, 2);
     assert.equal(a.length, 2);
     assert.equal(w[0].topic, 'ca.yannickmorgans.aura.push-type.widgets');
@@ -277,13 +277,10 @@ test('canvas: inbox versions, validation, limits and pushes to the partner only'
     assert.equal(w[0].token, DEV_B_W);
     assert.deepEqual(w[0].payload, { aps: { 'content-changed': true } });
     assert.equal(a[0].topic, 'ca.yannickmorgans.aura');
-    assert.equal(a[0].priority, 10);
+    assert.equal(a[0].priority, 5);
     assert.equal(a[0].token, DEV_B_APP);
     assert.equal(a[0].environment, 'sandbox');
-    assert.equal(a[0].payload.aps['content-available'], 1);
-    assert.equal(a[0].payload.aps['mutable-content'], 1);
-    assert.match(a[0].payload.aps.alert.body, /doodle/);
-    assert.deepEqual(a[0].payload.aura, { kind: 'doodle', size: 'small' });
+    assert.deepEqual(a[0].payload, { aps: { 'content-available': 1 }, aura: { kind: 'doodle', size: 'small' } });
     assert.ok(h.sent.every(s => s.token !== DEV_A));
   } finally { await h.close(); }
 });
