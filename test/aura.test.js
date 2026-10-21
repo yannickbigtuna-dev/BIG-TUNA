@@ -234,6 +234,46 @@ test('widgets report and partner read', async () => {
   } finally { await h.close(); }
 });
 
+test('multi-device: per-device widget reports merge for the partner', async () => {
+  const h = await harness();
+  try {
+    await pair(h);
+    const phone = [{ kind: 'AURADoodleWidget', family: 'systemSmall' }, { kind: 'AURAPhotoWidget', family: 'systemMedium' }];
+    const ipad = [{ kind: 'AURADoodleWidget', family: 'systemSmall' }, { kind: 'AURADoodleWidget', family: 'systemLarge' }];
+    assert.equal((await h.call('PUT', '/widgets', { token: 'tok-a', json: { installId: 'phone-1', widgets: phone } })).status, 200);
+    h.clock.t += 1000;
+    assert.equal((await h.call('PUT', '/widgets', { token: 'tok-a', json: { installId: 'ipad-1', widgets: ipad } })).status, 200);
+    let got = (await h.call('GET', '/partner/widgets', { token: 'tok-b' })).data;
+    assert.deepEqual(got.widgets.map(w => w.family).sort(), ['systemLarge', 'systemMedium', 'systemSmall']);
+    // Re-reporting from one device replaces only that device's list.
+    await h.call('PUT', '/widgets', { token: 'tok-a', json: { installId: 'ipad-1', widgets: [] } });
+    got = (await h.call('GET', '/partner/widgets', { token: 'tok-b' })).data;
+    assert.deepEqual(got.widgets, phone);
+    // Signing out the phone drops its report.
+    assert.equal((await h.call('POST', '/devices/remove', { token: 'tok-a', json: { installId: 'phone-1', tokens: [] } })).status, 200);
+    assert.deepEqual((await h.call('GET', '/partner/widgets', { token: 'tok-b' })).data.widgets, []);
+  } finally { await h.close(); }
+});
+
+test('switching accounts: a push token moves to the new account; remove unregisters it', async () => {
+  const h = await harness();
+  try {
+    const read = id => JSON.parse(fs.readFileSync(path.join(h.auraDir, 'users', `${id}.json`), 'utf8')).devices;
+    await register(h, 'tok-a', DEV_A, 'app');
+    await register(h, 'tok-a', DEV_B_APP, 'app');   // second device, same account
+    await register(h, 'tok-a', DEV_A, 'widgets');
+    assert.equal(read('user-a').length, 3);
+    // Same phone signs into carol: alice keeps her other device only.
+    await register(h, 'tok-c', DEV_A, 'app');
+    await register(h, 'tok-c', DEV_A, 'widgets');
+    assert.equal(read('user-a').length, 1);
+    assert.equal(read('user-c').length, 2);
+    assert.equal((await h.call('POST', '/devices/remove', { token: 'tok-c', json: { tokens: [DEV_A.toUpperCase(), 'nope'] } })).status, 200);
+    assert.equal(read('user-c').length, 0);
+    assert.equal(read('user-a').length, 1);
+  } finally { await h.close(); }
+});
+
 test('canvas: inbox versions, validation, limits and pushes to the partner only', async () => {
   const h = await harness();
   try {

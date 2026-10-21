@@ -182,6 +182,7 @@ const challengeApns = createChallengeApns({ env: process.env, logger: stravaChal
 const aura = createAura({
   dataDir: path.join(DATA, 'aura'),
   getSessionUser: token => getSessionUser(token),
+  touchSession: token => renewSession(token),
   readUsers: () => readUsers(),
   apns: createAuraApns({ env: process.env, logger: console }),
   logger: console,
@@ -806,6 +807,19 @@ function getSessionUser(token) {
   const session  = sessions.find(s => s.token === token && new Date(s.expiresAt) > new Date());
   if (!session) return null;
   return readUsers().find(u => u.id === session.userId) || null;
+}
+
+// Sliding expiry for apps that stay signed in (AURA): renews a session that
+// is in use once it has under 25 of its 30 days left.
+function renewSession(token) {
+  if (!token) return;
+  const sessions = readSessions();
+  const session = sessions.find(s => s.token === token);
+  if (!session) return;
+  const fresh = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  if (fresh - new Date(session.expiresAt).getTime() < 5 * 24 * 60 * 60 * 1000) return;
+  session.expiresAt = new Date(fresh).toISOString();
+  writeSessions(sessions);
 }
 
 function readNativeLightsSessions() {
