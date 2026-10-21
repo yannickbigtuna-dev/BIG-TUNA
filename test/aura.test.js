@@ -458,10 +458,10 @@ test('unpair deletes inboxes, notes and images; partner routes then 409', async 
     await h.call('PUT', '/canvas/photo?size=small', { token: 'tok-b', raw: JPEG });
     const image = await h.call('POST', '/notes/images', { token: 'tok-a', raw: JPEG });
     await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'x', sendAt: new Date(h.clock.t + 3600_000).toISOString(), imageId: image.data.imageId } });
-    for (const d of ['inbox', 'pairs', 'notes', 'note-images']) assert.ok(fs.readdirSync(path.join(h.auraDir, d)).length > 0, d);
+    for (const d of ['inbox', 'pairs', 'notes', 'note-images', 'history']) assert.ok(fs.readdirSync(path.join(h.auraDir, d)).length > 0, d);
 
     assert.deepEqual((await h.call('DELETE', '/pair', { token: 'tok-b' })).data, {});
-    for (const d of ['inbox', 'pairs', 'notes', 'note-images']) assert.deepEqual(fs.readdirSync(path.join(h.auraDir, d)), [], d);
+    for (const d of ['inbox', 'pairs', 'notes', 'note-images', 'history']) assert.deepEqual(fs.readdirSync(path.join(h.auraDir, d)), [], d);
     for (const who of ['tok-a', 'tok-b']) {
       const me = (await h.call('GET', '/me', { token: who })).data;
       assert.equal(me.partner, null);
@@ -530,5 +530,58 @@ test('handle ignores non-AURA paths and never leaks stack traces on bad JSON', a
     assert.deepEqual(Object.keys(res.data), ['error']);
     const r = { writeHead() { throw new Error('should not be called'); } };
     assert.equal(await h.aura.handle({ method: 'GET', headers: {} }, r, '/api/other'), false);
+  } finally { await h.close(); }
+});
+
+test('history: canvases from both members, newest first, images, seeding and pair privacy', async () => {
+  const h = await harness();
+  try {
+    assert.deepEqual((await h.call('GET', '/history/doodle', { token: 'tok-a' })).data, []);
+    await pair(h);
+    // a canvas sent before history existed is seeded from the inbox
+    await h.call('PUT', '/canvas/doodle?size=small', { token: 'tok-a', raw: PNG });
+    fs.rmSync(path.join(h.auraDir, 'history'), { recursive: true, force: true });
+    h.clock.t += 1000;
+    let list = (await h.call('GET', '/history/doodle', { token: 'tok-b' })).data;
+    assert.equal(list.length, 1);
+    assert.equal(list[0].fromMe, false);
+    assert.equal(list[0].fromName, 'alice');
+
+    await h.call('PUT', '/canvas/doodle?size=medium', { token: 'tok-b', raw: JPEG });
+    h.clock.t += 1000;
+    await h.call('PUT', '/canvas/doodle?size=small', { token: 'tok-a', raw: JPEG });
+    list = (await h.call('GET', '/history/doodle', { token: 'tok-a' })).data;
+    assert.deepEqual(list.map(e => [e.fromMe, e.size]), [[true, 'small'], [false, 'medium'], [true, 'small']]);
+    assert.deepEqual(Object.keys(list[0]).sort(), ['fromMe', 'fromName', 'id', 'kind', 'sentAt', 'size']);
+    const img = await h.call('GET', `/history/doodle/${list[2].id}/image`, { token: 'tok-b' });
+    assert.ok(img.buf.equals(PNG));
+    assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.equal((await h.call('GET', `/history/doodle/${list[2].id}/image`, { token: 'tok-c' })).status, 404);
+    assert.equal((await h.call('GET', `/history/photo/${list[2].id}/image`, { token: 'tok-a' })).status, 404);
+    assert.equal((await h.call('GET', '/history/doodle/a.b/image', { token: 'tok-a' })).status, 400);
+    assert.deepEqual((await h.call('GET', '/history/photo', { token: 'tok-a' })).data, []);
+    assert.deepEqual((await h.call('GET', '/history/doodle', { token: 'tok-c' })).data, []);
+  } finally { await h.close(); }
+});
+
+test('history: notes in both directions; recipients only see delivered notes', async () => {
+  const h = await harness();
+  try {
+    await pair(h);
+    await register(h, 'tok-b', DEV_B_APP, 'app');
+    await register(h, 'tok-a', DEV_A, 'app');
+    await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'hi bob' } });
+    h.clock.t += 1000;
+    await h.call('POST', '/notes', { token: 'tok-b', json: { title: 'hey', body: 'hi alice' } });
+    const later = await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'later', sendAt: new Date(h.clock.t + 3600_000).toISOString() } });
+    const cancelled = await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'nope', sendAt: new Date(h.clock.t + 3600_000).toISOString() } });
+    await h.call('DELETE', `/notes/${cancelled.data.id}`, { token: 'tok-a' });
+
+    const a = (await h.call('GET', '/history/notes', { token: 'tok-a' })).data;
+    assert.deepEqual(a.map(n => [n.draft.body, n.fromMe, n.status]), [['later', true, 'scheduled'], ['hi alice', false, 'sent'], ['hi bob', true, 'sent']]);
+    const b = (await h.call('GET', '/history/notes', { token: 'tok-b' })).data;
+    assert.deepEqual(b.map(n => [n.draft.body, n.fromMe]), [['hi alice', true], ['hi bob', false]]);
+    assert.ok(!b.some(n => n.id === later.data.id));
+    assert.deepEqual((await h.call('GET', '/history/notes', { token: 'tok-c' })).data, []);
   } finally { await h.close(); }
 });
