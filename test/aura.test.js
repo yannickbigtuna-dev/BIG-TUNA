@@ -309,7 +309,7 @@ test('canvas: inbox versions, validation, limits and pushes to the partner only'
     // pushes: 2 canvases x (1 widgets + 1 app) to B only
     assert.equal(h.sent.length, 4);
     const w = h.sent.filter(s => s.pushType === 'widgets');
-    const a = h.sent.filter(s => s.pushType === 'background');
+    const a = h.sent.filter(s => s.pushType === 'alert');
     assert.equal(w.length, 2);
     assert.equal(a.length, 2);
     assert.equal(w[0].topic, 'ca.yannickmorgans.aura.push-type.widgets');
@@ -317,10 +317,14 @@ test('canvas: inbox versions, validation, limits and pushes to the partner only'
     assert.equal(w[0].token, DEV_B_W);
     assert.deepEqual(w[0].payload, { aps: { 'content-changed': true } });
     assert.equal(a[0].topic, 'ca.yannickmorgans.aura');
-    assert.equal(a[0].priority, 5);
+    assert.equal(a[0].priority, 10);
     assert.equal(a[0].token, DEV_B_APP);
     assert.equal(a[0].environment, 'sandbox');
-    assert.deepEqual(a[0].payload, { aps: { 'content-available': 1 }, aura: { kind: 'doodle', size: 'small' } });
+    assert.deepEqual(a[0].payload.aura, { kind: 'doodle', size: 'small' });
+    assert.deepEqual(a[0].payload.aps.alert, { title: 'alice', body: 'Sent you a doodle 💙' });
+    assert.equal(a[0].payload.aps['mutable-content'], 1);
+    assert.equal(a[0].payload.aps['content-available'], 1);
+    assert.equal(a[0].payload.aps.sound, 'default');
     assert.ok(h.sent.every(s => s.token !== DEV_A));
   } finally { await h.close(); }
 });
@@ -361,10 +365,11 @@ test('notes: immediate delivery maps sound and interruption; validation', async 
     assert.equal((await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'hi', imageId: 'a'.repeat(32) } })).status, 400);
     assert.equal((await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'hi', sendAt: new Date(h.clock.t + 400 * 24 * 3600_000).toISOString() } })).status, 400);
 
-    // no devices yet -> still 201, status failed
+    // no devices yet -> still 201, kept for retry (cancelled here so it doesn't send later)
     const none = await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'hi', sound: 'standard', interruption: 'active' } });
     assert.equal(none.status, 201);
-    assert.equal(none.data.status, 'failed');
+    assert.equal(none.data.status, 'sending');
+    assert.equal((await h.call('DELETE', `/notes/${none.data.id}`, { token: 'tok-a' })).status, 200);
 
     await register(h, 'tok-b', DEV_B_APP, 'app');
     await register(h, 'tok-b', DEV_B_W, 'widgets');
@@ -410,7 +415,7 @@ test('notes: immediate delivery maps sound and interruption; validation', async 
   } finally { await h.close(); }
 });
 
-test('notes: all pushes failing yields failed; invalid tokens are removed', async () => {
+test('notes: undelivered notes retry with backoff, deliver when a phone registers, fail after the window', async () => {
   const h = await harness();
   try {
     await pair(h);
@@ -418,8 +423,32 @@ test('notes: all pushes failing yields failed; invalid tokens are removed', asyn
     h.behavior.result = () => ({ delivery: 'failed', reason: 'invalid_token' });
     const n = await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'x' } });
     assert.equal(n.status, 201);
-    assert.equal(n.data.status, 'failed');
+    assert.equal(n.data.status, 'sending');
     assert.equal(JSON.parse(fs.readFileSync(path.join(h.auraDir, 'users', 'user-b.json'), 'utf8')).devices.length, 0);
+    const status = async id => (await h.call('GET', '/notes', { token: 'tok-a' })).data.find(x => x.id === id).status;
+
+    // APNs flaky: not retried before its backoff, then retried and delivered.
+    h.behavior.result = () => ({ delivery: 'failed', reason: 'provider_unavailable' });
+    await register(h, 'tok-b', DEV_B_APP, 'app');      // phone registers -> immediate retry
+    await new Promise(r => setTimeout(r, 30));
+    await h.aura.tick();
+    assert.equal(await status(n.data.id), 'sending');
+    const before = h.sent.length;
+    await h.aura.tick();                                  // backoff not elapsed
+    assert.equal(h.sent.length, before);
+    h.behavior.result = () => ({ delivery: 'sent' });
+    h.clock.t += 60_000;
+    await h.aura.tick();
+    assert.equal(await status(n.data.id), 'sent');
+    assert.equal(h.sent.at(-1).payload.aps.alert.body, 'x');
+
+    // Never reachable: gives up after the retry window.
+    h.behavior.result = () => ({ delivery: 'failed', reason: 'provider_unavailable' });
+    const m = await h.call('POST', '/notes', { token: 'tok-a', json: { body: 'y' } });
+    assert.equal(m.data.status, 'sending');
+    h.clock.t += 7 * 3600_000;
+    await h.aura.tick();
+    assert.equal(await status(m.data.id), 'failed');
   } finally { await h.close(); }
 });
 

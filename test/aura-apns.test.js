@@ -116,3 +116,25 @@ test('device token cipher round-trips and prefers the AURA secret', () => {
   assert.equal(createAuraCipher({ env: {} }).configured, false);
   assert.throws(() => createAuraCipher({ env: {} }).encrypt(TOKEN));
 });
+
+test('retries transient network errors and 5xx on the same host', async () => {
+  const calls = [];
+  let n = 0;
+  const flaky = () => { n += 1; if (n === 1) throw new Error('socket disconnected'); return n === 2 ? { status: 503, reason: 'ServiceUnavailable' } : OK; };
+  const connect = host => {
+    const client = fakeConnect({ [host]: flaky }, calls)(host);
+    const request = client.request;
+    client.request = headers => {
+      const req = request(headers);
+      const end = req.end;
+      req.end = data => { try { end(data); } catch (error) { setImmediate(() => req.emit('error', error)); } };
+      return req;
+    };
+    return client;
+  };
+  const apns = createAuraApns({ env: ENV, connect, sleep: async () => {} });
+  const r = await apns.send({ token: TOKEN, environment: 'production', payload: {} });
+  assert.equal(r.delivery, 'sent');
+  assert.equal(n, 3);
+  assert.ok(calls.every(c => c.host === PROD));
+});
