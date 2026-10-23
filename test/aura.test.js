@@ -290,7 +290,7 @@ test('canvas: inbox versions, validation, limits and pushes to the partner only'
 
     const one = await h.call('PUT', '/canvas/doodle?size=small', { token: 'tok-a', raw: PNG });
     assert.equal(one.status, 200);
-    assert.deepEqual(Object.keys(one.data).sort(), ['fromName', 'kind', 'sentAt', 'size', 'version']);
+    assert.deepEqual(Object.keys(one.data).sort(), ['fromName', 'historyId', 'kind', 'sentAt', 'size', 'version']);
     assert.equal(one.data.version, 1);
     assert.equal(one.data.fromName, 'alice');
     const two = await h.call('PUT', '/canvas/doodle?size=small', { token: 'tok-a', raw: JPEG });
@@ -621,7 +621,7 @@ test('history: canvases from both members, newest first, images, seeding and pai
     await h.call('PUT', '/canvas/doodle?size=small', { token: 'tok-a', raw: JPEG });
     list = (await h.call('GET', '/history/doodle', { token: 'tok-a' })).data;
     assert.deepEqual(list.map(e => [e.fromMe, e.size]), [[true, 'small'], [false, 'medium'], [true, 'small']]);
-    assert.deepEqual(Object.keys(list[0]).sort(), ['fromMe', 'fromName', 'id', 'kind', 'sentAt', 'size']);
+    assert.deepEqual(Object.keys(list[0]).sort(), ['fromMe', 'fromName', 'id', 'kind', 'myReaction', 'sentAt', 'size', 'theirReaction']);
     const img = await h.call('GET', `/history/doodle/${list[2].id}/image`, { token: 'tok-b' });
     assert.ok(img.buf.equals(PNG));
     assert.equal(img.headers.get('content-type'), 'image/png');
@@ -652,5 +652,42 @@ test('history: notes in both directions; recipients only see delivered notes', a
     assert.deepEqual(b.map(n => [n.draft.body, n.fromMe]), [['hi alice', true], ['hi bob', false]]);
     assert.ok(!b.some(n => n.id === later.data.id));
     assert.deepEqual((await h.call('GET', '/history/notes', { token: 'tok-c' })).data, []);
+  } finally { await h.close(); }
+});
+
+test('reactions: partner reacts, sender is notified and sees a widget notice', async () => {
+  const h = await harness();
+  try {
+    await pair(h);
+    await register(h, 'tok-a', DEV_A, 'app');
+    const put = await h.call('PUT', '/canvas/doodle?size=small', { token: 'tok-a', raw: PNG });
+    const inbox = (await h.call('GET', '/inbox/doodle', { token: 'tok-b' })).data;
+    assert.match(inbox[0].historyId, /^[a-f0-9]{24}$/);
+    const id = inbox[0].historyId;
+    assert.deepEqual((await h.call('GET', '/inbox/doodle/reaction', { token: 'tok-a' })).data, {});
+    // cannot react to your own, or with an unknown emoji
+    assert.equal((await h.call('POST', `/history/doodle/${id}/reaction`, { token: 'tok-a', json: { emoji: '❤️' } })).status, 400);
+    assert.equal((await h.call('POST', `/history/doodle/${id}/reaction`, { token: 'tok-b', json: { emoji: '💩' } })).status, 400);
+    assert.equal((await h.call('POST', `/history/doodle/nope/reaction`, { token: 'tok-b', json: { emoji: '❤️' } })).status, 404);
+    assert.equal((await h.call('POST', `/history/doodle/${id}/reaction`, { token: 'tok-c', json: { emoji: '❤️' } })).status, 409);
+    h.sent.length = 0;
+    const r = await h.call('POST', `/history/doodle/${id}/reaction`, { token: 'tok-b', json: { emoji: '😂' } });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.myReaction, '😂');
+    const alert = h.sent.find(x => x.pushType === 'alert');
+    assert.ok(alert && alert.payload.aps.alert.body.includes('😂'));
+    assert.equal(alert.payload.aura.reactionKind, 'doodle');
+    const notice = (await h.call('GET', '/inbox/doodle/reaction', { token: 'tok-a' })).data;
+    assert.equal(notice.emoji, '😂');
+    assert.equal(notice.fromName, 'bob');
+    const forA = (await h.call('GET', '/history/doodle', { token: 'tok-a' })).data[0];
+    const forB = (await h.call('GET', '/history/doodle', { token: 'tok-b' })).data[0];
+    assert.equal(forA.theirReaction, '😂'); assert.equal(forA.myReaction, null);
+    assert.equal(forB.myReaction, '😂');
+    // clearing sends no push
+    h.sent.length = 0;
+    await h.call('POST', `/history/doodle/${id}/reaction`, { token: 'tok-b', json: { emoji: null } });
+    assert.equal(h.sent.length, 0);
+    assert.equal((await h.call('GET', '/history/doodle', { token: 'tok-b' })).data[0].myReaction, null);
   } finally { await h.close(); }
 });
