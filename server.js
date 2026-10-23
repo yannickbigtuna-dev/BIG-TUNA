@@ -1715,6 +1715,10 @@ function boundedChallengeRefreshOperation(operation, timeoutMs, label) {
   });
 }
 
+function logChallengeRefreshFailure(step, error) {
+  stravaChallengeLogger.warn(`challenge refresh step ${step} failed: ${error && error.name || 'Error'} ${error && error.code || ''} ${error && error.status || ''} ${error && error.message || error}`);
+}
+
 async function refreshChallengeAccountData(user, { accounts = challengeAccounts, service = stravaChallenge, timeoutMs = 80_000 } = {}) {
   if (!accounts) throw Object.assign(new Error('Challenge accounts are temporarily unavailable.'), { status: 503 });
   // Capture complete durable detail before any provider wait. If Strava uses
@@ -1735,6 +1739,7 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
     const results = await Promise.allSettled(participantIds.map(participantId => boundedChallengeRefreshOperation(
       () => coalescedChallengeAccountSync(service, participantId), syncWaitMs, 'Challenge account sync',
     )));
+    results.forEach((result, index) => { if (result.status === 'rejected') logChallengeRefreshFailure(`sync:${String(participantIds[index]).slice(0, 8)}`, result.reason); });
     partial = results.some(result => result.status === 'rejected');
   } else if (participantIds.length) {
     partial = true;
@@ -1758,7 +1763,8 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
           distanceMeters: activity.distanceMeters,
           movingTime: activity.movingTime,
         })).filter(activity => activity.id !== `account_${participantId}_`));
-      } catch {
+      } catch (error) {
+        logChallengeRefreshFailure(1, error);
         partial = true;
         cachedByParticipant.set(participantId, []);
       }
@@ -1776,7 +1782,8 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
             'Challenge activity import',
           );
         }
-      } catch {
+      } catch (error) {
+        logChallengeRefreshFailure(2, error);
         partial = true;
       }
     }
@@ -1787,7 +1794,8 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
         'Legacy challenge activity cache read',
       );
       if (!synced) partial = true;
-    } catch {
+    } catch (error) {
+      logChallengeRefreshFailure(3, error);
       partial = true;
     }
   }
@@ -1795,7 +1803,8 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
   let currentSummaries = initialChallenges;
   try {
     currentSummaries = await accounts.listChallenges(user);
-  } catch {
+  } catch (error) {
+    logChallengeRefreshFailure(4, error);
     partial = true;
   }
   const initialByID = new Map(initialChallenges.map(challenge => [challenge.id, challenge]));
@@ -1803,7 +1812,8 @@ async function refreshChallengeAccountData(user, { accounts = challengeAccounts,
   for (const challenge of currentSummaries) {
     try {
       challenges.push(await accounts.getChallenge(user, challenge.id));
-    } catch {
+    } catch (error) {
+      logChallengeRefreshFailure(5, error);
       partial = true;
       challenges.push(initialByID.get(challenge.id) || challenge);
     }
