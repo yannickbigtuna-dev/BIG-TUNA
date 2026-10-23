@@ -29,7 +29,7 @@ test('participant refresh is authenticated, allowlisted, coalesced, and response
   assert.match(server, /function challengeRefreshUser/);
   assert.match(server, /new Set\(\['yannick', 'fishyemma'\]\)\.has\(normalizedChallengeUsername\(user\)\)/);
   assert.match(server, /String\(user && user\.username \|\| ''\)\.trim\(\)\.toLowerCase\(\)/);
-  assert.match(server, /const CHALLENGE_REFRESH_COOLDOWN_MS = 5 \* 60_000/);
+  assert.match(server, /const CHALLENGE_REFRESH_COOLDOWN_MS = 20_000/);
   assert.match(server, /let challengeRefreshInFlight = null/);
   assert.match(server, /challengeRefreshCooldownUntil = Date\.now\(\) \+ CHALLENGE_REFRESH_COOLDOWN_MS;\s*const sync/);
   assert.match(server, /return \{ \.\.\.await challengeRefreshInFlight, coalesced: true \}/);

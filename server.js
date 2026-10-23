@@ -198,7 +198,7 @@ if (require.main === module && challengeApns.configured) {
     stravaChallengeLogger.info(`APNs key ${process.env.APNS_KEY_ID || ''}: production=${result.production} sandbox=${result.sandbox}`);
   }).catch(() => {}), 2000).unref();
 }
-const CHALLENGE_REFRESH_COOLDOWN_MS = 5 * 60_000;
+const CHALLENGE_REFRESH_COOLDOWN_MS = 20_000;
 let challengeRefreshInFlight = null;
 let challengeRefreshCooldownUntil = 0;
 function challengeAccountIdForParticipant(participantId) {
