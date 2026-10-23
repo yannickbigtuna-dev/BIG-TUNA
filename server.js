@@ -2834,8 +2834,15 @@ async function handleAPI(req, res, urlPath) {
     if (!user) return;
     if (!challengeAccounts) return jsonRes(res, 503, { error: 'Challenge accounts are temporarily unavailable' });
     if (!await challengeAccountsEmptyBody(req, res)) return;
-    try { return jsonRes(res, 200, await refreshChallengeAccountData(user)); }
-    catch (error) { return challengeAccountsError(res, error); }
+    const refreshStartedAt = Date.now();
+    try {
+      const refreshed = await refreshChallengeAccountData(user);
+      stravaChallengeLogger.info(`challenge refresh ok user=${user.username} challenges=${refreshed.challenges.length} partial=${refreshed.partial} ms=${Date.now() - refreshStartedAt}`);
+      return jsonRes(res, 200, refreshed);
+    } catch (error) {
+      stravaChallengeLogger.warn(`challenge refresh failed user=${user.username} ms=${Date.now() - refreshStartedAt}: ${error && error.message}`);
+      return challengeAccountsError(res, error);
+    }
   }
 
   if (urlPath === '/api/challenge-devices' && req.method === 'POST') {
