@@ -188,6 +188,24 @@ test('counters CRUD, validation and partner counters', async () => {
   } finally { await h.close(); }
 });
 
+test('counter start date, caption and reorder', async () => {
+  const h = await harness();
+  try {
+    const base = { name: 'n', date: '2026-12-01T00:00:00Z', mode: 'until', emoji: '' };
+    const r = await h.call('PUT', '/counters/a', { token: 'tok-a', json: { ...base, id: 'a', startDate: '2026-10-01T00:00:00.000Z', caption: '  to Paris  ' } });
+    assert.equal(r.data.startDate, '2026-10-01T00:00:00Z');
+    assert.equal(r.data.caption, 'to Paris');
+    assert.equal((await h.call('PUT', '/counters/a', { token: 'tok-a', json: { ...base, id: 'a', startDate: 'soon' } })).status, 400);
+    assert.equal((await h.call('PUT', '/counters/a', { token: 'tok-a', json: { ...base, id: 'a', caption: 'x'.repeat(81) } })).status, 400);
+    assert.equal((await h.call('PUT', '/counters/a', { token: 'tok-a', json: { ...base, id: 'a', caption: '   ' } })).data.caption, undefined);
+    for (const id of ['b', 'c']) await h.call('PUT', `/counters/${id}`, { token: 'tok-a', json: { ...base, id } });
+    const order = await h.call('PUT', '/counters', { token: 'tok-a', json: { ids: ['c', 'zzz', 'a'] } });
+    assert.deepEqual(order.data.map(x => x.id), ['c', 'a', 'b']);
+    assert.deepEqual((await h.call('GET', '/counters', { token: 'tok-a' })).data.map(x => x.id), ['c', 'a', 'b']);
+    assert.equal((await h.call('PUT', '/counters', { token: 'tok-a', json: { ids: 'c' } })).status, 400);
+  } finally { await h.close(); }
+});
+
 test('counter limit of 100', async () => {
   const h = await harness();
   try {
