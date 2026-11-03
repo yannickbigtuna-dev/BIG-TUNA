@@ -188,6 +188,35 @@ test('counters CRUD, validation and partner counters', async () => {
   } finally { await h.close(); }
 });
 
+test('shared counters: merged list, own order, creator-only edits', async () => {
+  const h = await harness();
+  try {
+    const base = { name: 'n', date: '2026-12-01T00:00:00Z', mode: 'until', emoji: '' };
+    for (const id of ['a1', 'a2']) await h.call('PUT', `/counters/${id}`, { token: 'tok-a', json: { ...base, id } });
+    await h.call('PUT', '/counters/b1', { token: 'tok-b', json: { ...base, id: 'b1' } });
+    // Unpaired: only my own.
+    assert.deepEqual((await h.call('GET', '/shared-counters', { token: 'tok-a' })).data.map(x => x.id), ['a1', 'a2']);
+    await pair(h);
+    const list = (await h.call('GET', '/shared-counters', { token: 'tok-a' })).data;
+    assert.deepEqual(list.map(x => [x.id, x.mine]), [['a1', true], ['a2', true], ['b1', false]]);
+    assert.deepEqual((await h.call('GET', '/shared-counters', { token: 'tok-b' })).data.map(x => [x.id, x.mine]), [['b1', true], ['a1', false], ['a2', false]]);
+    // Each person orders the shared list independently.
+    const ordered = await h.call('PUT', '/shared-counters', { token: 'tok-a', json: { ids: ['b1', 'gone', 'a2'] } });
+    assert.deepEqual(ordered.data.map(x => x.id), ['b1', 'a2', 'a1']);
+    assert.deepEqual((await h.call('GET', '/shared-counters', { token: 'tok-b' })).data.map(x => x.id), ['b1', 'a1', 'a2']);
+    assert.equal((await h.call('PUT', '/shared-counters', { token: 'tok-a', json: { ids: ['../x'] } })).status, 400);
+    // Only the creator edits or deletes.
+    assert.equal((await h.call('PUT', '/counters/b1', { token: 'tok-a', json: { ...base, id: 'b1', name: 'hijack' } })).status, 403);
+    assert.equal((await h.call('DELETE', '/counters/b1', { token: 'tok-a' })).status, 403);
+    assert.equal((await h.call('GET', '/shared-counters', { token: 'tok-a' })).data[0].name, 'n');
+    // A partner's new counter shows up at the end of my ordered list.
+    await h.call('PUT', '/counters/b2', { token: 'tok-b', json: { ...base, id: 'b2' } });
+    assert.deepEqual((await h.call('GET', '/shared-counters', { token: 'tok-a' })).data.map(x => x.id), ['b1', 'a2', 'a1', 'b2']);
+    assert.deepEqual((await h.call('DELETE', '/counters/b1', { token: 'tok-b' })).data, {});
+    assert.deepEqual((await h.call('GET', '/shared-counters', { token: 'tok-a' })).data.map(x => x.id), ['a2', 'a1', 'b2']);
+  } finally { await h.close(); }
+});
+
 test('counter start date, caption and reorder', async () => {
   const h = await harness();
   try {
