@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lamp Bridge</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #6b7280; --line: #e5e7eb;
+    --good: #16a34a; --good-bg: #dcfce7; --bad: #dc2626; --bad-bg: #fee2e2;
+    --warn: #b45309; --warn-bg: #fef3c7; --accent: #2563eb; --raw: #93c5fd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a21; --text: #e8eaee; --muted: #8b93a1; --line: #262b35;
+      --good: #4ade80; --good-bg: #14301f; --bad: #f87171; --bad-bg: #3a1717;
+      --warn: #fbbf24; --warn-bg: #3a2c0c; --accent: #60a5fa; --raw: #1e3a8a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  .chip { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--card);
+          border: 1px solid var(--line); color: var(--muted); }
+  .chip.ok { color: var(--good); }
+  .chip.err { color: var(--bad); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .top { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .top { grid-template-columns: 1fr; } }
+  .status { display: flex; align-items: center; gap: 16px; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; flex: none; background: var(--muted); }
+  .status.in .dot { background: var(--good); box-shadow: 0 0 0 6px var(--good-bg); }
+  .status.out .dot { background: var(--bad); box-shadow: 0 0 0 6px var(--bad-bg); }
+  .status .big { font-size: 28px; font-weight: 650; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .rssi { display: flex; align-items: baseline; gap: 6px; }
+  .rssi .num { font-size: 44px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .bars { display: flex; gap: 4px; align-items: flex-end; height: 26px; margin-left: auto; }
+  .bars i { width: 7px; background: var(--line); border-radius: 2px; }
+  .bars i.on { background: var(--accent); }
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+  .chartwrap { position: relative; height: 280px; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .seg button { background: none; border: 1px solid var(--line); color: var(--muted); padding: 4px 10px;
+                font: inherit; font-size: 12px; cursor: pointer; }
+  .seg button:first-child { border-radius: 8px 0 0 8px; }
+  .seg button:last-child { border-radius: 0 8px 8px 0; }
+  .seg button.sel { color: var(--text); background: var(--bg); }
+  .btn { font: inherit; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--line);
+         background: var(--bg); color: var(--text); cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .banner { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+  .banner ol { margin: 6px 0 0; padding-left: 20px; }
+  #log { font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--muted); max-height: 180px;
+         overflow-y: auto; white-space: pre-wrap; margin: 0; }
+  .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 24px; margin-top: 12px; }
+  .sl label { display: flex; justify-content: space-between; font-size: 14px; }
+  .sl b { font-variant-numeric: tabular-nums; }
+  .sl input { width: 100%; accent-color: var(--accent); }
+  .sl .sub { font-size: 12px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; margin-right: 5px;
+                         vertical-align: middle; background: var(--c); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Lamp Bridge <span class="sub">USB ESP32 · local only</span></h1>
+    <div style="display:flex;gap:6px">
+      <span id="chipServer" class="chip">Server: …</span>
+      <span id="chipSerial" class="chip">USB: …</span>
+      <span id="chipPair" class="chip">Phone: …</span>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="top">
+    <div class="card">
+      <div class="label">Lamp</div>
+      <div id="lampStatus" class="status">
+        <div class="dot"></div>
+        <div>
+          <div class="big" id="lampText">…</div>
+          <div class="sub" id="lampSub">&nbsp;</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn primary" onclick="post('lamp/on')">Turn on</button>
+        <button class="btn" onclick="post('lamp/off')">Turn off</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Presence rules</div>
+      <div class="big" id="presText" style="font-size:22px;font-weight:650">…</div>
+      <div class="sub" id="presSub" style="margin-top:4px">&nbsp;</div>
+      <div class="sub" id="presEvent" style="margin-top:8px">&nbsp;</div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
+        <input type="checkbox" id="auto"> Automatic on/off from phone
+      </label>
+    </div>
+  </section>
+
+  <section class="top">
+    <div class="card">
+      <div class="label">Phone</div>
+      <div id="status" class="status">
+        <div class="dot"></div>
+        <div>
+          <div class="big" id="statusText">Waiting…</div>
+          <div class="sub" id="seenAgo">&nbsp;</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Signal strength</div>
+      <div class="rssi">
+        <span class="num" id="rssiNum">--</span><span class="sub">dBm</span>
+        <div class="bars" id="bars"><i style="height:25%"></i><i style="height:50%"></i><i style="height:75%"></i><i style="height:100%"></i></div>
+      </div>
+      <div class="sub" id="rssiSub">smoothed -- · last raw --</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row"><div class="label" style="margin:0">Thresholds</div><span class="sub" id="saved">Changes apply instantly and are saved</span></div>
+    <div id="sliders" class="sliders"></div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-bottom:10px">
+      <div class="legend"><span style="--c:var(--raw)">raw</span><span style="--c:var(--accent)">smoothed</span></div>
+      <div class="seg" id="range">
+        <button data-s="60">1m</button><button data-s="300" class="sel">5m</button><button data-s="600">10m</button>
+      </div>
+    </div>
+    <div class="chartwrap"><canvas id="chart"></canvas></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div class="label" style="margin:0">Pairing</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn primary" id="btnEnroll">Pair phone</button>
+        <button class="btn" id="btnForget">Forget phone</button>
+      </div>
+    </div>
+    <div class="sub" id="irk" style="margin-top:8px"></div>
+  </section>
+
+  <section class="card">
+    <div class="label">Log</div>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = {}, hist = [], range = 300;
+
+function rssiBars(r) {
+  if (r == null) return 0;
+  return r > -60 ? 4 : r > -70 ? 3 : r > -80 ? 2 : r > -90 ? 1 : 0;
+}
+
+function render() {
+  $("chipSerial").textContent = S.serial ? `USB: connected · ${S.adv_rate ?? 0} BLE adverts/s` : "USB: disconnected";
+  $("chipSerial").className = "chip " + (S.serial ? "ok" : "err");
+  $("chipPair").textContent = S.enrolling ? "Phone: pairing…" : S.enrolled ? "Phone: paired" : "Phone: not paired";
+  $("chipPair").className = "chip " + (S.enrolled ? "ok" : "err");
+
+  $("chipServer").textContent = S.server ? "Server: live" : "Server: offline";
+  $("chipServer").className = "chip " + (S.server ? "ok" : "err");
+  const ls = $("lampStatus");
+  ls.className = "status " + (S.lamp_on == null ? "" : S.lamp_on ? "in" : "out");
+  $("lampText").textContent = S.lamp_on == null ? "Unknown" : S.lamp_on ? "On" : "Off";
+  $("lampSub").textContent = S.lamp_desired_on == null ? "Waiting for server" :
+    S.lamp_desired_on === S.lamp_on ? "Relay matches the app" :
+    `Switching to ${S.lamp_desired_on ? "on" : "off"}…`;
+  const c = S.cfg || {};
+  $("presText").textContent = S.presence === "present" ? "Phone here" : S.presence === "away" ? "Phone away" : "Learning…";
+  $("presSub").textContent = (S.presence === "away" && S.away_for != null ? `Away ${Math.floor(S.away_for / 60)} min · ` : "") +
+    `off after ${c.leaveAfterSeconds}s unseen · on if away ${Math.round(c.awayAtLeastSeconds / 60)}+ min` +
+    ` · quiet ${c.quietHoursStart}:00–${c.quietHoursEnd}:00` + (S.quiet ? " (now)" : "");
+  $("presEvent").textContent = S.last_event ? `Last: ${new Date(S.last_event[0] * 1000).toLocaleTimeString()} · ${S.last_event[1]}` : "No automation yet";
+  $("auto").checked = !!S.automation;
+  renderSliders();
+  const st = $("status");
+  if (!S.serial) { st.className = "status"; $("statusText").textContent = "ESP32 not connected"; }
+  else if (!S.enrolled) { st.className = "status"; $("statusText").textContent = "Phone not paired"; }
+  else if (S.present) { st.className = "status in"; $("statusText").textContent = "In range"; }
+  else { st.className = "status out"; $("statusText").textContent = "Not detected"; }
+  $("seenAgo").textContent = S.seen_ago == null ? "Never seen" :
+    `Last seen ${S.seen_ago < 2 ? "just now" : S.seen_ago.toFixed(0) + "s ago"}`;
+
+  const show = S.present ? S.rssi_smooth : null;
+  $("rssiNum").textContent = show == null ? "--" : Math.round(show);
+  $("rssiSub").textContent = `smoothed ${S.rssi_smooth ?? "--"} · last raw ${S.present ? S.rssi : "--"}`;
+  const n = rssiBars(show);
+  [...$("bars").children].forEach((b, i) => b.classList.toggle("on", i < n));
+
+  const b = $("banner");
+  if (S.enrolling) {
+    b.hidden = false;
+    b.innerHTML = `<b>Pairing mode is on.</b><ol>
+      <li>On your iPhone open <b>Settings → Bluetooth</b>.</li>
+      <li>Under Other Devices tap <b>ESP32 Presence</b>, then tap <b>Pair</b>.</li>
+      <li>This banner closes once the ESP32 has saved your phone's key.</li></ol>
+      <button class="btn" style="margin-top:8px" onclick="cmd('cancel')">Cancel</button>`;
+  } else if (S.serial && !S.enrolled) {
+    b.hidden = false;
+    b.innerHTML = "No phone paired yet. Click <b>Pair phone</b> to start.";
+  } else b.hidden = true;
+
+  $("btnEnroll").disabled = !S.serial || S.enrolling;
+  $("btnForget").disabled = !S.serial || !S.enrolled;
+  $("irk").textContent = S.irk ? `Phone identity key (IRK): ${S.irk}` : "";
+}
+
+function drawChart() {
+  const c = $("chart"), dpr = devicePixelRatio || 1;
+  const W = c.clientWidth, H = c.clientHeight;
+  c.width = W * dpr; c.height = H * dpr;
+  const g = c.getContext("2d"); g.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  const col = k => css.getPropertyValue(k).trim();
+  const L = 40, R = 8, T = 8, B = 22, now = Date.now() / 1000, t0 = now - range;
+  const yMin = -100, yMax = -30;
+  const x = t => L + (t - t0) / range * (W - L - R);
+  const y = v => T + (yMax - Math.max(yMin, Math.min(yMax, v))) / (yMax - yMin) * (H - T - B);
+
+  g.font = "11px -apple-system, sans-serif"; g.fillStyle = col("--muted"); g.strokeStyle = col("--line"); g.lineWidth = 1;
+  for (let v = yMin; v <= yMax; v += 10) {
+    g.beginPath(); g.moveTo(L, y(v)); g.lineTo(W - R, y(v)); g.stroke();
+    g.fillText(v, 4, y(v) + 4);
+  }
+  const step = range <= 60 ? 15 : range <= 300 ? 60 : 120;
+  for (let s = 0; s <= range; s += step) {
+    const t = now - s, label = s === 0 ? "now" : `-${s >= 60 ? s / 60 + "m" : s + "s"}`;
+    g.fillText(label, Math.min(W - R - 24, x(t) - 10), H - 6);
+  }
+  const pts = hist.filter(p => p[0] >= t0);
+  g.fillStyle = col("--raw");
+  for (const p of pts) if (p[1] != null) { g.beginPath(); g.arc(x(p[0]), y(p[1]), 2.2, 0, 7); g.fill(); }
+  g.strokeStyle = col("--accent"); g.lineWidth = 2; g.lineJoin = "round"; g.beginPath();
+  let pen = false, prevT = 0;
+  for (const p of pts) {
+    if (p[2] == null || p[0] - prevT > 3) pen = false;
+    if (p[2] != null) { pen ? g.lineTo(x(p[0]), y(p[2])) : g.moveTo(x(p[0]), y(p[2])); pen = true; }
+    prevT = p[0];
+  }
+  g.stroke();
+}
+
+function addLog([t, msg]) {
+  const el = $("log"), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+  el.textContent += `${new Date(t * 1000).toLocaleTimeString()}  ${msg}\n`;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+async function cmd(c) { await fetch("/cmd/" + c, { method: "POST" }); }
+const SLIDERS = [
+  ["leaveAfterSeconds", "Turn off when unseen for", 10, v => fmtDur(v), "Higher = fewer false 'left' events"],
+  ["awayAtLeastSeconds", "Turn on only if away at least", 30, v => fmtDur(v), "Higher = harder to trigger by accident"],
+  ["arriveMinRssi", "Arrival needs signal at least", 1, v => v + " dBm", "Lower = detects from farther away"],
+  ["arriveSightings", "Arrival needs sightings", 1, v => v + "×", "Strong sightings required in the window"],
+  ["arriveWindowSeconds", "…within", 1, v => v + " s", "Time window for those sightings"],
+  ["quietHoursStart", "Quiet hours start (no auto-on)", 1, v => v + ":00", ""],
+  ["quietHoursEnd", "Quiet hours end", 1, v => v + ":00", "Same as start = no quiet hours"],
+];
+function fmtDur(s) { return s < 60 ? s + " s" : s % 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : s / 60 + " min"; }
+let dragging = null, saveTimer = null;
+function buildSliders() {
+  if ($("sliders").children.length || !S.limits) return;
+  for (const [k, label, step, fmt, hint] of SLIDERS) {
+    const [min, max] = S.limits[k];
+    const d = document.createElement("div"); d.className = "sl";
+    d.innerHTML = `<label><span>${label}</span><b id="v_${k}"></b></label>
+      <input type="range" id="s_${k}" min="${min}" max="${max}" step="${step}">
+      <div class="sub">${hint}</div>`;
+    $("sliders").appendChild(d);
+    const inp = d.querySelector("input");
+    inp.oninput = () => {
+      dragging = k; $("v_" + k).textContent = fmt(+inp.value);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        await fetch("/settings", { method: "POST", body: JSON.stringify({ [k]: +inp.value }) });
+        dragging = null; $("saved").textContent = "Saved ✓"; setTimeout(() => $("saved").textContent = "Changes apply instantly and are saved", 1500);
+      }, 300);
+    };
+  }
+}
+function renderSliders() {
+  buildSliders();
+  for (const [k, , , fmt] of SLIDERS) {
+    if (k === dragging || !S.cfg || !$("s_" + k)) continue;
+    $("s_" + k).value = S.cfg[k]; $("v_" + k).textContent = fmt(S.cfg[k]);
+  }
+}
+async function post(p) { await fetch("/" + p, { method: "POST" }); }
+$("auto").onchange = e => post("automation/" + (e.target.checked ? "on" : "off"));
+$("btnEnroll").onclick = () => cmd("enroll");
+$("btnForget").onclick = () => { if (confirm("Remove the paired phone from the ESP32?")) cmd("forget"); };
+$("range").onclick = e => {
+  if (!e.target.dataset.s) return;
+  range = +e.target.dataset.s;
+  [...$("range").children].forEach(b => b.classList.toggle("sel", b === e.target));
+  drawChart();
+};
+
+const es = new EventSource("/events");
+es.addEventListener("init", e => {
+  const d = JSON.parse(e.data); S = d.state; hist = d.history; $("log").textContent = "";
+  d.logs.forEach(addLog); render(); drawChart();
+});
+es.addEventListener("state", e => { S = JSON.parse(e.data); render(); });
+es.addEventListener("sample", e => { hist.push(JSON.parse(e.data)); if (hist.length > 700) hist.shift(); drawChart(); });
+es.addEventListener("log", e => addLog(JSON.parse(e.data)));
+es.onerror = () => { S.serial = false; render(); };
+addEventListener("resize", drawChart);
+setInterval(drawChart, 1000);
+</script>
+</body>
+</html>

@@ -709,6 +709,8 @@ GET/POST /api/lamp/device/status
 
 `GET/PUT /api/lamp/native/v1` is the owner-only Apple-client contract for Lamp, mirroring the Lights native v1 contract (`physicalOn`, `reportedPhysicalOn`, `recentlyPolled`, `updatedAt`, `revision`, bounded `commandId` idempotency). `POST/DELETE /api/lamp/native/v1/session` manages scoped bearer sessions. Session creation accepts either the owner's temporary website session or an existing valid owner Lights-scoped token, allowing pre-Lamp app installations to bootstrap Lamp access without storing or re-entering the account password.
 
+Lamp hardware (since 2026-11-06): the lamp relay is driven by a USB-attached ESP32 at the Mac mini, not the Wi-Fi hub. `devices/lamp-usb/bridge.py` (PM2 app `bigtuna-lamp`, local dashboard on 127.0.0.1:8765) follows `GET /api/lamp/events` on localhost, polls `GET /api/lamp/device` every second as heartbeat/fallback, sends the PHYSICAL state (stored `on` inverted, matching `LAMP_NATIVE_INVERT_OUTPUT`) to the ESP32 over serial, and reports confirmations with `POST /api/lamp/device/status`. It also runs BLE phone-presence rules (IRK-resolved iPhone RSSI from the ESP32) that set the lamp through `POST /api/lamp`; thresholds/automation toggle persist in `data/lamp-usb/state.json`. Relay is wired to NO so power loss = lamp off. The old Wi-Fi hub should run the lights-only firmware (`APPS/_device-tools/lights-firmware/lights-hub-lightsonly`). See `devices/lamp-usb/README.md`.
+
 Radar:
 
 ```text

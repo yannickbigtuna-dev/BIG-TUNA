@@ -1,0 +1,3 @@
+.deps/
+firmware/*/build/
+__pycache__/

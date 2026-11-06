@@ -1,0 +1,17 @@
+{
+  "serverUrl": "http://127.0.0.1:3000",
+  "dashboardPort": 8765,
+  "serialPort": null,
+
+  "lampInvertOutput": true,
+
+  "presence": {
+    "leaveAfterSeconds": 90,
+    "awayAtLeastSeconds": 300,
+    "arriveSightings": 3,
+    "arriveWindowSeconds": 15,
+    "arriveMinRssi": -80,
+    "quietHoursStart": 23,
+    "quietHoursEnd": 8
+  }
+}
