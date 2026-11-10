@@ -11,11 +11,11 @@ const QRCode = require('qrcode');
 
 // PM2 keeps the environment captured when a process was first registered, so a
 // rotated APNs key in server.env would otherwise be ignored on restart. When run
-// as the live server, re-read the APNS_* entries from server.env at startup.
+// as the live server, re-read the APNS_* and SPOTIFY_* entries from server.env at startup.
 if (require.main === module) {
   try {
     for (const line of fs.readFileSync(path.join(__dirname, 'server.env'), 'utf8').split(/\r?\n/)) {
-      const match = line.trim().match(/^(APNS_[A-Z0-9_]+)=(.*)$/);
+      const match = line.trim().match(/^((?:APNS|SPOTIFY)_[A-Z0-9_]+)=(.*)$/);
       if (match) process.env[match[1]] = match[2].trim().replace(/^(["'])(.*)\1$/, '$2');
     }
   } catch {}
