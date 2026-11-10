@@ -785,6 +785,7 @@ test('songs: resolve, send with push + art, history, listened, reactions, unpair
     const sum = (await h.call('GET', '/songs/summary', { token: 'tok-b' })).data;
     assert.equal(sum.unheard, 1);
     assert.equal(sum.latestSong.unheard, true);
+    assert.equal(sum.latestUnheard.id, made.data.id);
     assert.equal(sum.latestSong.fromName, 'alice');
     assert.equal((await h.call('GET', '/songs/summary', { token: 'tok-a' })).data.unheard, 0);
     assert.deepEqual((await h.call('GET', `/songs/${made.data.id}/art`, { token: 'tok-b' })).buf, JPEG);
