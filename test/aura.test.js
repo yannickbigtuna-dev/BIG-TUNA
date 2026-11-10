@@ -35,7 +35,7 @@ async function harness(opts = {}) {
     dataDir: path.join(dir, 'aura'),
     getSessionUser: token => TOKENS[token] || null,
     readUsers: () => USERS,
-    apns, now: () => clock.t, logger: { warn() {} }, debounceMs: opts.debounceMs ?? 0,
+    apns, now: () => clock.t, logger: { warn() {} }, debounceMs: opts.debounceMs ?? 0, songResolver: opts.songResolver,
   });
   const server = http.createServer(async (req, res) => {
     const urlPath = decodeURIComponent(req.url.split('?')[0]);
@@ -736,5 +736,92 @@ test('reactions: partner reacts, sender is notified and sees a widget notice', a
     await h.call('POST', `/history/doodle/${id}/reaction`, { token: 'tok-b', json: { emoji: null } });
     assert.equal(h.sent.length, 0);
     assert.equal((await h.call('GET', '/history/doodle', { token: 'tok-b' })).data[0].myReaction, null);
+  } finally { await h.close(); }
+});
+
+const fakeSongs = () => ({
+  calls: [],
+  async resolve(url) {
+    this.calls.push(url);
+    if (!/spotify|youtube|apple/.test(url)) { const e = new Error('Share a link from Spotify, YouTube Music or Apple Music'); e.status = 400; throw e; }
+    return {
+      title: 'Never Gonna Give You Up', artist: 'Rick Astley', album: 'Whenever', source: 'youtubeMusic', artUrl: 'https://art/x.jpg',
+      links: {
+        spotify: { url: 'https://open.spotify.com/search/x', exact: false },
+        youtubeMusic: { url: 'https://music.youtube.com/watch?v=lYBUbBu4W08', exact: true },
+        appleMusic: { url: 'https://music.apple.com/x', exact: true },
+      },
+    };
+  },
+  async fetchArt() { return JPEG; },
+});
+
+test('songs: resolve, send with push + art, history, listened, reactions, unpair', async () => {
+  const resolver = fakeSongs();
+  const h = await harness({ songResolver: resolver });
+  try {
+    assert.equal((await h.call('POST', '/songs/resolve', { token: 'tok-a', json: { url: 'https://youtu.be/x' } })).status, 409);
+    await pair(h);
+    await register(h, 'tok-b', DEV_B_APP, 'app');
+    const bad = await h.call('POST', '/songs/resolve', { token: 'tok-a', json: { url: 'https://example.com/x' } });
+    assert.equal(bad.status, 400);
+    const r = await h.call('POST', '/songs/resolve', { token: 'tok-a', json: { url: 'https://music.youtube.com/watch?v=lYBUbBu4W08' } });
+    assert.equal(r.data.links.spotify.exact, false);
+
+    assert.equal((await h.call('GET', '/songs/summary', { token: 'tok-b' })).data.unheard, 0);
+    const made = await h.call('POST', '/songs', { token: 'tok-a', json: { url: 'https://music.youtube.com/watch?v=lYBUbBu4W08', draft: { body: 'play this one', sound: 'chime' } } });
+    assert.equal(made.status, 201);
+    assert.equal(made.data.fromMe, true);
+    assert.equal(made.data.hasArt, true);
+    assert.equal(made.data.unheard, false);
+    const push = h.sent.find(x => x.pushType === 'alert');
+    assert.equal(push.payload.aps.alert.title, 'alice sent you a song');
+    assert.equal(push.payload.aps.alert.subtitle, 'Never Gonna Give You Up · Rick Astley');
+    assert.equal(push.payload.aps.alert.body, 'play this one');
+    assert.equal(push.payload.aps.sound, 'chime.caf');
+    assert.equal(push.payload.aura.songId, made.data.id);
+    assert.match(push.payload.aura.imageId, /^[a-f0-9]{32}$/);
+
+    const sum = (await h.call('GET', '/songs/summary', { token: 'tok-b' })).data;
+    assert.equal(sum.unheard, 1);
+    assert.equal(sum.latestSong.unheard, true);
+    assert.equal(sum.latestSong.fromName, 'alice');
+    assert.equal((await h.call('GET', '/songs/summary', { token: 'tok-a' })).data.unheard, 0);
+    assert.deepEqual((await h.call('GET', `/songs/${made.data.id}/art`, { token: 'tok-b' })).buf, JPEG);
+
+    // reactions go to the latest song and notify the sender
+    h.sent.length = 0;
+    await register(h, 'tok-a', DEV_A, 'app');
+    assert.equal((await h.call('POST', '/songs/react', { token: 'tok-b', json: { emoji: '💩' } })).status, 400);
+    const react = await h.call('POST', '/songs/react', { token: 'tok-b', json: { emoji: '🔥' } });
+    assert.equal(react.status, 201);
+    assert.equal(react.data.songTitle, 'Never Gonna Give You Up');
+    assert.ok(h.sent.find(x => x.pushType === 'alert').payload.aps.alert.body.includes('🔥'));
+    assert.equal((await h.call('GET', '/songs/summary', { token: 'tok-a' })).data.latestReaction.emoji, '🔥');
+
+    // listened: only the recipient marks it
+    const mine = await h.call('POST', `/songs/${made.data.id}/listened`, { token: 'tok-a', json: {} });
+    assert.equal(mine.data.listenedAt, null);
+    const done = await h.call('POST', `/songs/${made.data.id}/listened`, { token: 'tok-b', json: {} });
+    assert.ok(done.data.listenedAt);
+    assert.equal((await h.call('GET', '/songs/summary', { token: 'tok-b' })).data.unheard, 0);
+
+    // pagination + received filter (newest first)
+    for (let i = 0; i < 4; i++) { h.clock.t += 1000; await h.call('POST', '/songs', { token: 'tok-a', json: { url: `https://open.spotify.com/track/${i}` } }); }
+    h.clock.t += 1000;
+    await h.call('POST', '/songs', { token: 'tok-b', json: { url: 'https://open.spotify.com/track/b' } });
+    const page1 = (await h.call('GET', '/songs?limit=3&filter=received', { token: 'tok-b' })).data;
+    assert.equal(page1.items.length, 3); assert.equal(page1.hasMore, true);
+    assert.ok(page1.items.every(i => i.kind === 'song' && !i.fromMe));
+    const page2 = (await h.call('GET', `/songs?limit=3&filter=received&before=${encodeURIComponent(page1.items[2].createdAt)}`, { token: 'tok-b' })).data;
+    assert.equal(page2.items.length, 2); assert.equal(page2.hasMore, false);
+    const all = (await h.call('GET', '/songs?limit=100', { token: 'tok-b' })).data.items;
+    assert.equal(all.length, 7);
+    assert.ok(all.some(i => i.kind === 'reaction'));
+    assert.equal((await h.call('GET', '/songs', { token: 'tok-c' })).data.items.length, 0);
+
+    // unpairing deletes the chain
+    await h.call('DELETE', '/pair', { token: 'tok-a' });
+    assert.equal(fs.existsSync(path.join(h.auraDir, 'songs')) && fs.readdirSync(path.join(h.auraDir, 'songs')).length, 0);
   } finally { await h.close(); }
 });
