@@ -187,6 +187,12 @@ const aura = createAura({
   apns: createAuraApns({ env: process.env, logger: console }),
   logger: console,
 });
+const { createLightsPush } = require('./lib/lights-push');
+const lightsPush = createLightsPush({
+  file: path.join(DATA, 'lights', 'push-devices.json'),
+  apns: createAuraApns({ env: process.env, logger: console }),
+  logger: console,
+});
 const pocketShift = createPocketShift({
   dataDir: path.join(DATA, 'pocketshift'),
   apns: createAuraApns({ env: process.env, logger: console }),
@@ -600,6 +606,7 @@ function writeLightsState(on, updatedBy) {
   };
   atomicWrite(LIGHTS_STATE_FILE, state);
   broadcastLightsState(state);
+  if (previous.on !== state.on) lightsPush.notifyChanged();
   // The ESP keeps its existing inverted wire contract. HomeKit works in the
   // physical light's terms, so translate only at this server boundary.
   if (homekitLightBridge) {
@@ -694,6 +701,7 @@ function writeLampState(on, updatedBy) {
   };
   atomicWrite(LAMP_STATE_FILE, state);
   broadcastLampState(state);
+  if (previous.on !== state.on) lightsPush.notifyChanged();
   return state;
 }
 
@@ -3523,6 +3531,32 @@ async function handleAPI(req, res, urlPath) {
     sessions.push({ token, userId: user.id, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() });
     writeNativeLampSessions(sessions);
     return jsonRes(res, 200, { token, username: user.username });
+  }
+
+  // Yannick Lights widget/control push tokens. Either native scoped token may
+  // register; the tokens only let the server ask iOS to reload the app's
+  // widgets and controls when the Lights or Lamp state changes.
+  if ((req.method === 'POST' || req.method === 'DELETE') && urlPath === '/api/lights/native/v1/push-tokens') {
+    const sourceToken = getToken(req);
+    const user = getNativeLightsUser(sourceToken) || getNativeLampUser(sourceToken);
+    if (!user) return jsonRes(res, 401, { error: 'Not authenticated' });
+    if (String(user.username || '').toLowerCase() !== 'yannick') return jsonRes(res, 403, { error: 'Forbidden' });
+    try {
+      const body = await parseBoundedJson(req);
+      if (req.method === 'DELETE') {
+        lightsPush.unregister(body && Array.isArray(body.tokens) ? body.tokens.slice(0, 16) : []);
+        return jsonRes(res, 200, { ok: true });
+      }
+      const invalid = lightsPush.validate(body);
+      if (invalid) return jsonRes(res, 400, { error: invalid });
+      lightsPush.register(body);
+      return jsonRes(res, 200, { ok: true });
+    } catch (error) {
+      if (error && error.code === 'UNAVAILABLE') return jsonRes(res, 503, { error: error.message });
+      if (error && error.code === 'BODY_TOO_LARGE') return jsonRes(res, 413, { error: error.message });
+      if (error && error.code === 'INVALID_JSON') return jsonRes(res, 400, { error: error.message });
+      throw error;
+    }
   }
 
   if (req.method === 'DELETE' && urlPath === '/api/lamp/native/v1/session') {
