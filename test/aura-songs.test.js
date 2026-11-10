@@ -20,5 +20,7 @@ test('sameSong ignores remaster/feature noise but not different songs', () => {
   assert.ok(sameSong({ title: 'Song - Remastered 2011', artist: 'The Beatles' }, { title: 'Song', artist: 'Beatles' }));
   assert.ok(!sameSong({ title: 'Never Give You Up', artist: 'Jerry Butler' }, { title: 'Never Gonna Give You Up', artist: 'Rick Astley' }));
   assert.ok(!sameSong({ title: 'Not Gonna Give It Up', artist: 'Peter Tosh' }, { title: 'Never Gonna Give You Up', artist: 'Rick Astley' }));
+  assert.ok(!sameSong({ title: 'Blinding Lights (Remix)', artist: 'The Weeknd & ROSALÍA' }, { title: 'Blinding Lights', artist: 'The Weeknd' }));
+  assert.ok(!sameSong({ title: 'Song (Live)', artist: 'A' }, { title: 'Song', artist: 'A' }));
   assert.equal(norm('Hey (feat. X) [Live]'), 'hey');
 });
