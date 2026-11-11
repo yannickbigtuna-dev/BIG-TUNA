@@ -1,0 +1,10 @@
+# Copy to planes.conf on the Kindle (extensions/planes/planes.conf).
+# The Kindle tries each URL in order until one works.
+# 1) Mac mini on the home Wi-Fi (no key needed on the LAN)
+PLANES_URL_1="http://192.168.2.164:3000/api/kindle/planes.png"
+# 2) Public site through the Cloudflare tunnel (needs KINDLE_PLANES_KEY from server.env)
+PLANES_URL_2="https://yannickmorgans.ca/api/kindle/planes.png?key=CHANGE_ME"
+# Seconds between refreshes
+PLANES_INTERVAL=60
+# Full e-ink refresh (clears ghosting) every N updates
+PLANES_FULL_REFRESH_EVERY=10

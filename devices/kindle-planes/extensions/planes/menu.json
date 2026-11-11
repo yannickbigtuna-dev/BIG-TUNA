@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "name": "Plane Dashboard",
+      "priority": 0,
+      "items": [
+        { "name": "Start dashboard", "priority": 1, "action": "bin/start.sh", "exitmenu": true },
+        { "name": "Stop dashboard", "priority": 2, "action": "bin/stop.sh", "exitmenu": true },
+        { "name": "Start automatically on boot", "priority": 3, "action": "bin/autostart.sh", "params": "on" },
+        { "name": "Don't start on boot", "priority": 4, "action": "bin/autostart.sh", "params": "off" }
+      ]
+    }
+  ]
+}

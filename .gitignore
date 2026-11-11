@@ -29,3 +29,6 @@ data/
 # source-controlled.
 .apple-app-factory/
 artifacts/apple-app-factory/
+
+# Kindle dashboard config with the access key
+devices/kindle-planes/extensions/planes/planes.conf

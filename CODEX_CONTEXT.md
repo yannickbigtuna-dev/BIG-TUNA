@@ -1065,3 +1065,15 @@ Small visual copy edits or isolated bug fixes usually do not need a context upda
   1.3.0 instead targets paid Developer Program/TestFlight distribution; its Watch,
   widget, complication, and control behavior remains unverified until the documented
   owner-controlled Mac upload and physical-device acceptance checks pass.
+
+## Kindle Plane Dashboard (2026-11-10)
+
+`lib/kindle-planes.js` renders the aircraft around home as an e-ink dashboard for a jailbroken Kindle (Kindle 10th gen, 600×800). Wired into `handleAPI` in `server.js`.
+
+- `GET /api/kindle/planes.png?w=600&h=800` — 8-bit greyscale PNG (16 grey levels) for `eips -g`. Rendered with Puppeteer's `chrome-headless-shell` (`npx puppeteer browsers install chrome-headless-shell`; the desktop Chrome app will not start headless on the Mac mini). Browser is reused and closed after 10 min idle; PNG cached 20 s.
+- `GET /api/kindle/planes.html` — same dashboard as a page (preview); `GET /api/kindle/planes.json` — raw nearby aircraft.
+- Data: `https://api.adsb.lol/v2/point/{lat}/{lon}/{nm}` (free, no key), cached 15 s.
+- Access: direct LAN connections are allowed; anything via the Cloudflare tunnel (has `cf-connecting-ip`) needs `?key=<KINDLE_PLANES_KEY>`.
+- `server.env` (loaded at startup like `APNS_*`/`SPOTIFY_*`): `KINDLE_PLANES_KEY`, `KINDLE_PLANES_LAT`, `KINDLE_PLANES_LON` (default Halifax centre), `KINDLE_PLANES_RADIUS_NM` (20), `KINDLE_PLANES_LABEL`, `KINDLE_PLANES_TZ` (America/Halifax), `KINDLE_PLANES_CHROME` (optional browser override).
+- Kindle side lives in `devices/kindle-planes/` (KUAL extension + fetch loop); copy `extensions/planes` to the Kindle's `extensions/` folder after jailbreaking.
+- Tests: `test/kindle-planes.test.js`.

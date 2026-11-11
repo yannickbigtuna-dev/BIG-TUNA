@@ -11,11 +11,11 @@ const QRCode = require('qrcode');
 
 // PM2 keeps the environment captured when a process was first registered, so a
 // rotated APNs key in server.env would otherwise be ignored on restart. When run
-// as the live server, re-read the APNS_* and SPOTIFY_* entries from server.env at startup.
+// as the live server, re-read the APNS_*, SPOTIFY_* and KINDLE_* entries from server.env at startup.
 if (require.main === module) {
   try {
     for (const line of fs.readFileSync(path.join(__dirname, 'server.env'), 'utf8').split(/\r?\n/)) {
-      const match = line.trim().match(/^((?:APNS|SPOTIFY)_[A-Z0-9_]+)=(.*)$/);
+      const match = line.trim().match(/^((?:APNS|SPOTIFY|KINDLE)_[A-Z0-9_]+)=(.*)$/);
       if (match) process.env[match[1]] = match[2].trim().replace(/^(["'])(.*)\1$/, '$2');
     }
   } catch {}
@@ -112,6 +112,7 @@ const { createChallengeApns, createDeviceTokenCipher } = require('./lib/challeng
 const { createAura } = require('./lib/aura');
 const { createAuraApns } = require('./lib/aura-apns');
 const { createPocketShift } = require('./lib/pocketshift');
+const { createKindlePlanes } = require('./lib/kindle-planes');
 const { createChallengeNotificationScheduler } = require('./lib/challenge-notification-scheduler');
 const emailCampaigns = require('./lib/email-campaigns');
 const triviaGenerator = require('./lib/trivia-generator');
@@ -193,6 +194,7 @@ const lightsPush = createLightsPush({
   apns: createAuraApns({ env: process.env, logger: console }),
   logger: console,
 });
+const kindlePlanes = createKindlePlanes();
 const pocketShift = createPocketShift({
   dataDir: path.join(DATA, 'pocketshift'),
   apns: createAuraApns({ env: process.env, logger: console }),
@@ -2705,6 +2707,9 @@ async function handleAPI(req, res, urlPath) {
 
   // PocketShift Live Activity push relay (lib/pocketshift.js).
   if (urlPath.startsWith('/api/pocketshift/v1/') && await pocketShift.handle(req, res, urlPath)) return;
+
+  // Kindle e-ink plane dashboard (lib/kindle-planes.js).
+  if (urlPath.startsWith('/api/kindle/') && await kindlePlanes.handle(req, res, urlPath)) return;
 
   // Apple App Factory: browser code is public, but every release response is
   // owner-authenticated and read from a non-static release root.
