@@ -187,6 +187,15 @@ const aura = createAura({
   readUsers: () => readUsers(),
   apns: createAuraApns({ env: process.env, logger: console }),
   logger: console,
+  // App-created logins (no email) are removed with the AURA account; website accounts keep theirs.
+  deleteLogin: userId => {
+    const users = readUsers();
+    const account = users.find(x => x.id === userId);
+    if (!account || account.email) return false;
+    writeUsers(users.filter(x => x.id !== userId));
+    writeSessions(readSessions().filter(x => x.userId !== userId));
+    return true;
+  },
 });
 const { createLightsPush } = require('./lib/lights-push');
 const lightsPush = createLightsPush({
