@@ -809,6 +809,26 @@ function readUsers() {
 }
 function writeUsers(users) { atomicWrite(USERS_FILE, users); }
 
+// Emails the owner each time a new account registers. Fire-and-forget: a mail
+// failure must never affect registration.
+const NEW_ACCOUNT_ALERT_TO = process.env.NEW_ACCOUNT_ALERT_TO || 'yannickm2006@icloud.com';
+const NEW_ACCOUNT_ALERT_FROM = process.env.NEW_ACCOUNT_ALERT_FROM || 'Big Tuna <bigtuna@yannickmorgans.ca>';
+function notifyNewAccount(user, users) {
+  try {
+    const when = new Date(user.createdAt).toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'full', timeStyle: 'long' });
+    const sorted = [...users].sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    const lines = sorted.map((u, i) => `${i + 1}. ${u.username} — ${String(u.createdAt || 'unknown').slice(0, 10)}${u.id === user.id ? '  ← NEW' : ''}`);
+    const text = `New account created\n\nUsername: ${user.username}\nCreated: ${when}\n\nAll accounts (${users.length} total):\n${lines.join('\n')}\n`;
+    assignmentCoach.sendEmail(NEW_ACCOUNT_ALERT_TO, {
+      from: NEW_ACCOUNT_ALERT_FROM,
+      subject: `New Big Tuna account: ${user.username} (${users.length} total)`,
+      text,
+      idempotencyKey: `new-account-${user.id}`,
+    }).then(r => { if (r && r.skipped) console.warn('[new-account-alert] skipped:', r.reason); })
+      .catch(e => console.warn('[new-account-alert] failed:', e && e.message));
+  } catch (e) { console.warn('[new-account-alert] error:', e && e.message); }
+}
+
 // ── Sessions ──────────────────────────────────────────────────────────────────
 function readSessions() {
   try { return JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')); }
@@ -3748,6 +3768,7 @@ async function handleAPI(req, res, urlPath) {
     };
     users.push(user);
     writeUsers(users);
+    notifyNewAccount(user, users);
 
     const token    = generateToken();
     const sessions = readSessions();
